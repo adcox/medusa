@@ -1,0 +1,15 @@
+# Ignore in git
+
+# Python
+__pycache__/
+*.py[cod]
+
+# pip
+*.egg-info/*
+
+# Vim
+*.swp
+
+# Testing
+htmlcov
+.coverage

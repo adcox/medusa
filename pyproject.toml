@@ -1,0 +1,69 @@
+# Project Configuration
+# ------------------------------------------------------------------------------
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+# -------------------------------------
+# Project metadata
+[project]
+name = "pika"
+version = "0.0.1"
+description = "Tools for multi-body astrodynamics research"
+#license = ?  # TODO define
+keywords = ["astrodynamics", "dynamics"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+]
+authors = [
+    {name="Andrew Cox", email="andrewdcox10@gmail.com"}
+]
+readme = "README.md"
+
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "numba",
+    "scipy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.1.0",
+    "pre-commit==2.13.0",
+    "isort>=5.12.0",
+]
+test = [
+    "pytest>=6.2.4"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/adcox/pika"
+"Bug Reports" = "https://github.com/adcox/pika/issues"
+"Source" = "https://github.com/adcox/pika"
+
+
+# -------------------------------------
+# Tools
+[tool.setuptools]
+packages = ["pika"]
+
+[tool.pytest.ini_options]
+addopts = "-ra -v"
+
+#[tool.black]
+#line-length = 88
+#target-version = ['py39']
+#include = '''
+#pika/\.py?$
+#tests/\.py?$
+#'''
+#
+#[tool.isort]
+#profile = "black"
+#extend_skip = ["env"]
+#force_to_top = ["os", "sys"]
+#sections = ["FUTURE", "STDLIB", "THIRDPARTY", "LOCALFOLDER"]
+#combine_as_imports = true
