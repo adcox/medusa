@@ -7,6 +7,10 @@ import numpy as np
 
 
 class SystemData(ABC):
+    """
+    Abstract class to store system data
+    """
+
     def __init__(bodies):
         self.bodies = copy(bodies)
         self.params = {}

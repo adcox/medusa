@@ -14,8 +14,36 @@ G_MEAN_EARTH = 9.80665e-3
 
 
 class Body:
+    """
+    Describe a celestial body (star, planet, moon)
+
+    Args:
+        name (str): Body name
+        gm (float): gravitational parameter (km**2/sec**3)
+        sma (Optional, float): orbital semimajor axis (km)
+        ecc (Optional, float): orbital eccentricity
+        inc (Optional, float): orbital inclination w.r.t. Earth Equatorial J2000 (deg)
+        raan (Optional, float): right ascenscion of the ascending node w.r.t.
+            Earth Equatorial J2000 (deg)
+        spiceId (Optional, int): SPICE ID for this body
+        parentId (Optional, int): SPICE ID for the body this body orbits. Set to
+            ``None`` if there is no parent body
+
+    Attributes:
+        name (str): Body name
+        gm (float): gravitational parameter (km**2/sec**3)
+        sma (float): orbital semimajor axis (km)
+        ecc (float): orbital eccentricity
+        inc (float): orbital inclination w.r.t. Earth Equatorial J2000 (deg)
+        raan (float): right ascenscion of the ascending node w.r.t.
+            Earth Equatorial J2000 (deg)
+        spiceId (int): SPICE ID for this body
+        parentId (int): SPICE ID for the body this body orbits. Set to
+            ``None`` if there is no parent body
+    """
+
     def __init__(
-        self, name, gm, sma=0.0, ecc=0.0, inc=0.0, raan=0.0, spiceId=0, parentId=0
+        self, name, gm, sma=0.0, ecc=0.0, inc=0.0, raan=0.0, spiceId=0, parentId=None
     ):
         self.name = name
         self.gm = gm
@@ -28,6 +56,17 @@ class Body:
 
     @staticmethod
     def fromXML(file, name):
+        """
+        Create a body from an XML file
+
+        Args:
+            file (str): path to the XML file
+            name (str): Body name
+
+        Returns:
+            Body: the corresponding data in a :class:`Body` object. If no body
+            can be found that matches ``name``, ``None`` is returned.
+        """
         tree = ET.parse(file)
         root = tree.getroot()
 
