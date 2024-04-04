@@ -3,6 +3,15 @@ Data objects
 """
 import xml.etree.ElementTree as ET
 
+# ------------------------------------------------------------------------------
+# Constants
+
+GRAV_PARAM = 6.67384e-20
+""": Universal gravitational constant (km**3/kg-s**2)"""
+
+G_MEAN_EARTH = 9.80665e-3
+""": Mean Earth gravity (km/s**2)"""
+
 
 class Body:
     def __init__(
