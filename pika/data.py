@@ -90,3 +90,18 @@ class Body:
                 )
 
         return None
+
+    def __eq__(self, other):
+        if not isinstance(other, Body):
+            return False
+
+        return (
+            self.name == other.name
+            and self.gm == other.gm
+            and self.sma == other.sma
+            and self.ecc == other.ecc
+            and self.inc == other.inc
+            and self.raan == other.raan
+            and self.id == other.id
+            and self.parentId == other.parentId
+        )

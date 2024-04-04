@@ -2,32 +2,32 @@
 Dynamics Classes and Interfaces
 """
 from abc import ABC, abstractmethod
-from enum import Flag, auto
+from copy import copy
+from enum import IntEnum
 
+import numba
 import numpy as np
 
 from pika.data import Body
 
 
-class EOMVars(Flag):
+# numba only supports Enum and IntEnum
+class EOMVars(IntEnum):
     """
     Specify the variables included in the equations of motion
     """
 
-    STATE = auto()
+    STATE = 0
     """: State variables; usually includes the position and velocity vectors """
 
-    STM = auto()
+    STM = 1
     """: State Transition Matrix; N**2 set of state variable partials """
 
-    EPOCH_DEPS = auto()
+    EPOCH_DEPS = 2
     """: Epoch dependencies """
 
-    PARAM_DEPS = auto()
+    PARAM_DEPS = 3
     """: Parameter dependencies """
-
-    ALL = STATE | STM | EPOCH_DEPS | PARAM_DEPS
-    """: All variables """
 
 
 class ModelConfig:
@@ -37,6 +37,9 @@ class ModelConfig:
     Attributes:
         bodies (tuple): a tuple of :class:`~pika.data.Body` objects
         params (dict): the parameters associated with this configuration
+        charL (float):
+        charT (float):
+        charM (float):
     """
 
     def __init__(self, *bodies, **params):
@@ -44,7 +47,7 @@ class ModelConfig:
             raise TypeError("Expecting Body objects")
 
         # Copy body objects into tuple
-        self.bodies = (copy(body) for body in bodies)
+        self.bodies = tuple(copy(body) for body in bodies)
 
         # Unpack parameters into internal dict
         self._params = {**params}
@@ -70,6 +73,27 @@ class ModelConfig:
     def charM(self):
         return self._charM
 
+    def __eq__(self, other):
+        """
+        Compare two ModelConfig objects. This can be overridden for more specific
+        comparisons in derived classes
+        """
+        if not isinstance(other, ModelConfig):
+            return False
+
+        if not type(self) == type(other):
+            return False
+
+        if not all([b1 == b2 for b1, b2 in zip(self.bodies, other.bodies)]):
+            return False
+
+        return (
+            self.params == other.params
+            and self.charL == other.charL
+            and self.charT == other.charT
+            and self.charM == other.charM
+        )
+
 
 class AbstractDynamicsModel(ABC):
     """
@@ -87,7 +111,7 @@ class AbstractDynamicsModel(ABC):
         self.config = config
 
     @abstractmethod
-    def evalEOMs(self, t, q, eomVars):
+    def evalEOMs(self, t, y, params, eomVars):
         pass
 
     @abstractmethod
@@ -115,20 +139,18 @@ class AbstractDynamicsModel(ABC):
         Returns:
             numpy.ndarray: initial conditions for the specified equation type
         """
-        if eomVars == EOMVars.ALL:
-            raise NotImplementedError("Does not support generation of ALL EOMVars")
-        elif eomVars == EOMVars.STM:
+        if eomVars == EOMVars.STM:
             return np.identity(self.stateSize(EOMVars.STATE)).flatten()
         else:
             return np.zeros((self.stateSize(eomVars),))
 
-    def appendICs(self, q, varsToAppend):
+    def appendICs(self, y0, varsToAppend):
         """
         Append initial conditions for the specified variable groups to the
         provided state vector
 
         Args:
-            q (numpy.ndarray): state vector of arbitrary length
+            y0 (numpy.ndarray): state vector of arbitrary length
             varsToAppend (EOMVars): the variable group(s) to append initial
                 conditions for. Note that
 
@@ -137,20 +159,19 @@ class AbstractDynamicsModel(ABC):
             the start of the array with the additional initial conditions
             appended afterward
         """
-        nIn = q.size
+        varsToAppend = np.array(varsToAppend, ndmin=1)
+        nIn = y0.size
         nOut = self.stateSize(varsToAppend)
-        qOut = np.zeros((nIn + nOut,))
-        qOut[:nIn] = q
+        y0_out = np.zeros((nIn + nOut,))
+        y0_out[:nIn] = y0
         ix = nIn
-        for attr in ["STATE", "STM", "EPOCH_DEPS", "PARAM_DEPS"]:
-            tp = getattr(EOMVars, attr)
-            if tp in varsToAppend:
-                ic = self.defaultICs(tp)
-                if ic.size > 0:
-                    qOut[ix : ix + ic.size] = ic
-                    ix += ic.size
+        for v in varsToAppend:
+            ic = self.defaultICs(v)
+            if ic.size > 0:
+                y0_out[ix : ix + ic.size] = ic
+                ix += ic.size
 
-        return qOut
+        return y0_out
 
     def validForPropagation(self, eomVars):
         """
@@ -168,4 +189,10 @@ class AbstractDynamicsModel(ABC):
             bool: True if the set is valid, False otherwise
         """
         # General principle: STATE vars are always required
-        return EOMVars.STATE in eomVars
+        return EOMVars.STATE in np.array(eomVars, ndmin=1)
+
+    def __eq__(self, other):
+        if not isinstance(other, AbstractDynamicsModel):
+            return False
+
+        return type(self) == type(other) and self.config == other.config

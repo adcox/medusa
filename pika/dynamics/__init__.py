@@ -2,7 +2,6 @@
 Dynamics Objects
 """
 
-from . import crtbp
 from .dynamics import AbstractDynamicsModel, EOMVars, ModelConfig
 
 __all__ = [
