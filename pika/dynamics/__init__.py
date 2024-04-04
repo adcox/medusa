@@ -2,9 +2,14 @@
 Dynamics Objects
 """
 
-from .dynamics import SystemData
+from . import crtbp
+from .dynamics import AbstractDynamicsModel, EOMVars, ModelConfig
 
 __all__ = [
     # base module
-    "SystemData",
+    "EOMVars",
+    "ModelConfig",
+    "AbstractDynamicsModel",
+    # namespaces for specific model implementations
+    "crtbp",
 ]

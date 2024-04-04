@@ -1,13 +1,10 @@
 """
 Test Body Data
 """
-from pathlib import Path
-
 import pytest
+from conftest import BODY_XML
 
 from pika.data import Body
-
-XML = Path(__file__).parent / "../resources/body-data.xml"
 
 
 def test_constructor_min():
@@ -17,8 +14,10 @@ def test_constructor_min():
     body = Body(name, gm)
     assert body.name == name
     assert body.gm == gm
-    for attr in ["sma", "ecc", "inc", "raan", "id", "parentId"]:
+    for attr in ["sma", "ecc", "inc", "raan"]:
         assert getattr(body, attr) == 0.0
+    assert body.id == 0
+    assert body.parentId is None
 
 
 def test_constructor_opts():
@@ -39,5 +38,5 @@ def test_constructor_opts():
 
 @pytest.mark.parametrize("name", ["Sun", "Earth", "Moon", "Earth Barycenter", "Triton"])
 def test_readXML(name):
-    body = Body.fromXML(XML, name)
+    body = Body.fromXML(BODY_XML, name)
     assert body.name == name
