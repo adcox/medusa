@@ -63,3 +63,17 @@ class TestDynamicsModel:
         q0_mod = model.appendICs(q0, append)
 
         assert q0_mod.shape == (q0.size + model.stateSize(append),)
+
+    @pytest.mark.parametrize("ix", [0, 1])
+    def test_bodyPos(self, emConfig, ix):
+        model = DynamicsModel(emConfig)
+        pos = model.bodyPos(ix, 0.0)
+        assert isinstance(pos, np.ndarray)
+        assert pos.shape == (3,)
+
+    @pytest.mark.parametrize("ix", [0, 1])
+    def test_bodyVel(self, emConfig, ix):
+        model = DynamicsModel(emConfig)
+        pos = model.bodyVel(ix, 0.0)
+        assert isinstance(pos, np.ndarray)
+        assert pos.shape == (3,)

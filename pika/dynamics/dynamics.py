@@ -11,17 +11,23 @@ import numpy as np
 from pika.data import Body
 
 
-# numba only supports Enum and IntEnum
+# numba JIT compilation only supports Enum and IntEnum
 class EOMVars(IntEnum):
     """
-    Specify the variables included in the equations of motion
+    Specify the variable groups included in the equations of motion. The integer
+    values of the groups correspond to their location in a variable array. I.e.,
+    the ``STATE`` variables are always first, followed by the ``STM``,
+    ``EPOCH_DEPS``, and ``PARAM_DEPS``.
     """
 
     STATE = 0
     """: State variables; usually includes the position and velocity vectors """
 
     STM = 1
-    """: State Transition Matrix; N**2 set of state variable partials """
+    """ 
+    State Transition Matrix; N**2 set of state variable partials, where N 
+    is the size of the ``STATE`` component
+    """
 
     EPOCH_DEPS = 2
     """: Epoch dependencies """
@@ -37,9 +43,9 @@ class ModelConfig:
     Attributes:
         bodies (tuple): a tuple of :class:`~pika.data.Body` objects
         params (dict): the parameters associated with this configuration
-        charL (float):
-        charT (float):
-        charM (float):
+        charL (float): a characteristic length (km) used to nondimensionalize lengths
+        charT (float): a characteristic time (sec) used to nondimensionalize times
+        charM (float): a characteristic mass (kg) used to nondimensionalize masses
     """
 
     def __init__(self, *bodies, **params):
@@ -111,19 +117,67 @@ class AbstractDynamicsModel(ABC):
         self.config = config
 
     @abstractmethod
-    def evalEOMs(self, t, y, params, eomVars):
+    def evalEOMs(self, t, y, eomVars, params):
+        """
+        Evaluate the equations of motion
+
+        Args:
+            t (float): time value
+            y (numpy.ndarray<float>): One-dimensional variable array
+            eomVars (tuple of EOMVars): describes the variable groups included
+                in the state vector
+            params (float, [float]): one or more parameter values. These are
+                generally constants that may vary integration to integration
+                within a model (e.g., thrust magnitude) but are not constants
+                of the model itself (e.g., mass ratio).
+
+        Returns:
+            numpy.ndarray: the time derivative of the state vector; the array
+            has the same size and shape as ``y``
+        """
         pass
 
     @abstractmethod
-    def bodyPos(self, ix, t):
+    def bodyPos(self, ix, t, params):
+        """
+        Evaluate the position of a body at a time
+
+        Args:
+            ix (int): index of the body within :attr:`bodies`
+            t (float): time value
+            params (float, [float]): one or more parameter values
+
+        Returns:
+            numpy.ndarray: Cartesian position vector
+        """
         pass
 
     @abstractmethod
-    def bodyVel(self, ix, t):
+    def bodyVel(self, ix, t, params):
+        """
+        Evaluate the velocity of a body at a time
+
+        Args:
+            ix (int): index of the body within :attr:`bodies`
+            t (float): time value
+            params (float, [float]): one or more parameter values
+
+        Returns:
+            numpy.ndarray: Cartesian velocity vector
+        """
         pass
 
     @abstractmethod
     def stateSize(self, eomVars):
+        """
+        Get the size (i.e., number of elements) for one or more variable groups
+
+        Args:
+            eomVars (EOMVars, [EOMVars]): describes onre or more groups of variables
+
+        Returns:
+            int: the size of a variable array with the specified variable groups
+        """
         pass
 
     def defaultICs(self, eomVars):
@@ -134,7 +188,7 @@ class AbstractDynamicsModel(ABC):
         this method to provide other values.
 
         Args:
-            eomVars (EOMVars): equation type
+            eomVars (EOMVars): describes the group of variables
 
         Returns:
             numpy.ndarray: initial conditions for the specified equation type
@@ -177,13 +231,13 @@ class AbstractDynamicsModel(ABC):
         """
         Check that the set of EOM variables can be propagated.
 
-        In many cases, some of the variables are dependent upon others. E.g.,
+        In many cases, some groups of the variables are dependent upon others. E.g.,
         the STM equations of motion generally require the state variables to be
         propagated alongside the STM so ``EOMVars.STM`` would be an invalid set for
         evaluation but ``EOMVars.STATE | EOMVars.STM`` would be valid.
 
         Args:
-            eomVars (EOMVars): the variables to be propagated
+            eomVars (EOMVars, [EOMVars]): the group(s) variables to be propagated
 
         Returns:
             bool: True if the set is valid, False otherwise
@@ -192,6 +246,9 @@ class AbstractDynamicsModel(ABC):
         return EOMVars.STATE in np.array(eomVars, ndmin=1)
 
     def __eq__(self, other):
+        """
+        Evaluate equality between this object and another
+        """
         if not isinstance(other, AbstractDynamicsModel):
             return False
 

@@ -12,6 +12,12 @@ from pika.dynamics import ModelConfig as BaseModelConfig
 class ModelConfig(BaseModelConfig):
     """
     CRTBP Model Configuration
+
+    Args:
+        body1 (Body): one of the two primary bodies
+        body2 (Body): the othe primary body
+
+    The two bodies are stored in :attr:`bodies` in order of decreassing mass
     """
 
     def __init__(self, body1, body2):
@@ -34,21 +40,18 @@ class DynamicsModel(AbstractDynamicsModel):
     def __init__(self, config):
         super().__init__(config)
 
-    def evalEOMs(self, t, q, params=None, eomVars=EOMVars.STATE):
-        # TODO can we avoid casting eomVars to tuple at each evaluation?
-        return DynamicsModel._eoms(
-            t, q, self.config.params["mu"], tuple(np.array(eomVars, ndmin=1))
-        )
+    def evalEOMs(self, t, q, eomVars, params=None):
+        return DynamicsModel._eoms(t, q, self.config.params["mu"], eomVars)
 
-    def bodyPos(self, ix, t):
+    def bodyPos(self, ix, t, params=None):
         if ix == 0:
-            return np.array([-self.params["mu"], 0.0, 0.0])
+            return np.array([-self.config.params["mu"], 0.0, 0.0])
         elif ix == 1:
-            return np.array([1 - self.params["mu"], 0.0, 0.0])
+            return np.array([1 - self.config.params["mu"], 0.0, 0.0])
         else:
             raise ValueError(f"Index {ix} must be zero or one")
 
-    def bodyVel(self, ix, t):
+    def bodyVel(self, ix, t, params=None):
         if ix in [0, 1]:
             return np.zeros((3,))
         else:
@@ -59,7 +62,7 @@ class DynamicsModel(AbstractDynamicsModel):
         return 6 * (EOMVars.STATE in eomVars) + 36 * (EOMVars.STM in eomVars)
 
     @staticmethod
-    @njit
+    # @njit
     def _eoms(t, q, mu, eomVars):
         qdot = np.zeros(q.shape)
 
