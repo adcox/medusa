@@ -2,4 +2,4 @@
 Pika Package Setup
 """
 
-__all__ = ["data", "dynamics", "propagate"]
+__all__ = ["corrections", "data", "dynamics", "propagate"]

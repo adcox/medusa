@@ -56,17 +56,17 @@ packages = ["pika"]
 [tool.pytest.ini_options]
 addopts = "-ra -v"
 
-#[tool.black]
-#line-length = 88
-#target-version = ['py39']
-#include = '''
-#pika/\.py?$
-#tests/\.py?$
-#'''
-#
-#[tool.isort]
-#profile = "black"
-#extend_skip = ["env"]
-#force_to_top = ["os", "sys"]
-#sections = ["FUTURE", "STDLIB", "THIRDPARTY", "LOCALFOLDER"]
-#combine_as_imports = true
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '''
+pika/\.py?$
+tests/\.py?$
+'''
+
+[tool.isort]
+profile = "black"
+extend_skip = ["env"]
+force_to_top = ["os", "sys"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+combine_as_imports = true

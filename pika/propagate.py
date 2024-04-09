@@ -156,6 +156,9 @@ class ApseEvent(AbstractEvent):
     """
 
     def __init__(self, model, bodyIx, terminal=False, direction=0.0):
+        if not isinstance(model, AbstractDynamicsModel):
+            raise ValueError("model must be derived from AbstractDynamicsModel")
+
         super().__init__(terminal, direction)
         self._model = model
         self._ix = bodyIx
@@ -173,11 +176,44 @@ class ApseEvent(AbstractEvent):
         return relPos[0] * relVel[0] + relPos[1] * relVel[1] + relPos[2] * relVel[2]
 
 
-class DistanceEvent(AbstractEvent):
+class BodyDistanceEvent(AbstractEvent):
     """
-    Occurs when the root-sum-squared difference between two vectors is zero
+    Occurs when the position distance relative to a body equals a specified value
 
     Args:
+        model (AbstractDynamicsModel): the model that includes the body
+        ix (int): index of the body in the model
+        dist (float): distance value
+        terminal (Optional, bool, int): defines how the event interacts with the
+            proapgation. If ``True``, the propagation will stop at the first occurrence
+            of this event. If an :class:`int` is passed, the propagation will
+            end after the specified number of occurrences.
+        direction (Optional, float): defines event direction. If less than zero,
+            the event is only triggered when ``eval`` moves from positive to
+            negative values. A positive value triggers in the opposite direction,
+            and ``0`` will trigger the event in either direction.
+    """
+
+    def __init__(self, model, ix, dist, terminal=False, direction=0.0):
+        if not isinstance(model, AbstractDynamicsModel):
+            raise ValueError("model must be derived from AbstractDynamicsModel")
+
+        super().__init__(terminal, direction)
+        self._model = model
+        self._ix = ix
+        self._dist = dist * dist  # evaluation uses squared value
+
+    def eval(self, t, y, eomVars, params):
+        relPos = y[:3] - self._model.bodyPos(self._ix, t, params)
+        return sum([x * x for x in relPos]) - self._dist
+
+
+class DistanceEvent(AbstractEvent):
+    """
+    Occurs when the L2 norm difference between two vectors equals the specified distance
+
+    Args:
+        dist (float): the distance
         vec (numpy.ndarray<float>): the goal vector
         ixs (numpy.ndarray<int>): the indices of the variables to compare to ``vec``
         terminal (Optional, bool, int): defines how the event interacts with the
@@ -190,23 +226,19 @@ class DistanceEvent(AbstractEvent):
             and ``0`` will trigger the event in either direction.
     """
 
-    def __init__(self, vec, ixs=[0, 1, 2], terminal=False, direction=0.0):
-        super().__init__(terminal, direction)
+    def __init__(self, dist, vec, ixs=[0, 1, 2], terminal=False, direction=0.0):
         vec, ixs = np.array(vec, ndmin=1), np.array(ixs, ndmin=1)
         if not vec.shape == ixs.shape:
             raise ValueError("vec and ixs must have the same shape")
 
+        super().__init__(terminal, direction)
         self._vec = vec
         self._ixs = ixs
+        self._dist = dist * dist  # evaluation uses squared value
 
     def eval(self, t, y, eomVars, params):
-        return self._eval(y)
-
-    @staticmethod
-    @njit
-    def _eval(y):
-        dist = self._vec - y[ixs]
-        return sum([x * x for x in dist])
+        dist = self._vec - y[self._ixs]
+        return sum([x * x for x in dist]) - self._dist
 
 
 class VariableValueEvent(AbstractEvent):

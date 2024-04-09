@@ -1,6 +1,7 @@
 """
 Test Propagation
 """
+
 import numpy as np
 import pytest
 import scipy.integrate
@@ -9,7 +10,13 @@ from conftest import loadBody
 
 from pika.dynamics import EOMVars
 from pika.dynamics.crtbp import DynamicsModel, ModelConfig
-from pika.propagate import ApseEvent, Propagator, VariableValueEvent
+from pika.propagate import (
+    ApseEvent,
+    BodyDistanceEvent,
+    DistanceEvent,
+    Propagator,
+    VariableValueEvent,
+)
 
 
 @pytest.fixture
@@ -19,7 +26,7 @@ def emModel():
     return DynamicsModel(ModelConfig(earth, moon))
 
 
-@pytest.mark.usesfixtures("emModel")
+@pytest.mark.usefixtures("emModel")
 class TestPropagator:
     def test_constructor(self, emModel):
         prop = Propagator(emModel)
@@ -189,6 +196,30 @@ def test_apseEvent(emModel, terminal, direction):
     tspan = [0, 6.32]
     prop = Propagator(emModel)
     prop.events.append(ApseEvent(emModel, 0, terminal, direction))
+    sol = prop.propagate(y0, tspan)
+
+    assert len(sol.t_events) == 1  # 1 event
+    t_events = sol.t_events[0]
+    assert len(t_events) > 0
+
+
+def test_distanceEvent(emModel):
+    y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+    tspan = [0, 6.32]
+    prop = Propagator(emModel)
+    prop.events.append(DistanceEvent(0.5, [-1.0, 0.0, 0.0]))
+    sol = prop.propagate(y0, tspan)
+
+    assert len(sol.t_events) == 1  # 1 event
+    t_events = sol.t_events[0]
+    assert len(t_events) > 0
+
+
+def test_bodyDistanceEvent(emModel):
+    y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+    tspan = [0, 6.32]
+    prop = Propagator(emModel)
+    prop.events.append(BodyDistanceEvent(emModel, 0, 1.0))
     sol = prop.propagate(y0, tspan)
 
     assert len(sol.t_events) == 1  # 1 event
