@@ -11,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 class AbstractConstraint(ABC):
+    """
+    Defines the interface for a constraint object
+    """
+
     @property
     @abstractmethod
     def size(self):
@@ -120,20 +124,50 @@ class CorrectionsProblem:
     # Variables
 
     def addVariable(self, variable):
+        """
+        Add a variable to the problem
+
+        Args:
+            variable (Variable): a variable to add
+
+        Raises:
+            ValueError: if ``variable`` is not a valid Variable object
+        """
         if not isinstance(variable, Variable):
             raise ValueError("Can only add Variable objects")
         self._freeVarIndexMap[variable] = None
 
     def rmVariable(self, variable):
+        """
+        Remove a variable from the problem
+
+        Args:
+            variable (Variable): the variable to remove. If the variable is not
+            part of the problem, no action is taken.
+        """
         if variable in self._freeVarIndexMap:
             del self._freeVarIndexMap[variable]
         else:
             logger.error(f"Could not remove variable {variable}")
 
     def clearVariables(self):
+        """
+        Remove all variables from the problem
+        """
         self._freeVarIndexMap = {}
 
     def freeVarVec(self, recompute):
+        """
+        Get the free variable vector
+
+        Args:
+            recompute (bool): whether or not to recompute the free variable vector.
+                The :func:`freeVarIndexMap` function must be called first (with
+                ``recompute = True``).
+
+        Returns:
+            numpy.ndarray<float>: the free variable vector
+        """
         if recompute:
             self._freeVarVec = np.zeros((self.numFreeVars,))
             for var, ix in self._freeVarIndexMap.items():
@@ -142,6 +176,19 @@ class CorrectionsProblem:
         return self._freeVarVec
 
     def freeVarIndexMap(self, recompute):
+        """
+        Get the free variable index map
+
+        Args:
+            recompute (bool): whether or not to recompute the free variable index
+                map, e.g., after variables have been added or removed from the
+                problem
+
+        Returns:
+            dict: a dictionary mapping the variables included in the problem
+            (as :class:`Variable` objects) to the index within the free variable
+            vector (as an :class:`int`).
+        """
         if recompute:
             # TODO sort variables by type?
             count = 0
@@ -153,6 +200,15 @@ class CorrectionsProblem:
 
     @property
     def numFreeVars(self):
+        """
+        Get the number of scalar free variable values in the problem. This is
+        distinct from the number of :class:`Variable` objects as each object
+        can contain a vector of values and a mask that removes some of the values
+        from the free variable vector
+
+        Returns:
+            int: number of free variables
+        """
         return sum([var.numFree for var in self._freeVarIndexMap])
 
     # TODO (internal?) function to update variable objects with values from
@@ -162,20 +218,47 @@ class CorrectionsProblem:
     # Constraints
 
     def addConstraint(self, constraint):
+        """
+        Add a constraint to the problem
+
+        Args:
+            constraint (AbstractConstraint): a constraint to add
+        """
         if not isinstance(constraint, AbstractConstraint):
             raise ValueError("Can only add AbstractConstraint objects")
         self._constraintIndexMap[constraint] = None
 
     def rmConstraint(self, constraint):
+        """
+        Remove a constraint from the problem
+
+        Args:
+            constraint (AbstractConstraint): the constraint to remove. If the
+                constraint is not part of the problem, no action is taken.
+        """
         if constraint in self._constraintIndexMap:
             del self._constraintIndexMap[constraint]
         else:
             logger.error(f"Could not remove constraint {constraint}")
 
     def clearConstraints(self):
+        """
+        Remove all constraints from the problem
+        """
         self._constraintIndexMap = {}
 
     def constraintVec(self, recompute):
+        """
+        Get the constraint vector
+
+        Args:
+            recompile (bool): whether or not to recompute the constraint vector.
+                The :func:`constraintIndexMap` function and :func:`freeVarIndexMap`
+                must be called first (with ``recompute = True``).
+
+        Returns:
+            numpy.ndarray<float>: the constraint vector
+        """
         if recompute:
             self._constraintVec = np.zeros((self.numConstraints,))
             for constraint, ix in self._constraintIndexMap.items():
@@ -185,6 +268,19 @@ class CorrectionsProblem:
         return self._constraintVec
 
     def constraintIndexMap(self, recompute):
+        """
+        Get the constraint index map
+
+        Args:
+            recompute (bool): whether or not to recompute the constraint index
+                map, e.g., after constraints have been added or removed from
+                the problem
+
+        Returns:
+            dict: a dictionary mapping the constraints included in the problem
+                (as objects derived from :class:`AbstractConstraint`) to the index
+                within the constraint vector (as an :class:`int`).
+        """
         if recompute:
             # TODO sort constraints by type?
             count = 0
@@ -196,6 +292,14 @@ class CorrectionsProblem:
 
     @property
     def numConstraints(self):
+        """
+        Get the number of scalar constraint equations. This is distinct from the
+        number of :class:`AbstractConstraint` objects as each object can define
+        a vector of equations.
+
+        Returns:
+            int: the number of scalar constraint equations
+        """
         return sum([con.size for con in self._constraintIndexMap])
 
     # -------------------------------------------

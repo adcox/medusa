@@ -18,6 +18,27 @@ logger = logging.getLogger(__name__)
 
 
 class Propagator:
+    """
+    Create a propagator object.
+
+    This class primarily wraps the :func:`scipy.integrate.solve_ivp` method
+
+    Args:
+        model (AbstractDynamicsModel): defines the dynamics model in which the
+            propagation occurs
+        method (Optional, str): the integration method to use; passed as the
+            ``method`` argument to :func:`~scipy.integrate.solve_ivp`
+        dense (Optional, bool): whether or not to output dense propagation data;
+            passed as the ``dense_output`` argument to
+            :func:`~scipy.integrate.solve_ivp`
+
+    Attributes:
+        method (AbstractDynamicsModel): defines the dynamics model
+        model (str): the integration method
+        dense (bool): whether or not to output dense propagation data
+        events ([AbstractEvent]): a list of integration events
+    """
+
     def __init__(self, model, method="DOP853", dense=True):
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
@@ -28,6 +49,34 @@ class Propagator:
         self.events = []
 
     def propagate(self, y0, tspan, *, params=None, eomVars=EOMVars.STATE, **kwargs):
+        """
+        Perform a propagation
+
+        Args:
+            y0 (numpy.ndarray<float>): initial state vector
+            tspan ([float]): a 2-element vector defining the start and end times
+                for the propagation
+            params (Optional, [float]): parameters that are passed to the dynamics
+                model
+            eomVars (Optional, [EOMVars]): the variable groups that are included
+                 in ``y0``.
+            kwargs: additional arguments passed to :func:`scipy.integrate.solve_ivp`.
+                Note that the ``method`` and ``dense_output`` arguments, defined
+                in the :class:`Propagator` constructor, cannot be overridden.
+
+        Returns:
+            scipy.optimize.OptimizeResult: the output of the
+            :func:`~scipy.integrate.solve_ivp` function. This includes the times,
+            states, event data, and other integration metadata.
+
+        Raises:
+            RuntimeError: if ``eomVars`` is not valid for the propagation as
+                checked via :func:`AbstractDynamicsModel.validForPropagation`
+            RuntimeError: if the size of ``y0`` is inconsistent with ``eomVars``
+                as checked via :func:`AbstractDynamicsModel.stateSize`
+            RuntimeError: if any of the objects in :attr:`events` are not derived
+                from the :class:`AbstractEvent` base class
+        """
         # Checks
         if not self.model.validForPropagation(eomVars):
             raise RuntimeError(f"EOMVars = {eomVars} is not valid for propagation")
