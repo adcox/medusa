@@ -5,8 +5,7 @@ import numpy as np
 from numba import njit
 
 from pika.data import GRAV_PARAM
-from pika.dynamics import AbstractDynamicsModel, EOMVars
-from pika.dynamics import ModelConfig as BaseModelConfig
+from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelConfig as BaseModelConfig
 
 
 class ModelConfig(BaseModelConfig):
@@ -39,6 +38,10 @@ class DynamicsModel(AbstractDynamicsModel):
 
     def __init__(self, config):
         super().__init__(config)
+
+    @property
+    def epochIndependent(self):
+        return True
 
     def evalEOMs(self, t, q, eomVars, params=None):
         return DynamicsModel._eoms(t, q, self.config.params["mu"], eomVars)

@@ -39,6 +39,9 @@ class TestPropagator:
             EOMVars.STATE,
             [EOMVars.STATE, EOMVars.STM],
             [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS],
+            [EOMVars.STATE, EOMVars.STM, EOMVars.PARAM_DEPS],
+            [EOMVars.STATE, EOMVars.PARAM_DEPS],
+            [EOMVars.EPOCH_DEPS, EOMVars.STATE],
         ],
     )
     def test_propagate(self, emModel, dense, eoms):
@@ -66,9 +69,7 @@ class TestPropagator:
         assert hasattr(sol, "params")
         assert sol.params == None
         assert hasattr(sol, "eomVars")
-        assert all(
-            [vOut == vIn for vOut, vIn in zip(sol.eomVars, np.array(eoms, ndmin=1))]
-        )
+        assert np.array_equal(sorted(np.array(eoms, ndmin=1)), sol.eomVars)
 
     @pytest.mark.parametrize(
         "eoms", [EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS]

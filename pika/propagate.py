@@ -44,7 +44,7 @@ class Propagator:
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
         self.method = method
-        self.model = copy(model)
+        self.model = model
         self.dense = dense
         self.events = []
 
@@ -104,7 +104,7 @@ class Propagator:
 
         # make eomVars an array and then cast to tuple; need simple type for
         #   JIT compilation support
-        eomVars = tuple(np.array(eomVars, ndmin=1))
+        eomVars = tuple(sorted(np.array(eomVars, ndmin=1)))
 
         # TODO also cast params to tuple?
         kwargs_in["args"] = (eomVars, params)

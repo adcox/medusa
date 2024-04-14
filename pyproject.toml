@@ -37,9 +37,8 @@ dev = [
     "isort>=5.12.0",
     "sphinx",
     "sphinxcontrib-fulltoc>=1.2.0",
-]
-test = [
-    "pytest>=6.2.4"
+    "pytest>=6.2.4",
+    "pytest-mock",
 ]
 
 [project.urls]

@@ -17,23 +17,33 @@ class EOMVars(IntEnum):
     Specify the variable groups included in the equations of motion. The integer
     values of the groups correspond to their location in a variable array. I.e.,
     the ``STATE`` variables are always first, followed by the ``STM``,
-    ``EPOCH_DEPS``, and ``PARAM_DEPS``.
+    ``EPOCH_DEPS``, and ``PARAM_DEPS``. All matrix objects are stored in column-major
+    order
     """
 
     STATE = 0
-    """: State variables; usually includes the position and velocity vectors """
+    """: State variables; usually includes the position and velocity coordinates """
 
     STM = 1
     """ 
-    State Transition Matrix; N**2 set of state variable partials, where N 
-    is the size of the ``STATE`` component
+    State Transition Matrix; An N**2 matrix of the time-evolving partial derivatives
+    of the propagated state w.r.t. the initial state, where N is the size of the 
+    ``STATE`` component
     """
 
     EPOCH_DEPS = 2
-    """: Epoch dependencies """
+    """
+    Epoch dependencies; An N-element vector of the time-evolving partial derivatives
+    of the propagated state w.r.t. the initial epoch where N is the size of the
+    ``STATE`` component
+    """
 
     PARAM_DEPS = 3
-    """: Parameter dependencies """
+    """
+    Parameter dependencies; An NxM matrix of the time-evolving partial derivatives
+    of the propagated state w.r.t. the parameter values where N is the size of
+    the ``STATE`` component and ``M`` is the number of parameters.
+    """
 
 
 class ModelConfig:
@@ -117,27 +127,6 @@ class AbstractDynamicsModel(ABC):
         self.config = config
 
     @abstractmethod
-    def evalEOMs(self, t, y, eomVars, params):
-        """
-        Evaluate the equations of motion
-
-        Args:
-            t (float): time value
-            y (numpy.ndarray<float>): One-dimensional variable array
-            eomVars (tuple of EOMVars): describes the variable groups included
-                in the state vector
-            params (float, [float]): one or more parameter values. These are
-                generally constants that may vary integration to integration
-                within a model (e.g., thrust magnitude) but are not constants
-                of the model itself (e.g., mass ratio).
-
-        Returns:
-            numpy.ndarray: the time derivative of the state vector; the array
-            has the same size and shape as ``y``
-        """
-        pass
-
-    @abstractmethod
     def bodyPos(self, ix, t, params):
         """
         Evaluate the position of a body at a time
@@ -168,6 +157,37 @@ class AbstractDynamicsModel(ABC):
         pass
 
     @abstractmethod
+    def evalEOMs(self, t, y, eomVars, params):
+        """
+        Evaluate the equations of motion
+
+        Args:
+            t (float): time value
+            y (numpy.ndarray<float>): One-dimensional variable array
+            eomVars (tuple of EOMVars): describes the variable groups included
+                in the state vector
+            params (float, [float]): one or more parameter values. These are
+                generally constants that may vary integration to integration
+                within a model (e.g., thrust magnitude) but are not constants
+                of the model itself (e.g., mass ratio).
+
+        Returns:
+            numpy.ndarray: the time derivative of the state vector; the array
+            has the same size and shape as ``y``
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def epochIndependent(self):
+        """
+        Returns:
+            bool: True if the dynamics model has no dependencies on epoch, False
+            otherwise.
+        """
+        pass
+
+    @abstractmethod
     def stateSize(self, eomVars):
         """
         Get the size (i.e., number of elements) for one or more variable groups
@@ -179,6 +199,50 @@ class AbstractDynamicsModel(ABC):
             int: the size of a variable array with the specified variable groups
         """
         pass
+
+    def extractVars(self, y, eomVars, eomVarsIn=None):
+        """
+        Extract a variable group from a vector
+
+        Args:
+            y (numpy.ndarray): the variable vector
+            eomVars (EOMVars): the variable group to extract
+            eomVarsIn ([EOMVars]): the variable groups in ``y``. If ``None``, it
+                is assumed that all variable groups with lower indices than
+                ``eomVars`` are included in ``y``.
+
+        Returns:
+            numpy.ndarray: the subset of ``y`` that corresponds to the ``eomVars``
+            group. The vector elements are reshaped into a matrix if applicable.
+
+        Raises:
+            ValueError: if ``y`` doesn't have enough elements to extract the
+                requested variable groups
+        """
+        if eomVarsIn is None:
+            eomVarsIn = [v for v in range(eomVars + 1)]
+        eomVarsIn = np.array(eomVarsIn, ndmin=1)
+
+        if not eomVars in eomVarsIn:
+            raise RuntimeError(
+                f"Requested variable group {eomVars} is not part of input set, {eomVarsIn}"
+            )
+
+        nPre = sum([self.stateSize(tp) for tp in eomVarsIn if not tp == eomVars])
+        sz = self.stateSize(eomVars)
+
+        if y.size < nPre + sz:
+            raise ValueError(
+                f"Need {nPre + sz} vector elements to extract {eomVars} "
+                f"but y has size {y.size}"
+            )
+
+        nState = self.stateSize(EOMVars.STATE)
+        nCol = int(sz / nState)
+        if nCol > 1:
+            return np.reshape(y[nPre : nPre + sz], (nCol, nState))
+        else:
+            return np.array(y[nPre : nPre + sz])
 
     def defaultICs(self, eomVars):
         """
@@ -219,7 +283,7 @@ class AbstractDynamicsModel(ABC):
         y0_out = np.zeros((nIn + nOut,))
         y0_out[:nIn] = y0
         ix = nIn
-        for v in varsToAppend:
+        for v in sorted(varsToAppend):
             ic = self.defaultICs(v)
             if ic.size > 0:
                 y0_out[ix : ix + ic.size] = ic

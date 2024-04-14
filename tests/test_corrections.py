@@ -1,31 +1,222 @@
 """
 Test corrections
 """
+
 import numpy as np
 import pytest
+from conftest import loadBody
 
 import pika.corrections.constraints as constraints
-from pika.corrections import AbstractConstraint, CorrectionsProblem, Variable
-
-
-@pytest.mark.parametrize(
-    "vals, mask, name",
-    [
-        [1.0, False, "state"],
-        [[1.0, 2.0], [True, False], "angle"],
-    ],
+from pika.corrections import (
+    AbstractConstraint,
+    ControlPoint,
+    CorrectionsProblem,
+    Segment,
+    Variable,
 )
-def test_Variable(vals, mask, name):
-    var = Variable(vals, mask, name)
-
-    assert isinstance(var.values, np.ndarray)
-    assert len(var.values.shape) == 1
-
-    assert all(var.values.data == np.array(vals, ndmin=1))
-    assert all(var.values.mask == np.array(mask, ndmin=1))
-    assert var.name == name
+from pika.dynamics import EOMVars
+from pika.dynamics.crtbp import DynamicsModel, ModelConfig
+from pika.propagate import Propagator
 
 
+# ------------------------------------------------------------------------------
+class TestVariable:
+    @pytest.mark.parametrize(
+        "vals, mask, name",
+        [
+            [1.0, False, "state"],
+            [[1.0, 2.0], [True, False], "angle"],
+        ],
+    )
+    def test_constructor(self, vals, mask, name):
+        var = Variable(vals, mask, name)
+
+        assert isinstance(var.values, np.ndarray)
+        assert len(var.values.shape) == 1
+
+        assert all(var.values.data == np.array(vals, ndmin=1))
+        assert all(var.values.mask == np.array(mask, ndmin=1))
+        assert var.name == name
+
+    @pytest.mark.parametrize(
+        "vals, mask",
+        [
+            [[1.0], [False]],
+            [[1.0, 2.0], [True, False]],
+            [[1.0, 2.0], [True, True]],
+        ],
+    )
+    def test_allVals(self, vals, mask):
+        var = Variable(vals, mask)
+        assert np.array_equal(var.allVals, vals)
+
+    @pytest.mark.parametrize(
+        "vals, mask",
+        [
+            [[1.0], [False]],
+            [[1.0, 2.0], [True, False]],
+            [[1.0, 2.0], [True, True]],
+        ],
+    )
+    def test_freeVals(self, vals, mask):
+        var = Variable(vals, mask)
+        assert np.array_equal(
+            var.freeVals, [v for ix, v in enumerate(vals) if not mask[ix]]
+        )
+
+    @pytest.mark.parametrize("mask", [[True, True], [True, False], [False, False]])
+    def test_numFree(self, mask):
+        var = Variable([1.0, 2.0], mask)
+        assert var.numFree == sum([not m for m in mask])
+
+
+# ------------------------------------------------------------------------------
+class TestControlPoint:
+    @pytest.fixture(scope="class")
+    def model(self):
+        earth, moon = loadBody("Earth"), loadBody("Moon")
+        config = ModelConfig(earth, moon)
+        return DynamicsModel(config)
+
+    @pytest.mark.parametrize(
+        "epoch, state",
+        [
+            [0.0, np.arange(6)],
+            [Variable(0), Variable(np.arange(6))],
+        ],
+    )
+    def test_constructor(self, model, epoch, state):
+        cp = ControlPoint(model, epoch, state)
+
+        assert isinstance(cp.epoch, Variable)
+        assert isinstance(cp.state, Variable)
+
+    @pytest.mark.parametrize(
+        "epoch, state",
+        [
+            [[0.0, 1.0], np.arange(6)],
+            [0.0, np.arange(42)],
+        ],
+    )
+    def test_constructor_errs(self, model, epoch, state):
+        with pytest.raises(RuntimeError):
+            ControlPoint(model, epoch, state)
+
+    # TODO test ControlPoint.fromProp
+
+
+# ------------------------------------------------------------------------------
+class TestSegment:
+    @pytest.fixture(scope="class")
+    def model(self):
+        earth, moon = loadBody("Earth"), loadBody("Moon")
+        config = ModelConfig(earth, moon)
+        return DynamicsModel(config)
+
+    @pytest.fixture(scope="class")
+    def prop(self, model):
+        return Propagator(model, dense=False)
+
+    @pytest.fixture
+    def origin(self, model):
+        # IC for EM L3 Vertical
+        return ControlPoint(model, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
+
+    @pytest.mark.parametrize(
+        "tof, _prop, params",
+        [
+            [1.0, None, []],
+            [1.0, "prop", []],
+            [Variable(1.0, True), None, Variable([])],
+        ],
+    )
+    def test_constructor(self, origin, tof, _prop, params, request):
+        if not _prop is None:
+            _prop = request.getfixturevalue(_prop)
+
+        seg = Segment(origin, tof, _prop, params)
+
+        assert seg.origin == origin
+
+        assert isinstance(seg.tof, Variable)
+        assert seg.tof.values.size == 1
+        assert seg.tof.allVals[0] == 1.0
+
+        assert isinstance(seg.prop, Propagator)
+        assert seg.prop.model == origin.model
+
+        assert isinstance(seg.propParams, Variable)
+        assert seg.propParams.values.size == 0
+
+    def test_constructor_altProp(self, origin, request):
+        sun, earth = loadBody("Sun"), loadBody("Earth")
+        model = DynamicsModel(ModelConfig(sun, earth))
+        prop = Propagator(model)
+        seg = Segment(origin, 2.3, prop)
+        assert seg.prop.model == origin.model
+        assert not seg.prop.model == model
+
+    @pytest.mark.parametrize(
+        "eomVars",
+        [
+            [EOMVars.STATE],
+            [EOMVars.STATE, EOMVars.STM],
+            [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS],
+            [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS],
+        ],
+    )
+    def test_propagate(self, origin, eomVars):
+        seg = Segment(origin, 1.0)
+        assert seg.propSol is None
+        seg.propagate(eomVars)
+        assert seg.propSol is not None
+        assert seg.propSol.y[:, 0].size == origin.model.stateSize(eomVars)
+        assert seg.propSol.t[0] == origin.epoch.allVals[0]
+        assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
+
+    @pytest.mark.parametrize("lazy", [True, False])
+    @pytest.mark.parametrize(
+        "eomVars1, eomVars2",
+        [
+            [EOMVars.STATE, EOMVars.STATE],
+            [[EOMVars.STATE, EOMVars.STM], EOMVars.STATE],
+        ],
+    )
+    def test_propagate_lazy(self, origin, mocker, eomVars1, eomVars2, lazy):
+        seg = Segment(origin, 1.0)
+        spy = mocker.spy(Propagator, "propagate")
+
+        seg.propagate(eomVars1)
+        assert spy.call_count == 1
+
+        seg.propagate(eomVars2, lazy)
+        assert spy.call_count == 1 if lazy else 2
+        assert seg.propSol is not None
+        assert seg.propSol.y[:, 0].size >= origin.model.stateSize(eomVars2)
+        assert seg.propSol.t[0] == origin.epoch.allVals[0]
+        assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
+
+    @pytest.mark.parametrize(
+        "fcn, shapeOut",
+        [
+            ["finalState", (6,)],
+            ["partials_finalState_wrt_time", (6,)],
+            ["partials_finalState_wrt_initialState", (6, 6)],
+            ["partials_finalState_wrt_epoch", (0,)],
+            ["partials_finalState_wrt_params", (0,)],
+        ],
+    )
+    def test_getPropResults(self, origin, mocker, fcn, shapeOut):
+        seg = Segment(origin, 1.0)
+        spy = mocker.spy(Propagator, "propagate")
+        fcn = getattr(seg, fcn)
+        out = fcn()
+        assert spy.call_count == 1
+        assert isinstance(out, np.ndarray)
+        assert out.shape == shapeOut
+
+
+# ------------------------------------------------------------------------------
 class TestCorrectionsProblem:
     # -------------------------------------------
     # Variables

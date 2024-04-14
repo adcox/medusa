@@ -3,11 +3,58 @@ Core Corrections Class
 """
 import logging
 from abc import ABC, abstractmethod
+from copy import copy
 
 import numpy as np
 import numpy.ma as ma
 
+from pika.dynamics import AbstractDynamicsModel, EOMVars
+from pika.propagate import Propagator
+
 logger = logging.getLogger(__name__)
+
+
+# ------------------------------------------------------------------------------
+# Basic Building Blocks
+#
+#   - Variable
+#   - AbstractConstraint
+# ------------------------------------------------------------------------------
+
+
+class Variable:
+    """
+    Contains a variable vector with an optional mask to flag non-variable values
+
+    Args:
+        values (float, [float], np.ndarray<float>): scalar or array of variable
+            values
+        mask (bool, [bool], np.ndarray<bool>): ``True`` flags values as excluded
+            from the free variable vector; ``False`` flags values as included
+    """
+
+    def __init__(self, values, mask=False, name=""):
+        self.values = ma.array(values, mask=mask, ndmin=1)
+        self.name = name
+
+    @property
+    def allVals(self):
+        return self.values.data
+
+    @property
+    def freeVals(self):
+        return self.values[~self.values.mask]
+
+    @property
+    def numFree(self):
+        """
+        Get the number of un-masked values, i.e., the number of free variables
+        within the vector
+
+        Returns:
+            int: the number of un-masked values
+        """
+        return int(sum(~self.values.mask))
 
 
 class AbstractConstraint(ABC):
@@ -67,31 +114,150 @@ class AbstractConstraint(ABC):
         pass
 
 
-class Variable:
+# ------------------------------------------------------------------------------
+# Representing Trajectories
+#
+#   - ControlPoint
+#   - Segment
+# ------------------------------------------------------------------------------
+
+
+class ControlPoint:
     """
-    Contains a variable vector with an optional mask to flag non-variable values
+    Defines a propagation start point
 
     Args:
-        values (float, [float], np.ndarray<float>): scalar or array of variable
-            values
-        mask (bool, [bool], np.ndarray<bool>): ``True`` flags values as excluded
-            from the free variable vector; ``False`` flags values as included
+        model (AbstractDynamicsModel): defines the dynamics model for the propagation
+        epoch (float, Variable): the epoch at which the propagation begins. An
+            input ``float`` is converted to a :class:`Variable` with name "Epoch"
+        state ([float], Variable): the state at which the propagation begins. An
+            input list of floats is converted to a :class:`Variable` with name "State"
+
+    Raises:
+        TypeError: if the model is not derived from AbstractDynamicsModel
+        RuntimeError: if the epoch specifies more than one value
+        RuntimeError: if the state specifies more values than the dynamics model
+            allows for :attr:`EOMVars.STATE`
     """
 
-    def __init__(self, values, mask=False, name=""):
-        self.values = ma.array(values, mask=mask, ndmin=1)
-        self.name = name
+    def __init__(self, model, epoch, state):
+        if not isinstance(model, AbstractDynamicsModel):
+            raise TypeError("Model must be derived from AbstractDynamicsModel")
 
-    @property
-    def numFree(self):
+        if not isinstance(epoch, Variable):
+            epoch = Variable(epoch, name="Epoch")
+
+        if not isinstance(state, Variable):
+            state = Variable(state, name="State")
+
+        if not epoch.values.size == 1:
+            raise RuntimeError("Epoch can only have one value")
+
+        sz = model.stateSize(EOMVars.STATE)
+        if not state.values.size == sz:
+            raise RuntimeError("State must have {sz} values")
+
+        self.model = model
+        self.epoch = epoch
+        self.state = state
+
+    @staticmethod
+    def fromProp(solution, ix=0):
         """
-        Get the number of un-masked values, i.e., the number of free variables
-        within the vector
+        Construct a control point from a propagated arc
+
+        Args:
+            solution (scipy.integrate.OptimizeResult): the output from the propagation
+            ix (Optional, int): the index of the point within the ``solution``
 
         Returns:
-            int: the number of un-masked values
+            ControlPoint: a control point with epoch and state retrieved from the
+            propagation solution
         """
-        return int(sum(~self.values.mask))
+        if not isinstance(solution, scipy.integrate.OptimizeResult):
+            raise TypeError("Expecting OptimizeResult from scipy solve_ivp")
+
+        if ix > len(solution.t):
+            raise ValueError(f"ix = {ix} is out of bounds (max = {len(solution.t)})")
+
+        return ControlPoint(solution.model, solution.t[ix], solution.y[:, ix])
+
+
+class Segment:
+    def __init__(self, origin, tof, prop=None, propParams=[]):
+        if not isinstance(origin, ControlPoint):
+            raise TypeError("origin must be a ControlPoint")
+
+        if prop is not None:
+            if not isinstance(prop, Propagator):
+                raise TypeError("prop must be a Propagator")
+            prop = copy(prop)
+            if not prop.model == origin.model:
+                logger.warning("Changing propagator model to match origin")
+                prop.model = origin.model
+        else:
+            prop = Propagator(origin.model, dense=False)
+
+        if not isinstance(tof, Variable):
+            tof = Variable(tof, name="Time-of-flight")
+
+        if not isinstance(propParams, Variable):
+            propParams = Variable(propParams, name="Params")
+
+        self.origin = origin
+        self.tof = tof
+        self.prop = prop
+        self.propParams = propParams
+        self.propSol = None
+
+    def finalState(self):
+        self.propagate(EOMVars.STATE)
+        return self.propSol.y[:, -1]
+
+    def partials_finalState_wrt_time(self):
+        self.propagate(EOMVars.STATE)
+        return self.origin.model.evalEOMs(
+            self.propSol.t[-1],
+            self.propSol.y[:, -1],
+            [EOMVars.STATE],
+            self.propParams.values,
+        )
+
+    def partials_finalState_wrt_initialState(self):
+        # Assumes propagation begins at initial state
+        self.propagate([EOMVars.STATE, EOMVars.STM])
+        return self.origin.model.extractVars(self.propSol.y[:, -1], EOMVars.STM)
+
+    def partials_finalState_wrt_epoch(self):
+        self.propagate([EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS])
+        return self.origin.model.extractVars(self.propSol.y[:, -1], EOMVars.EPOCH_DEPS)
+
+    def partials_finalState_wrt_params(self):
+        self.propagate(
+            [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS]
+        )
+        return self.origin.model.extractVars(self.propSol.y[:, -1], EOMVars.PARAM_DEPS)
+
+    def propagate(self, eomVars, lazy=True):
+        # Check to see if we can skip the propagation
+        if lazy and self.propSol is not None:
+            eomVars = np.array(eomVars, ndmin=1)
+            if all([v in self.propSol.eomVars for v in eomVars]):
+                return
+
+        # Propagate from the origin for TOF, set self.propSol
+        tspan = [0, self.tof.allVals[0]] + self.origin.epoch.allVals[0]
+        self.propSol = self.prop.propagate(
+            self.origin.state.allVals,
+            tspan,
+            params=self.propParams.allVals,
+            eomVars=eomVars,
+        )
+
+
+# ------------------------------------------------------------------------------
+# Organizing it all together
+# ------------------------------------------------------------------------------
 
 
 class CorrectionsProblem:
