@@ -67,11 +67,10 @@ class AbstractConstraint(ABC):
     @abstractmethod
     def size(self):
         """
-        Get the number of constraint rows, i.e., the number of scalar constraint
-        equations
+        Get the number of scalar constraint equations
 
         Returns:
-            int: the number of constraint rows
+            int: the number of constraint equations
         """
         pass
 
@@ -474,6 +473,7 @@ class CorrectionsProblem:
 
     def jacobian(self, recompute):
         if recompute:
+            self._jacobian = np.zeros((self.numConstraints, self.numFreeVars))
             # Loop through constraints and compute partials with respect to all
             #   of the free variables
             for constraint, cix in self._constraintIndexMap.items():
@@ -484,10 +484,16 @@ class CorrectionsProblem:
                 for partialVar, partialMat in partials.items():
                     # Mask the partials to remove columns associated with variables
                     #   that are not free variables
-                    maskedMat = partialVar.maskPartials(partialMat)
-
-                    if maskedMat.size > 0:
-                        # TODO insert partialMat into Jacobian
-                        pass
+                    if any(~partialVar.values.mask):
+                        cols = self._freeVarIndexMap[partialVar] + np.arange(
+                            partialVar.numFree
+                        )
+                        for rix, partials in zip(
+                            cix + np.arange(constraint.size), partialMat
+                        ):
+                            self._jacobian[rix, cols] = partials
+                        # rows = cix + np.arange(constraint.size)
+                        # breakpoint()
+                        # self._jacobian[rows, cols] = partialMat
 
         return self._jacobian
