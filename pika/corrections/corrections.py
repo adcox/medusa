@@ -7,6 +7,7 @@ from copy import copy
 
 import numpy as np
 import numpy.ma as ma
+import scipy
 
 from pika.dynamics import AbstractDynamicsModel, EOMVars
 from pika.propagate import Propagator
@@ -174,7 +175,7 @@ class ControlPoint:
             ControlPoint: a control point with epoch and state retrieved from the
             propagation solution
         """
-        if not isinstance(solution, scipy.integrate.OptimizeResult):
+        if not isinstance(solution, scipy.optimize.OptimizeResult):
             raise TypeError("Expecting OptimizeResult from scipy solve_ivp")
 
         if ix > len(solution.t):

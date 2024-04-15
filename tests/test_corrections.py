@@ -102,7 +102,16 @@ class TestControlPoint:
         with pytest.raises(RuntimeError):
             ControlPoint(model, epoch, state)
 
-    # TODO test ControlPoint.fromProp
+    def test_fromProp(self, model):
+        prop = Propagator(model)
+        t0 = 0.1
+        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        sol = prop.propagate(y0, [t0, t0 + 1.2])
+        cp = ControlPoint.fromProp(sol)
+
+        assert cp.model == model
+        assert cp.epoch.allVals[0] == t0
+        assert np.array_equal(cp.state.allVals, y0)
 
 
 # ------------------------------------------------------------------------------
