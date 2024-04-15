@@ -31,7 +31,7 @@ class TestVariable:
     def test_constructor(self, vals, mask, name):
         var = Variable(vals, mask, name)
 
-        assert isinstance(var.values, np.ndarray)
+        assert isinstance(var.values, np.ma.MaskedArray)
         assert len(var.values.shape) == 1
 
         assert all(var.values.data == np.array(vals, ndmin=1))
@@ -444,3 +444,41 @@ class TestCorrectionsProblem:
             prob.addConstraint(con)
 
         assert prob.numConstraints == sum([con.size for con in cons])
+
+    # -------------------------------------------
+    # Jacobian
+
+    @pytest.mark.parametrize(
+        "posMask, posVals",
+        [
+            [[0, 0, 0], [None, 2.0, 3.0]],
+            [[1, 0, 1], [1.0]],
+            [[0, 0, 1], [1.0, 2.0]],
+        ],
+    )
+    def test_jacobian(self, posMask, posVals):
+        prob = CorrectionsProblem()
+
+        pos = Variable([1.0, 2.0, 3.0], mask=posMask)
+        vel = Variable([4.0, 5.0, 6.0])
+
+        matchY = constraints.VariableValueConstraint(pos, posVals)
+        matchDX = constraints.VariableValueConstraint(vel, [4.01, None, None])
+
+        prob.addVariable(pos)
+        prob.addVariable(vel)
+
+        prob.addConstraint(matchY)
+        prob.addConstraint(matchDX)
+
+        prob.freeVarIndexMap(True)
+        prob.constraintIndexMap(True)
+        prob.freeVarVec(True)
+        prob.constraintVec(True)
+
+        jac = prob.jacobian(True)
+        assert isinstance(jac, np.ndarray)
+        assert jac.shape == (prob.numConstraints, prob.numFreeVars)
+
+        # There should be a one in the Jacobian for each constraint
+        assert sum(jac.flat) == prob.numConstraints
