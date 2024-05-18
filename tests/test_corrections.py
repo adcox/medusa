@@ -38,17 +38,9 @@ class TestVariable:
         assert all(var.values.mask == np.array(mask, ndmin=1))
         assert var.name == name
 
-    @pytest.mark.parametrize(
-        "vals, mask",
-        [
-            [[1.0], [False]],
-            [[1.0, 2.0], [True, False]],
-            [[1.0, 2.0], [True, True]],
-        ],
-    )
-    def test_allVals(self, vals, mask):
-        var = Variable(vals, mask)
-        assert np.array_equal(var.allVals, vals)
+        # simple properties
+        assert all(var.allVals == np.array(vals, ndmin=1))
+        assert all(var.mask == np.array(mask, ndmin=1))
 
     @pytest.mark.parametrize(
         "vals, mask",
@@ -68,6 +60,21 @@ class TestVariable:
     def test_numFree(self, mask):
         var = Variable([1.0, 2.0], mask)
         assert var.numFree == sum([not m for m in mask])
+
+    @pytest.mark.parametrize(
+        "indices, expected",
+        [
+            [[0, 1, 2, 3], [0, 1]],
+            [[0, 1], [0]],
+            [[1, 2], [0, 1]],
+            [[2, 3], [1]],
+            [[2, 1], [0, 1]],
+            [[0, 3], []],
+        ],
+    )
+    def test_unmaskedIndices(self, indices, expected):
+        var = Variable([0.0, 1.0, 2.0, 3.0], [True, False, False, True])
+        assert var.unmaskedIndices(indices) == expected
 
 
 # ------------------------------------------------------------------------------
@@ -132,20 +139,25 @@ class TestSegment:
         return ControlPoint(model, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
 
     @pytest.mark.parametrize(
-        "tof, _prop, params",
+        "tof, term, _prop, params",
         [
-            [1.0, None, []],
-            [1.0, "prop", []],
-            [Variable(1.0, True), None, Variable([])],
+            [1.0, None, None, []],
+            [1.0, "cp", None, []],
+            [1.0, None, "prop", []],
+            [Variable(1.0, True), None, None, Variable([])],
         ],
     )
-    def test_constructor(self, origin, tof, _prop, params, request):
+    def test_constructor(self, origin, tof, term, _prop, params, request):
         if not _prop is None:
             _prop = request.getfixturevalue(_prop)
 
-        seg = Segment(origin, tof, _prop, params)
+        if term == "cp":
+            term = ControlPoint(origin.model, 0.1, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        seg = Segment(origin, tof, term, _prop, params)
 
         assert seg.origin == origin
+        assert seg.terminus == term
 
         assert isinstance(seg.tof, Variable)
         assert seg.tof.values.size == 1
@@ -161,7 +173,7 @@ class TestSegment:
         sun, earth = loadBody("Sun"), loadBody("Earth")
         model = DynamicsModel(ModelConfig(sun, earth))
         prop = Propagator(model)
-        seg = Segment(origin, 2.3, prop)
+        seg = Segment(origin, 2.3, prop=prop)
         assert seg.prop.model == origin.model
         assert not seg.prop.model == model
 
@@ -224,6 +236,14 @@ class TestSegment:
         assert isinstance(out, np.ndarray)
         assert out.shape == shapeOut
 
+    def test_getMultiplePropResults(self, origin):
+        seg = Segment(origin, 1.0)
+        assert seg.partials_finalState_wrt_params().shape == (0,)
+        assert seg.partials_finalState_wrt_epoch().shape == (0,)
+        assert seg.partials_finalState_wrt_initialState().shape == (6, 6)
+        assert seg.partials_finalState_wrt_time().shape == (6,)
+        assert seg.finalState().shape == (6,)
+
 
 # ------------------------------------------------------------------------------
 class TestCorrectionsProblem:
@@ -240,6 +260,13 @@ class TestCorrectionsProblem:
         assert var in prob._freeVarIndexMap  # successfull add
         assert prob._freeVarIndexMap[var] is None  # no index set yet
         assert prob._freeVarVec.size == 0  # not updated
+
+    def test_addEmptyVariable(self):
+        # A variable with no free values will not be added
+        prob = CorrectionsProblem()
+        var = Variable([1.0, 2.0], mask=[1, 1])
+        prob.addVariable(var)
+        assert not var in prob._freeVarIndexMap
 
     @pytest.mark.parametrize(
         "variables",
@@ -366,6 +393,15 @@ class TestCorrectionsProblem:
         assert con in prob._constraintIndexMap  # was added
         assert prob._constraintIndexMap[con] is None  # no index set yet
         assert prob._constraintVec.size == 0  # not updated
+
+    def test_addEmptyConstraint(self):
+        prob = CorrectionsProblem()
+        var = Variable([1.0])
+        con = constraints.VariableValueConstraint(var, [None])
+        assert con.size == 0
+
+        prob.addConstraint(con)
+        assert not con in prob._constraintIndexMap
 
     def test_rmConstraint(self):
         prob = CorrectionsProblem()

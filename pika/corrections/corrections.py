@@ -38,6 +38,9 @@ class Variable:
         self.values = ma.array(values, mask=mask, ndmin=1)
         self.name = name
 
+    def __repr__(self):
+        return "<Variable {!r}, values={!r}>".format(self.name, self.values)
+
     @property
     def allVals(self):
         return self.values.data
@@ -45,6 +48,10 @@ class Variable:
     @property
     def freeVals(self):
         return self.values[~self.values.mask]
+
+    @property
+    def mask(self):
+        return self.values.mask
 
     @property
     def numFree(self):
@@ -56,6 +63,32 @@ class Variable:
             int: the number of un-masked values
         """
         return int(sum(~self.values.mask))
+
+    def unmaskedIndices(self, indices):
+        """
+        Get the indices of the
+
+        Args:
+            indices ([int]): the indices of the Variable value regardless of masking
+
+        Returns:
+            [int]: the indices of the requested Variable values within the unmasked
+            array.
+
+        Examples:
+            >>> Variable([0, 1], [True, False]).unmaskedIndices([1])
+            ... [0]
+            >>> Variable([0, 1], [True, False]).unmaskedIndices([0])
+            ... []
+        """
+        count = 0
+        out = []
+        for ix, mask in enumerate(self.values.mask):
+            if ix in indices and not mask:
+                out.append(count)
+            count += not mask
+
+        return out
 
 
 class AbstractConstraint(ABC):
@@ -184,9 +217,12 @@ class ControlPoint:
 
 
 class Segment:
-    def __init__(self, origin, tof, prop=None, propParams=[]):
+    def __init__(self, origin, tof, terminus=None, prop=None, propParams=[]):
         if not isinstance(origin, ControlPoint):
             raise TypeError("origin must be a ControlPoint")
+
+        if terminus is not None and not isinstance(terminus, ControlPoint):
+            raise TypeError("terminus must be a ControlPoint or None")
 
         if prop is not None:
             if not isinstance(prop, Propagator):
@@ -205,6 +241,7 @@ class Segment:
             propParams = Variable(propParams, name="Params")
 
         self.origin = origin
+        self.terminus = terminus
         self.tof = tof
         self.prop = prop
         self.propParams = propParams
@@ -212,16 +249,17 @@ class Segment:
 
     def finalState(self):
         self.propagate(EOMVars.STATE)
-        return self.propSol.y[:, -1]
+        return self.origin.model.extractVars(self.propSol.y[:, -1], EOMVars.STATE)
 
     def partials_finalState_wrt_time(self):
         self.propagate(EOMVars.STATE)
-        return self.origin.model.evalEOMs(
+        dy_dt = self.origin.model.evalEOMs(
             self.propSol.t[-1],
             self.propSol.y[:, -1],
             [EOMVars.STATE],
             self.propParams.values,
         )
+        return self.origin.model.extractVars(dy_dt, EOMVars.STATE)
 
     def partials_finalState_wrt_initialState(self):
         # Assumes propagation begins at initial state
@@ -301,6 +339,11 @@ class CorrectionsProblem:
         """
         if not isinstance(variable, Variable):
             raise ValueError("Can only add Variable objects")
+
+        if variable.numFree == 0:
+            logger.error(f"Cannot add {variable}; it has no free values")
+            return
+
         self._freeVarIndexMap[variable] = None
 
     def rmVariable(self, variable):
@@ -392,6 +435,11 @@ class CorrectionsProblem:
         """
         if not isinstance(constraint, AbstractConstraint):
             raise ValueError("Can only add AbstractConstraint objects")
+
+        if constraint.size == 0:
+            logger.error(f"Cannot add {constraint}; its size is zero")
+            return
+
         self._constraintIndexMap[constraint] = None
 
     def rmConstraint(self, constraint):

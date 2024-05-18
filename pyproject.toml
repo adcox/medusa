@@ -55,7 +55,7 @@ test = [
 packages = ["pika"]
 
 [tool.pytest.ini_options]
-addopts = "-ra -v"
+addopts = "-ra"
 
 [tool.black]
 line-length = 88
