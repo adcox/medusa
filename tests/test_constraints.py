@@ -79,10 +79,7 @@ class TestContinuityConstraint:
     )
     def test_evaluate(self, segment, indices, problem):
         con = pcons.ContinuityConstraint(segment, indices=indices)
-        freeVarIndexMap = problem.freeVarIndexMap(True)
-        freeVarVec = problem.freeVarVec(True)
-
-        err = con.evaluate(freeVarIndexMap, freeVarVec)
+        err = con.evaluate(problem.freeVarIndexMap(), problem.freeVarVec())
         assert isinstance(err, np.ndarray)
         assert err.size == con.size
 
@@ -100,9 +97,7 @@ class TestContinuityConstraint:
     )
     def test_partials(self, segment, indices, problem):
         con = pcons.ContinuityConstraint(segment, indices=indices)
-        freeVarIndexMap = problem.freeVarIndexMap(True)
-        freeVarVec = problem.freeVarVec(True)
-        partials = con.partials(freeVarIndexMap, freeVarVec)
+        partials = con.partials(problem.freeVarIndexMap(), problem.freeVarVec())
 
         assert isinstance(partials, dict)
 

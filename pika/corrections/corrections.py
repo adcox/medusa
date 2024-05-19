@@ -317,12 +317,17 @@ class CorrectionsProblem:
     """
 
     def __init__(self):
-        self._freeVarIndexMap = {}
-        self._constraintIndexMap = {}
+        # free variables and constraints are stored in a list for add/remove
+        self._freeVars = []
+        self._constraints = []
 
-        self._freeVarVec = np.empty((0,))
-        self._constraintVec = np.empty((0,))
-        self._jacobian = np.empty((0,))
+        # Other data objects are initialized to None and recomputed on demand
+        self._freeVarIndexMap = None  # {}
+        self._constraintIndexMap = None
+
+        self._freeVarVec = None  # np.empty((0,))
+        self._constraintVec = None
+        self._jacobian = None
 
     # -------------------------------------------
     # Variables
@@ -344,7 +349,10 @@ class CorrectionsProblem:
             logger.error(f"Cannot add {variable}; it has no free values")
             return
 
-        self._freeVarIndexMap[variable] = None
+        self._freeVars.append(variable)
+        self._freeVarIndexMap = None
+        self._freeVarVec = None
+        self._jacobian = None
 
     def rmVariable(self, variable):
         """
@@ -354,54 +362,51 @@ class CorrectionsProblem:
             variable (Variable): the variable to remove. If the variable is not
             part of the problem, no action is taken.
         """
-        if variable in self._freeVarIndexMap:
-            del self._freeVarIndexMap[variable]
-        else:
+        try:
+            self._freeVars.remove(variable)
+            self._freeVarIndexMap = None
+            self._freeVarVec = None
+            self._jacobian = None
+        except ValueError:
             logger.error(f"Could not remove variable {variable}")
 
     def clearVariables(self):
         """
         Remove all variables from the problem
         """
-        self._freeVarIndexMap = {}
+        self._freeVars = []
+        self._freeVarIndexMap = None
+        self._freeVarVec = None
+        self._jacobian = None
 
-    def freeVarVec(self, recompute):
+    def freeVarVec(self):
         """
         Get the free variable vector
-
-        Args:
-            recompute (bool): whether or not to recompute the free variable vector.
-                The :func:`freeVarIndexMap` function must be called first (with
-                ``recompute = True``).
 
         Returns:
             numpy.ndarray<float>: the free variable vector
         """
-        if recompute:
+        if self._freeVarVec is None:
             self._freeVarVec = np.zeros((self.numFreeVars,))
-            for var, ix in self._freeVarIndexMap.items():
+            for var, ix in self.freeVarIndexMap().items():
                 self._freeVarVec[ix : ix + var.numFree] = var.values[~var.values.mask]
 
         return self._freeVarVec
 
-    def freeVarIndexMap(self, recompute):
+    def freeVarIndexMap(self):
         """
         Get the free variable index map
-
-        Args:
-            recompute (bool): whether or not to recompute the free variable index
-                map, e.g., after variables have been added or removed from the
-                problem
 
         Returns:
             dict: a dictionary mapping the variables included in the problem
             (as :class:`Variable` objects) to the index within the free variable
             vector (as an :class:`int`).
         """
-        if recompute:
+        if self._freeVarIndexMap is None:
             # TODO sort variables by type?
+            self._freeVarIndexMap = {}
             count = 0
-            for var in self._freeVarIndexMap:
+            for var in self._freeVars:
                 self._freeVarIndexMap[var] = count
                 count += var.numFree
 
@@ -418,7 +423,7 @@ class CorrectionsProblem:
         Returns:
             int: number of free variables
         """
-        return sum([var.numFree for var in self._freeVarIndexMap])
+        return sum([var.numFree for var in self._freeVars])
 
     # TODO (internal?) function to update variable objects with values from
     #   freeVarVec? Not sure if needed
@@ -440,7 +445,10 @@ class CorrectionsProblem:
             logger.error(f"Cannot add {constraint}; its size is zero")
             return
 
-        self._constraintIndexMap[constraint] = None
+        self._constraints.append(constraint)
+        self._constraintIndexMap = None
+        self._constraintVec = None
+        self._jacobian = None
 
     def rmConstraint(self, constraint):
         """
@@ -450,18 +458,24 @@ class CorrectionsProblem:
             constraint (AbstractConstraint): the constraint to remove. If the
                 constraint is not part of the problem, no action is taken.
         """
-        if constraint in self._constraintIndexMap:
-            del self._constraintIndexMap[constraint]
-        else:
+        try:
+            self._constraints.remove(constraint)
+            self._constraintIndexMap = None
+            self._constraintVec = None
+            self._jacobian = None
+        except ValueError:
             logger.error(f"Could not remove constraint {constraint}")
 
     def clearConstraints(self):
         """
         Remove all constraints from the problem
         """
-        self._constraintIndexMap = {}
+        self._constraints = []
+        self._constraintIndexMap = None
+        self._constraintVec = None
+        self._jacobian = None
 
-    def constraintVec(self, recompute):
+    def constraintVec(self):
         """
         Get the constraint vector
 
@@ -473,15 +487,15 @@ class CorrectionsProblem:
         Returns:
             numpy.ndarray<float>: the constraint vector
         """
-        if recompute:
+        if self._constraintVec is None:
             self._constraintVec = np.zeros((self.numConstraints,))
-            for constraint, ix in self._constraintIndexMap.items():
+            for constraint, ix in self.constraintIndexMap().items():
                 self._constraintVec[ix : ix + constraint.size] = constraint.evaluate(
-                    self._freeVarIndexMap, self._freeVarVec
+                    self.freeVarIndexMap(), self.freeVarVec()
                 )
         return self._constraintVec
 
-    def constraintIndexMap(self, recompute):
+    def constraintIndexMap(self):
         """
         Get the constraint index map
 
@@ -495,10 +509,11 @@ class CorrectionsProblem:
                 (as objects derived from :class:`AbstractConstraint`) to the index
                 within the constraint vector (as an :class:`int`).
         """
-        if recompute:
+        if self._constraintIndexMap is None:
             # TODO sort constraints by type?
+            self._constraintIndexMap = {}
             count = 0
-            for con in self._constraintIndexMap:
+            for con in self._constraints:
                 self._constraintIndexMap[con] = count
                 count += con.size
 
@@ -514,20 +529,22 @@ class CorrectionsProblem:
         Returns:
             int: the number of scalar constraint equations
         """
-        return sum([con.size for con in self._constraintIndexMap])
+        return sum([con.size for con in self._constraints])
 
     # -------------------------------------------
     # Jacobian
 
-    def jacobian(self, recompute):
-        if recompute:
+    def jacobian(self):
+        if self._jacobian is None:
             self._jacobian = np.zeros((self.numConstraints, self.numFreeVars))
             # Loop through constraints and compute partials with respect to all
             #   of the free variables
-            for constraint, cix in self._constraintIndexMap.items():
+            for constraint, cix in self.constraintIndexMap().items():
                 # Compute the partials of the constraint with respect to the free
                 #   variables
-                partials = constraint.partials(self._freeVarIndexMap, self._freeVarVec)
+                partials = constraint.partials(
+                    self.freeVarIndexMap(), self.freeVarVec()
+                )
 
                 for partialVar, partialMat in partials.items():
                     # Mask the partials to remove columns associated with variables
@@ -545,3 +562,77 @@ class CorrectionsProblem:
                         # self._jacobian[rows, cols] = partialMat
 
         return self._jacobian
+
+
+class DifferentialCorrector:
+    def __init__(self):
+        self.maxIterations = 20
+
+        self.convergenceCheck = None
+        self.updateGenerator = None
+        self.solution = None
+
+    def solve(self, problem):
+        self.solution = copy.deepcopy(problem)
+
+        if self.solution.numFreeVars == 0 or self.solution.numConstraints == 0:
+            return self.solution
+
+        itCount = 0
+        while True:
+            if itCount > 0:
+                freeVarStep = self.updateGenerator(self.solution)
+                # TODO setter method for freeVarVec
+                self.solution._freeVarVec = self.solution.freeVarVec() + freeVarStep
+
+            err = np.linalg.norm(self.solution.constraintVec(True))
+            logger.info(f"Iteration {itCount:03d}: ||F|| = {err:.4e}")
+            itCount += 1
+
+            if self.convergenceCheck(self.solution) or itCount >= self.maxIterations:
+                break
+
+        if not self.convergenceCheck(self.solution):
+            return None
+
+        return self.solution
+
+
+def minimumNormUpdate(problem):
+    nFree = problem.numFreeVars()
+    FX = -1 * problem.constraintVec()  # using -FX for all equations, so premultiply
+
+    if len(conVec) > nFree:
+        raise RuntimeError(
+            "Minimum Norm Update requires fewer or equal number of "
+            "constraints as free variables"
+        )
+
+    jacobian = problem.jacobian()
+    if len(FX) == nFree:
+        # Jacobian is square; it must be full rank!
+        # Solve the linear system J @ dX = -FX for dX
+        return scipy.linalg.solve(jacobian, FX)
+    elif len(FX) < nFree:
+        # Compute Gramm matrix; J must have linearly independent rows; rank(J) == nRows
+        JT = jacobian.T
+        G = jacobian @ JT
+        W = scipy.linalg.solve(G, FX)  # Solve G @ W = -FX for W
+        return JT @ W  # Minimum norm step is dX = JT @ W
+
+
+def leastSquaresUpdate(problem):
+    FX = -1 * problem.constraintVec()  # using -FX for all equations, so premultiply
+
+    if len(FX) <= problem.numFreeVars():
+        raise RuntimeError(
+            "Least Squares UPdate requires more constraints than free variables"
+        )
+
+    # System is over-constrained; J must have linearly independent columns;
+    #   rank(J) == nCols
+    JT = jacobian.T
+    G = JT @ J
+
+    # Solve system (J' @ J) @ dX = -J' @ FX for dX
+    return scipy.linalg.solve(G, JT @ FX)
