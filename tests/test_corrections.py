@@ -253,20 +253,18 @@ class TestCorrectionsProblem:
     def test_addVariable(self):
         prob = CorrectionsProblem()
         var = Variable([1.0, 2.0])
-        assert prob._freeVarIndexMap == {}  # empty to start
-        assert prob._freeVarVec.size == 0  # empty to start
+        assert prob._freeVars == []
 
         prob.addVariable(var)
-        assert var in prob._freeVarIndexMap  # successfull add
-        assert prob._freeVarIndexMap[var] is None  # no index set yet
-        assert prob._freeVarVec.size == 0  # not updated
+        assert var in prob._freeVars  # successful add
 
     def test_addEmptyVariable(self):
         # A variable with no free values will not be added
         prob = CorrectionsProblem()
         var = Variable([1.0, 2.0], mask=[1, 1])
         prob.addVariable(var)
-        assert not var in prob._freeVarIndexMap
+        assert not var in prob._freeVars
+        # TODO check logging
 
     @pytest.mark.parametrize(
         "variables",
@@ -282,7 +280,7 @@ class TestCorrectionsProblem:
 
         # remove one
         prob.rmVariable(variables[0])
-        assert not variables[0] in prob._freeVarIndexMap
+        assert not variables[0] in prob._freeVars
 
         # check that original object is not affected
         assert all(variables[0].values.data)
@@ -294,7 +292,7 @@ class TestCorrectionsProblem:
             prob.addVariable(var)
 
         # Should do nothing if asked to remove a variable
-        # TODO check logging?
+        # TODO check logging?  caplog
         prob.rmVariable(Variable([1.2, 3.4]))
 
     @pytest.mark.parametrize(
@@ -310,7 +308,7 @@ class TestCorrectionsProblem:
             prob.addVariable(var)
 
         prob.clearVariables()
-        assert prob._freeVarIndexMap == {}
+        assert prob._freeVars == []
 
         # Check that original objects are not affected
         for var in variables:
@@ -328,12 +326,8 @@ class TestCorrectionsProblem:
         for var in variables:
             prob.addVariable(var)
 
-        indexMap = prob.freeVarIndexMap(False)
-        for var in variables:
-            assert var in indexMap
-            assert indexMap[var] is None
-
-        indexMap = prob.freeVarIndexMap(True)
+        indexMap = prob.freeVarIndexMap()
+        assert isinstance(indexMap, dict)
         for var in variables:
             assert var in indexMap
             assert isinstance(indexMap[var], int)
@@ -352,14 +346,7 @@ class TestCorrectionsProblem:
         for var in variables:
             prob.addVariable(var)
 
-        # Need to update variable indices before building vector
-        prob.freeVarIndexMap(True)
-
-        vec = prob.freeVarVec(False)
-        assert isinstance(vec, np.ndarray)
-        assert vec.size == 0
-
-        vec = prob.freeVarVec(True)
+        vec = prob.freeVarVec()
         assert isinstance(vec, np.ndarray)
         assert vec.size == sum([var.numFree for var in variables])
 
@@ -384,15 +371,12 @@ class TestCorrectionsProblem:
 
     def test_addConstraint(self):
         prob = CorrectionsProblem()
-        assert prob._constraintIndexMap == {}  # empty to start
-        assert prob._constraintVec.size == 0  # empty to start
+        assert prob._constraints == []  # empty to start
 
         var = Variable([1.1])
         con = constraints.VariableValueConstraint(var, [0.0])
         prob.addConstraint(con)
-        assert con in prob._constraintIndexMap  # was added
-        assert prob._constraintIndexMap[con] is None  # no index set yet
-        assert prob._constraintVec.size == 0  # not updated
+        assert con in prob._constraints  # was added
 
     def test_addEmptyConstraint(self):
         prob = CorrectionsProblem()
@@ -401,7 +385,8 @@ class TestCorrectionsProblem:
         assert con.size == 0
 
         prob.addConstraint(con)
-        assert not con in prob._constraintIndexMap
+        assert not con in prob._constraints
+        # TODO check logging
 
     def test_rmConstraint(self):
         prob = CorrectionsProblem()
@@ -410,7 +395,7 @@ class TestCorrectionsProblem:
         prob.addConstraint(con)
         prob.rmConstraint(con)
 
-        assert not con in prob._constraintIndexMap
+        assert not con in prob._constraints
 
     def test_rmConstraint_missing(self):
         prob = CorrectionsProblem()
@@ -428,7 +413,7 @@ class TestCorrectionsProblem:
         prob.addConstraint(con)
         prob.clearConstraints()
 
-        assert not con in prob._constraintIndexMap
+        assert not con in prob._constraints
 
     def test_constraintIndexMap(self):
         prob = CorrectionsProblem()
@@ -436,11 +421,8 @@ class TestCorrectionsProblem:
         con = constraints.VariableValueConstraint(var, [0.0])
         prob.addConstraint(con)
 
-        indexMap = prob.constraintIndexMap(False)
-        assert con in indexMap
-        assert indexMap[con] is None
-
-        indexMap = prob.constraintIndexMap(True)
+        indexMap = prob.constraintIndexMap()
+        assert isinstance(indexMap, dict)
         assert con in indexMap
         assert isinstance(indexMap[con], int)
 
@@ -450,15 +432,8 @@ class TestCorrectionsProblem:
         prob.addVariable(var)
         con = constraints.VariableValueConstraint(var, [0.0])
         prob.addConstraint(con)
-        prob.freeVarIndexMap(True)  # must build indices to eval constraints
-        prob.constraintIndexMap(True)
-        prob.freeVarVec(True)  # must update free variables to eval constraints
 
-        vec = prob.constraintVec(False)
-        assert isinstance(vec, np.ndarray)
-        assert vec.size == 0
-
-        vec = prob.constraintVec(True)
+        vec = prob.constraintVec()
         assert isinstance(vec, np.ndarray)
         assert vec.size == con.size
         assert all([isinstance(val, float) for val in vec])
@@ -507,12 +482,7 @@ class TestCorrectionsProblem:
         prob.addConstraint(matchY)
         prob.addConstraint(matchDX)
 
-        prob.freeVarIndexMap(True)
-        prob.constraintIndexMap(True)
-        prob.freeVarVec(True)
-        prob.constraintVec(True)
-
-        jac = prob.jacobian(True)
+        jac = prob.jacobian()
         assert isinstance(jac, np.ndarray)
         assert jac.shape == (prob.numConstraints, prob.numFreeVars)
 
