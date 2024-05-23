@@ -412,6 +412,15 @@ class CorrectionsProblem:
 
         return self._freeVarIndexMap
 
+    def updateFreeVars(self, step):
+        newVec = self.freeVarVec() + step
+        for var, ix0 in self.freeVarIndexMap().items():
+            var.values[~var.mask] = newVec[ix0 : ix0 + var.numFree]
+
+        self._freeVarVec = None
+        self._constraintVec = None
+        self._jacobian = None
+
     @property
     def numFreeVars(self):
         """
@@ -547,19 +556,18 @@ class CorrectionsProblem:
                 )
 
                 for partialVar, partialMat in partials.items():
+                    if not partialVar in self.freeVarIndexMap():
+                        continue
                     # Mask the partials to remove columns associated with variables
                     #   that are not free variables
                     if any(~partialVar.values.mask):
-                        cols = self._freeVarIndexMap[partialVar] + np.arange(
+                        cols = self.freeVarIndexMap()[partialVar] + np.arange(
                             partialVar.numFree
                         )
                         for rix, partials in zip(
                             cix + np.arange(constraint.size), partialMat
                         ):
                             self._jacobian[rix, cols] = partials
-                        # rows = cix + np.arange(constraint.size)
-                        # breakpoint()
-                        # self._jacobian[rows, cols] = partialMat
 
         return self._jacobian
 
@@ -573,7 +581,9 @@ class DifferentialCorrector:
         self.solution = None
 
     def solve(self, problem):
-        self.solution = copy.deepcopy(problem)
+        # TODO
+        # self.solution = copy.deepcopy(problem)
+        self.solution = problem
 
         if self.solution.numFreeVars == 0 or self.solution.numConstraints == 0:
             return self.solution
@@ -582,10 +592,9 @@ class DifferentialCorrector:
         while True:
             if itCount > 0:
                 freeVarStep = self.updateGenerator(self.solution)
-                # TODO setter method for freeVarVec
-                self.solution._freeVarVec = self.solution.freeVarVec() + freeVarStep
+                self.solution.updateFreeVars(freeVarStep)
 
-            err = np.linalg.norm(self.solution.constraintVec(True))
+            err = np.linalg.norm(self.solution.constraintVec())
             logger.info(f"Iteration {itCount:03d}: ||F|| = {err:.4e}")
             itCount += 1
 
@@ -599,10 +608,10 @@ class DifferentialCorrector:
 
 
 def minimumNormUpdate(problem):
-    nFree = problem.numFreeVars()
+    nFree = problem.numFreeVars
     FX = -1 * problem.constraintVec()  # using -FX for all equations, so premultiply
 
-    if len(conVec) > nFree:
+    if len(FX) > nFree:
         raise RuntimeError(
             "Minimum Norm Update requires fewer or equal number of "
             "constraints as free variables"
@@ -624,7 +633,7 @@ def minimumNormUpdate(problem):
 def leastSquaresUpdate(problem):
     FX = -1 * problem.constraintVec()  # using -FX for all equations, so premultiply
 
-    if len(FX) <= problem.numFreeVars():
+    if len(FX) <= problem.numFreeVars:
         raise RuntimeError(
             "Least Squares UPdate requires more constraints than free variables"
         )
@@ -636,3 +645,7 @@ def leastSquaresUpdate(problem):
 
     # Solve system (J' @ J) @ dX = -J' @ FX for dX
     return scipy.linalg.solve(G, JT @ FX)
+
+
+def constraintVecL2Norm(problem):
+    return np.linalg.norm(problem.constraintVec()) < 1e-4

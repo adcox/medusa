@@ -8,7 +8,7 @@ __pycache__/
 *.egg-info/*
 
 # Vim
-*.swp
+*.sw[po]
 
 # Testing
 htmlcov
