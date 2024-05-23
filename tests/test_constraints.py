@@ -118,6 +118,37 @@ class TestContinuityConstraint:
 
         assert not segment.propParams in partials
         assert not segment.origin.epoch in partials
+        assert not segment.terminus.epoch in partials
+
+    @pytest.mark.parametrize(
+        "originMask, terminusMask, indices",
+        [
+            [None, None, None],
+            [None, None, [0, 1, 2]],
+            [None, [0, 0, 0, 1, 1, 1], [0, 1, 2]],
+            [[0, 0, 0, 1, 1, 1], None, None],
+            [[0, 1, 0, 1, 1, 1], None, None],
+            [[0, 0, 0, 1, 1, 1], None, [0, 1, 2]],
+            [[0, 0, 0, 1, 1, 1], [0, 0, 0, 1, 1, 1], [0, 1, 2]],
+        ],
+    )
+    def test_excludeTerminus(self, segment, indices):
+        # Don't include the terminus in the free variable vector
+        prob = CorrectionsProblem()
+        prob.addVariable(segment.origin.state)
+        prob.addVariable(segment.tof)
+        con = pcons.ContinuityConstraint(segment, indices=indices)
+        err = con.evaluate(prob.freeVarIndexMap(), prob.freeVarVec())
+        assert isinstance(err, np.ndarray)
+        assert err.size == con.size
+
+        partials = con.partials(prob.freeVarIndexMap(), prob.freeVarVec())
+        assert not segment.terminus.state in partials
+        assert segment.origin.state in partials
+        assert segment.tof in partials
+        assert not segment.propParams in partials
+        assert not segment.origin.epoch in partials
+        assert not segment.terminus.epoch in partials
 
 
 class TestVariableValueConstraint:

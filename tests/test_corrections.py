@@ -6,11 +6,13 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
+import pika.corrections as corrections
 import pika.corrections.constraints as constraints
 from pika.corrections import (
     AbstractConstraint,
     ControlPoint,
     CorrectionsProblem,
+    DifferentialCorrector,
     Segment,
     Variable,
 )
@@ -488,3 +490,39 @@ class TestCorrectionsProblem:
 
         # There should be a one in the Jacobian for each constraint
         assert sum(jac.flat) == prob.numConstraints
+
+
+class TestDifferentialCorrector:
+    @pytest.fixture(scope="class")
+    def model(self):
+        earth, moon = loadBody("Earth"), loadBody("Moon")
+        return DynamicsModel(ModelConfig(earth, moon))
+
+    def test_singleShooter(self, model):
+        # Create an initial state with velocity states free
+        q0 = Variable(
+            [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], [True] * 3 + [False] * 3
+        )
+        origin = ControlPoint(model, 0, q0)
+
+        # Target roughly halfway around
+        terminus = ControlPoint(model, 0, [0.82, 0.0, -0.57, 0.0, 0.0, 0.0])
+        segment = Segment(origin, 3.1505, terminus)
+
+        problem = CorrectionsProblem()
+        problem.addVariable(origin.state)
+        problem.addVariable(segment.tof)
+
+        # Constrain the position at the end of the arc to match the terminus
+        problem.addConstraint(
+            constraints.ContinuityConstraint(segment, indices=[0, 1, 2])
+        )
+
+        corrector = DifferentialCorrector()
+        corrector.updateGenerator = corrections.minimumNormUpdate
+        corrector.convergenceCheck = corrections.constraintVecL2Norm
+        solution = corrector.solve(problem)
+
+        breakpoint()
+        assert isinstance(solution, CorrectionsProblem)
+        # TODO check that constraints are met, etc.

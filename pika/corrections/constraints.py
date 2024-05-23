@@ -41,13 +41,14 @@ class ContinuityConstraint(AbstractConstraint):
         # F = propFinalState - terminalState
 
         termVar = self.segment.terminus.state
-        if not termVar in freeVarIndexMap:
-            raise RuntimeError(f"{termVar} is not in free variable index map")
-
         propState = self.segment.finalState()[~termVar.mask][self.unmaskedIx]
 
-        ix0 = freeVarIndexMap[termVar]
-        termState = freeVarVec[ix0 : ix0 + termVar.numFree][self.unmaskedIx]
+        if termVar in freeVarIndexMap:
+            ix0 = freeVarIndexMap[termVar]
+            termState = freeVarVec[ix0 : ix0 + termVar.numFree][self.unmaskedIx]
+        else:
+            termState = termVar.freeVals[self.unmaskedIx]
+
         return propState - termState
 
     def partials(self, freeVarIndexMap, freeVarVec):
@@ -57,11 +58,13 @@ class ContinuityConstraint(AbstractConstraint):
         tofVar = self.segment.tof
         paramVar = self.segment.propParams
 
-        # Partials for terminal state are all -1
-        dF_dqf = np.zeros((self.size, termVar.numFree))
-        for count, ix in enumerate(self.unmaskedIx):
-            dF_dqf[count, ix] = -1
-        partials = {termVar: dF_dqf}
+        partials = {}
+        if termVar in freeVarIndexMap:
+            # Partials for terminal state are all -1
+            dF_dqf = np.zeros((self.size, termVar.numFree))
+            for count, ix in enumerate(self.unmaskedIx):
+                dF_dqf[count, ix] = -1
+            partials[termVar] = dF_dqf
 
         # Partials for other variables come from integrated solution
         if originVar in freeVarIndexMap:
