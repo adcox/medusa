@@ -3,13 +3,13 @@ Core Corrections Class
 """
 import logging
 from abc import ABC, abstractmethod
-from copy import copy
+from copy import copy, deepcopy
 
 import numpy as np
 import numpy.ma as ma
 import scipy
 
-from pika.dynamics import AbstractDynamicsModel, EOMVars
+from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelBlockCopyMixin
 from pika.propagate import Propagator
 
 logger = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ class Variable:
         return out
 
 
-class AbstractConstraint(ABC):
+class AbstractConstraint(ModelBlockCopyMixin, ABC):
     """
     Defines the interface for a constraint object
     """
@@ -155,7 +155,7 @@ class AbstractConstraint(ABC):
 # ------------------------------------------------------------------------------
 
 
-class ControlPoint:
+class ControlPoint(ModelBlockCopyMixin):
     """
     Defines a propagation start point
 
@@ -603,9 +603,7 @@ class DifferentialCorrector:
         self.solution = None
 
     def solve(self, problem):
-        # TODO
-        # self.solution = copy.deepcopy(problem)
-        self.solution = problem
+        self.solution = deepcopy(problem)
 
         if self.solution.numFreeVars == 0 or self.solution.numConstraints == 0:
             return self.solution

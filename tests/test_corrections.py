@@ -1,6 +1,8 @@
 """
 Test corrections
 """
+import copy
+
 import numpy as np
 import pytest
 from conftest import loadBody
@@ -42,6 +44,32 @@ class TestVariable:
         # simple properties
         assert all(var.allVals == np.array(vals, ndmin=1))
         assert all(var.mask == np.array(mask, ndmin=1))
+
+    def test_copy(self):
+        var = Variable([1.0, 2.0], [True, False], "variable")
+        var2 = copy.copy(var)
+        assert id(var.values) == id(var2.values)
+        assert id(var.name) == id(var2.name)
+
+        # Changes to one DO affect the other
+        var.values[:] = [3, 4]
+        assert np.array_equal(var.values, var2.values)
+
+        var.name = "blah"
+        assert var2.name == "variable"
+
+    def test_deepCopy(self):
+        var = Variable([1.0, 2.0], [True, False], "variable")
+        var2 = copy.deepcopy(var)
+        assert np.array_equal(var.values, var2.values)
+        assert var.name == var2.name
+
+        # Changes to one do NOT affect the other
+        var.values[:] = [3, 4]
+        assert np.array_equal(var2.values, [1, 2])
+
+        var.name = "blah"
+        assert var2.name == "variable"
 
     @pytest.mark.parametrize(
         "vals, mask",
@@ -121,6 +149,40 @@ class TestControlPoint:
         assert cp.epoch.allVals[0] == t0
         assert np.array_equal(cp.state.allVals, y0)
 
+    def test_copy(self, model):
+        state = Variable(np.arange(6))
+        epoch = Variable(0.0)
+        cp = ControlPoint(model, epoch, state)
+        cp2 = copy.copy(cp)
+
+        assert id(cp.model) == id(cp2.model) == id(model)
+        assert id(cp.epoch) == id(cp2.epoch) == id(epoch)
+        assert id(cp.state) == id(cp2.state) == id(state)
+
+        # Changes to variables affect both objects
+        state.values[:] = np.arange(6, 12)
+        assert np.array_equal(cp.state.values, cp2.state.values)
+
+        epoch.values[:] = 3
+        assert np.array_equal(cp.epoch.values, cp2.epoch.values)
+
+    def test_deepcopy(self, model):
+        state = Variable(np.arange(6))
+        epoch = Variable(0.0)
+        cp = ControlPoint(model, epoch, state)
+        cp2 = copy.deepcopy(cp)
+
+        assert id(cp.model) == id(cp2.model)
+        assert not id(cp.epoch) == id(cp2.epoch)
+        assert not id(cp.state) == id(cp2.state)
+
+        # Changes to variables do NOT affect both objects
+        state.values[:] = np.arange(6, 12)
+        assert np.array_equal(cp2.state.values, np.arange(6))
+
+        epoch.values[:] = 3
+        assert np.array_equal(cp2.epoch.values, [0])
+
 
 # ------------------------------------------------------------------------------
 class TestSegment:
@@ -165,6 +227,7 @@ class TestSegment:
         assert seg.tof.allVals[0] == 1.0
 
         assert isinstance(seg.prop, Propagator)
+        assert not id(seg.prop) == id(_prop)  # should make a copy
         assert seg.prop.model == origin.model
 
         assert isinstance(seg.propParams, Variable)
@@ -177,6 +240,34 @@ class TestSegment:
         seg = Segment(origin, 2.3, prop=prop)
         assert seg.prop.model == origin.model
         assert not seg.prop.model == model
+
+    def test_copy(self, origin, prop):
+        tof = Variable([2.1])
+        terminus = ControlPoint(origin.model, 0.1, [0.0] * 6)
+        params = Variable([1.0, 2.0])
+        seg = Segment(origin, tof, terminus, prop, params)
+        seg2 = copy.copy(seg)
+
+        assert id(seg.origin) == id(seg2.origin) == id(origin)
+        assert id(seg.terminus) == id(seg2.terminus) == id(terminus)
+        assert id(seg.tof) == id(seg2.tof) == id(tof)
+        assert id(seg.prop) == id(seg2.prop)
+        assert id(seg.propParams) == id(seg2.propParams) == id(params)
+
+    def test_deepcopy(self, origin, prop):
+        tof = Variable([2.1])
+        terminus = ControlPoint(origin.model, 0.1, [0.0] * 6)
+        params = Variable([1.0, 2.0])
+        seg = Segment(origin, tof, terminus, prop, params)
+        seg2 = copy.deepcopy(seg)
+
+        assert not id(seg.origin) == id(seg2.origin)
+        assert id(seg.origin.model) == id(seg2.origin.model)
+        assert not id(seg.terminus) == id(seg2.terminus)
+        assert id(seg.terminus.model) == id(seg2.terminus.model)
+        assert not id(seg.tof) == id(seg2.tof)
+        assert not id(seg.prop) == id(seg2.prop)
+        assert not id(seg.propParams) == id(seg2.propParams)
 
     @pytest.mark.parametrize(
         "eomVars",
@@ -606,5 +697,9 @@ class TestDifferentialCorrector:
         corrector.convergenceCheck = corrections.constraintVecL2Norm
         solution = corrector.solve(problem)
 
+        assert isinstance(corrector.solution, CorrectionsProblem)
+        assert not id(corrector.solution) == id(problem)
+
+        breakpoint()
         assert isinstance(solution, CorrectionsProblem)
         # TODO check that constraints are met, etc.

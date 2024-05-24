@@ -2,7 +2,7 @@
 Dynamics Classes and Interfaces
 """
 from abc import ABC, abstractmethod
-from copy import copy
+from copy import copy, deepcopy
 from enum import IntEnum
 
 import numba
@@ -317,3 +317,17 @@ class AbstractDynamicsModel(ABC):
             return False
 
         return type(self) == type(other) and self.config == other.config
+
+
+class ModelBlockCopyMixin:
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            if isinstance(v, AbstractDynamicsModel):
+                # Models should NOT be copied
+                setattr(result, k, v)
+            else:
+                setattr(result, k, deepcopy(v, memo))
+        return result

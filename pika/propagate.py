@@ -9,7 +9,7 @@ import numpy as np
 from numba import njit
 from scipy.integrate import solve_ivp
 
-from pika.dynamics import AbstractDynamicsModel, EOMVars
+from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelBlockCopyMixin
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 #   anything and just making code more complex
 
 
-class Propagator:
+class Propagator(ModelBlockCopyMixin):
     """
     Create a propagator object.
 
