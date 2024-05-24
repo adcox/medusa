@@ -230,3 +230,17 @@ class TestVariableValueConstraint:
             if not con.values.mask[ix]:
                 assert partials[var][count, ix] == 1
                 count += 1
+
+    def test_varsAreRefs(self):
+        var = Variable([1.0, 2.0])
+        con = pcons.VariableValueConstraint(var, [0.0, 1.0])
+        indexMap = {var: 0}
+        freeVarVec = np.array(var.freeVals)
+
+        conEval = con.evaluate(indexMap, freeVarVec)
+        assert np.array_equal(conEval, [1.0, 1.0])
+
+        # Update variable
+        var.values[:] = [0.0, 1.0]
+        conEval2 = con.evaluate(indexMap, freeVarVec)
+        assert np.array_equal(conEval, [1.0, 1.0])
