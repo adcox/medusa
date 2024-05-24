@@ -1,7 +1,6 @@
 """
 Test corrections
 """
-
 import numpy as np
 import pytest
 from conftest import loadBody
@@ -361,6 +360,36 @@ class TestCorrectionsProblem:
             [Variable([1.0, 3.0], [True, False]), Variable([2.0, 4.0])],
         ],
     )
+    def test_updateFreeVars(self, variables):
+        prob = CorrectionsProblem()
+        for var in variables:
+            prob.addVariable(var)
+
+        vec0 = prob.freeVarVec()
+        newVec = np.random.rand(*vec0.shape)
+        prob.updateFreeVars(newVec)
+
+        assert prob._freeVarVec is None
+        assert prob._constraintVec is None
+        assert prob._jacobian is None
+        assert np.array_equal(prob.freeVarVec(), newVec)
+
+        # Check that variable objects were updated
+        for var, ix0 in prob.freeVarIndexMap().items():
+            assert np.array_equal(
+                var.values[~var.mask], prob._freeVarVec[ix0 : ix0 + var.numFree]
+            )
+            # TODO check that masked elements were NOT changed
+
+    @pytest.mark.parametrize(
+        "variables",
+        [
+            [Variable([1.0, 2.0])],
+            [Variable([1.0, 2.0], [True, False])],
+            [Variable([1.0, 3.0]), Variable([2.0, 4.0])],
+            [Variable([1.0, 3.0], [True, False]), Variable([2.0, 4.0])],
+        ],
+    )
     def test_numFreeVars(self, variables):
         prob = CorrectionsProblem()
         for var in variables:
@@ -491,6 +520,60 @@ class TestCorrectionsProblem:
         # There should be a one in the Jacobian for each constraint
         assert sum(jac.flat) == prob.numConstraints
 
+    def assertCached(
+        self, prob, fVec=False, fMap=False, cVec=False, cMap=False, jac=False
+    ):
+        flags = {
+            "_freeVarVec": fVec,
+            "_freeVarIndexMap": fMap,
+            "_constraintVec": cVec,
+            "_constraintIndexMap": cMap,
+            "_jacobian": jac,
+        }
+        for attr, flag in flags.items():
+            if flag:
+                assert getattr(prob, attr) is not None, f"{attr} should not be None"
+            else:
+                assert getattr(prob, attr) is None, f"{attr} should be None"
+
+    def clearCache(self, prob):
+        prob._freeVarVec = None
+        prob._freeVarIndexMap = None
+        prob._constraintVec = None
+        prob._constraintIndexMap = None
+        prob._jacobian = None
+
+    def test_caching(self):
+        prob = CorrectionsProblem()
+        var = Variable([0, 1, 2])
+        con = constraints.VariableValueConstraint(var, [None, 1.1, None])
+        prob.addVariable(var)
+        prob.addConstraint(con)
+        self.assertCached(prob)  # all caches are empty
+
+        prob.freeVarIndexMap()
+        self.assertCached(prob, fMap=True)
+
+        self.clearCache(prob)
+        prob.freeVarVec()
+        self.assertCached(prob, fMap=True, fVec=True)
+
+        self.clearCache(prob)
+        prob.constraintIndexMap()
+        self.assertCached(prob, cMap=True)
+
+        self.clearCache(prob)
+        prob.constraintVec()
+        self.assertCached(prob, fMap=True, fVec=True, cMap=True, cVec=True)
+
+        self.clearCache(prob)
+        prob.jacobian()
+        self.assertCached(prob, fMap=True, fVec=True, cMap=True, jac=True)
+
+        # Calling updateFreeVars clears most of the caches
+        prob.updateFreeVars(np.array([2, 0, 1]))
+        self.assertCached(prob, fMap=True, cMap=True)
+
 
 class TestDifferentialCorrector:
     @pytest.fixture(scope="class")
@@ -523,6 +606,5 @@ class TestDifferentialCorrector:
         corrector.convergenceCheck = corrections.constraintVecL2Norm
         solution = corrector.solve(problem)
 
-        breakpoint()
         assert isinstance(solution, CorrectionsProblem)
         # TODO check that constraints are met, etc.

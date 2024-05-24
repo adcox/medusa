@@ -349,6 +349,9 @@ class CorrectionsProblem:
             logger.error(f"Cannot add {variable}; it has no free values")
             return
 
+        if variable in self._freeVars:
+            raise RuntimeError("Variable has already been added")
+
         self._freeVars.append(variable)
         self._freeVarIndexMap = None
         self._freeVarVec = None
@@ -412,8 +415,24 @@ class CorrectionsProblem:
 
         return self._freeVarIndexMap
 
-    def updateFreeVars(self, step):
-        newVec = self.freeVarVec() + step
+    def updateFreeVars(self, newVec):
+        """
+        Update the free variable vector and corresponding Variable objects
+
+        Args:
+            newVec (numpy.ndarray): an updated free variable vector. It must
+                be the same size and shape as the existing free variable vector.
+
+        Raises:
+            ValueError: if ``newVec`` doesn't have the same shape as the
+                existing free variable vector
+        """
+        if not newVec.shape == self.freeVarVec().shape:
+            raise ValueError(
+                f"Shape of newVec {newVec.shape} doesn't match existing "
+                f"free variable vector {self.freeVarVec().shape}"
+            )
+
         for var, ix0 in self.freeVarIndexMap().items():
             var.values[~var.mask] = newVec[ix0 : ix0 + var.numFree]
 
@@ -453,6 +472,9 @@ class CorrectionsProblem:
         if constraint.size == 0:
             logger.error(f"Cannot add {constraint}; its size is zero")
             return
+
+        if constraint in self._constraints:
+            raise RuntimeError("Constraint has laredy been added")
 
         self._constraints.append(constraint)
         self._constraintIndexMap = None
@@ -592,7 +614,11 @@ class DifferentialCorrector:
         while True:
             if itCount > 0:
                 freeVarStep = self.updateGenerator(self.solution)
-                self.solution.updateFreeVars(freeVarStep)
+                newVec = self.solution.freeVarVec() + freeVarStep
+                self.solution.updateFreeVars(newVec)
+
+            print(self.solution.freeVarVec())
+            print(self.solution.constraintVec())
 
             err = np.linalg.norm(self.solution.constraintVec())
             logger.info(f"Iteration {itCount:03d}: ||F|| = {err:.4e}")
