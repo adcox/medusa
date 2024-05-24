@@ -1,6 +1,7 @@
 """
 Test Propagation
 """
+import copy
 
 import numpy as np
 import pytest
@@ -31,6 +32,13 @@ class TestPropagator:
     def test_constructor(self, emModel):
         prop = Propagator(emModel)
         assert prop.model == emModel
+
+    def test_deepcopy(self, emModel):
+        prop = Propagator(emModel)
+        prop2 = copy.deepcopy(prop)
+
+        assert id(prop.model) == id(prop2.model)
+        # TODO check other attributes
 
     @pytest.mark.parametrize("dense", [True, False])
     @pytest.mark.parametrize(
