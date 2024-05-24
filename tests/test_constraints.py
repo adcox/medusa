@@ -79,7 +79,7 @@ class TestContinuityConstraint:
     )
     def test_evaluate(self, segment, indices, problem):
         con = pcons.ContinuityConstraint(segment, indices=indices)
-        err = con.evaluate(problem.freeVarIndexMap(), problem.freeVarVec())
+        err = con.evaluate(problem.freeVarIndexMap())
         assert isinstance(err, np.ndarray)
         assert err.size == con.size
 
@@ -97,7 +97,7 @@ class TestContinuityConstraint:
     )
     def test_partials(self, segment, indices, problem):
         con = pcons.ContinuityConstraint(segment, indices=indices)
-        partials = con.partials(problem.freeVarIndexMap(), problem.freeVarVec())
+        partials = con.partials(problem.freeVarIndexMap())
 
         assert isinstance(partials, dict)
 
@@ -138,11 +138,11 @@ class TestContinuityConstraint:
         prob.addVariable(segment.origin.state)
         prob.addVariable(segment.tof)
         con = pcons.ContinuityConstraint(segment, indices=indices)
-        err = con.evaluate(prob.freeVarIndexMap(), prob.freeVarVec())
+        err = con.evaluate(prob.freeVarIndexMap())
         assert isinstance(err, np.ndarray)
         assert err.size == con.size
 
-        partials = con.partials(prob.freeVarIndexMap(), prob.freeVarVec())
+        partials = con.partials(prob.freeVarIndexMap())
         assert not segment.terminus.state in partials
         assert segment.origin.state in partials
         assert segment.tof in partials
@@ -197,8 +197,7 @@ class TestVariableValueConstraint:
         var = Variable([1.0, 2.0])
         con = pcons.VariableValueConstraint(var, values)
         indexMap = {var: 3}
-        freeVarVec = np.array([0.0, 1.0, 2.0, 1.1, 2.05])
-        conEval = con.evaluate(indexMap, freeVarVec)
+        conEval = con.evaluate(indexMap)
 
         assert isinstance(conEval, np.ndarray)
         assert conEval.size == con.size
@@ -208,7 +207,7 @@ class TestVariableValueConstraint:
         count = 0
         for ix in range(len(con.values)):
             if not con.values.mask[ix]:
-                assert conEval[count] == freeVarVec[indexMap[var] + ix] - con.values[ix]
+                assert conEval[count] == var.freeVals[ix] - con.values[ix]
                 count += 1
 
     @pytest.mark.parametrize("values", [[0.0, 0.0], [None, 0.0], [None, None]])
@@ -216,8 +215,7 @@ class TestVariableValueConstraint:
         var = Variable([1.0, 2.0])
         con = pcons.VariableValueConstraint(var, values)
         indexMap = {var: 3}
-        freeVarVec = np.array([0.0, 1.0, 2.0, 1.1, 2.05])
-        partials = con.partials(indexMap, freeVarVec)
+        partials = con.partials(indexMap)
 
         assert isinstance(partials, dict)
         assert var in partials
@@ -235,12 +233,11 @@ class TestVariableValueConstraint:
         var = Variable([1.0, 2.0])
         con = pcons.VariableValueConstraint(var, [0.0, 1.0])
         indexMap = {var: 0}
-        freeVarVec = np.array(var.freeVals)
 
-        conEval = con.evaluate(indexMap, freeVarVec)
+        conEval = con.evaluate(indexMap)
         assert np.array_equal(conEval, [1.0, 1.0])
 
         # Update variable
         var.values[:] = [0.0, 1.0]
-        conEval2 = con.evaluate(indexMap, freeVarVec)
-        assert np.array_equal(conEval, [1.0, 1.0])
+        conEval2 = con.evaluate(indexMap)
+        assert np.array_equal(conEval2, [0.0, 0.0])

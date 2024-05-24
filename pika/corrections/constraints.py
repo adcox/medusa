@@ -37,27 +37,22 @@ class ContinuityConstraint(AbstractConstraint):
     def size(self):
         return len(self.unmaskedIx)
 
-    def evaluate(self, freeVarIndexMap, freeVarVec):
+    def evaluate(self, freeVarIndexMap):
         # F = propFinalState - terminalState
-
+        self.segment.resetProp()  # force re-propagation
         termVar = self.segment.terminus.state
         propState = self.segment.finalState()[~termVar.mask][self.unmaskedIx]
-
-        if termVar in freeVarIndexMap:
-            ix0 = freeVarIndexMap[termVar]
-            termState = freeVarVec[ix0 : ix0 + termVar.numFree][self.unmaskedIx]
-        else:
-            termState = termVar.freeVals[self.unmaskedIx]
-
+        termState = termVar.freeVals[self.unmaskedIx]
         return propState - termState
 
-    def partials(self, freeVarIndexMap, freeVarVec):
+    def partials(self, freeVarIndexMap):
         originVar = self.segment.origin.state
         epochVar = self.segment.origin.epoch
         termVar = self.segment.terminus.state
         tofVar = self.segment.tof
         paramVar = self.segment.propParams
 
+        self.segment.resetProp()  # force re-propagation
         partials = {}
         if termVar in freeVarIndexMap:
             # Partials for terminal state are all -1
@@ -66,26 +61,27 @@ class ContinuityConstraint(AbstractConstraint):
                 dF_dqf[count, ix] = -1
             partials[termVar] = dF_dqf
 
-        # Partials for other variables come from integrated solution
+        # Partials for other variables come from integrated solution; ask for them
+        #   in decreasing order of complexity to take advantage of lazy propagation
+        if paramVar in freeVarIndexMap:
+            dState_dParams = self.segment.partials_finalState_wrt_params()
+            partials[paramVar] = dState_dParams[:, ~termVar.mask][:, self.unmaskedIx][
+                ~paramVar.mask, :
+            ]
+
+        if epochVar in freeVarIndexMap:
+            dState_dEpoch = self.segment.partials_finalState_wrt_epoch()
+            partials[epochVar] = dState_dEpoch[~termVar.mask][self.unmaskedIx]
+
         if originVar in freeVarIndexMap:
             # rows of STM correspond to terminal state, cols to origin state
             stm = self.segment.partials_finalState_wrt_initialState()
             stm_free = stm[~termVar.mask, :][self.unmaskedIx, :][:, ~originVar.mask]
             partials[originVar] = stm_free
 
-        if epochVar in freeVarIndexMap:
-            dState_dEpoch = self.segment.partials_finalState_wrt_epoch()
-            partials[epochVar] = dState_dEpoch[~termVar.mask][self.unmaskedIx]
-
         if tofVar in freeVarIndexMap:
             dState_dtof = self.segment.partials_finalState_wrt_time()
             partials[tofVar] = dState_dtof[~termVar.mask][self.unmaskedIx]
-
-        if paramVar in freeVarIndexMap:
-            dState_dParams = self.segment.partials_finalState_wrt_params()
-            partials[paramVar] = dState_dParams[:, ~termVar.mask][:, self.unmaskedIx][
-                ~paramVar.mask, :
-            ]
 
         return partials
 
@@ -113,24 +109,26 @@ class VariableValueConstraint(AbstractConstraint):
                 f"as variable free values ({variable.numFree})"
             )
 
-        self.values = np.ma.array(values, mask=[v is None for v in values])
         self.variable = variable
+        self.values = np.ma.array(values, mask=[v is None for v in values])
 
     @property
     def size(self):
         return sum(~self.values.mask)
 
-    def evaluate(self, freeVarIndexMap, freeVarVec):
-        # Find values in freeVarVec
+    def evaluate(self, freeVarIndexMap):
         if not self.variable in freeVarIndexMap:
             # TODO handle more gracefully?
             raise RuntimeError(f"{self.variable} is not in free variable index map")
 
-        ix0 = freeVarIndexMap[self.variable]
-        vecValues = freeVarVec[ix0 : ix0 + self.variable.numFree]
-        return vecValues[~self.values.mask] - self.values[~self.values.mask]
+        return (
+            self.variable.freeVals[~self.values.mask] - self.values[~self.values.mask]
+        )
+        # ix0 = freeVarIndexMap[self.variable]
+        # vecValues = freeVarVec[ix0 : ix0 + self.variable.numFree]
+        # return vecValues[~self.values.mask] - self.values[~self.values.mask]
 
-    def partials(self, freeVarIndexMap, freeVarVec):
+    def partials(self, freeVarIndexMap):
         # Partial is 1 for each constrained variable, zero otherwise
         deriv = np.zeros((self.size, self.variable.numFree))
         count = 0

@@ -108,14 +108,13 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
         pass
 
     @abstractmethod
-    def evaluate(self, freeVarIndexMap, freeVarVec):
+    def evaluate(self, freeVarIndexMap):
         """
         Evaluate the constraint
 
         Args:
             freeVarIndexMap (dict): maps the first index (:class:`int`) of each⋅
                 :class:`Variable` within ``freeVars`` to the variable object
-            freeVarVec (numpy.ndarray<float>): free variable vector
 
         Returns:
             numpy.ndarray<float> the value of the constraint funection; evaluates
@@ -127,7 +126,7 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
         pass
 
     @abstractmethod
-    def partials(self, freeVarIndexMap, freeVarVec):
+    def partials(self, freeVarIndexMap):
         """
         Compute the partial derivatives of the constraint vector with respect to
         all variables
@@ -135,7 +134,6 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
         Args:
             freeVarIndexMap (dict): maps the first index (:class:`int`) of each⋅
                 :class:`Variable` within ``freeVars`` to the variable object
-            freeVarVec (numpy.ndarray<float>): free variable vector
 
         Returns:
             dict: a dictionary mapping a :class:`Variable` object to the partial
@@ -245,6 +243,9 @@ class Segment:
         self.tof = tof
         self.prop = prop
         self.propParams = propParams
+        self.propSol = None
+
+    def resetProp(self):
         self.propSol = None
 
     def finalState(self):
@@ -522,7 +523,7 @@ class CorrectionsProblem:
             self._constraintVec = np.zeros((self.numConstraints,))
             for constraint, ix in self.constraintIndexMap().items():
                 self._constraintVec[ix : ix + constraint.size] = constraint.evaluate(
-                    self.freeVarIndexMap(), self.freeVarVec()
+                    self.freeVarIndexMap()
                 )
         return self._constraintVec
 
@@ -573,9 +574,7 @@ class CorrectionsProblem:
             for constraint, cix in self.constraintIndexMap().items():
                 # Compute the partials of the constraint with respect to the free
                 #   variables
-                partials = constraint.partials(
-                    self.freeVarIndexMap(), self.freeVarVec()
-                )
+                partials = constraint.partials(self.freeVarIndexMap())
 
                 for partialVar, partialMat in partials.items():
                     if not partialVar in self.freeVarIndexMap():
@@ -616,7 +615,7 @@ class DifferentialCorrector:
                 self.solution.updateFreeVars(newVec)
 
             print(self.solution.freeVarVec())
-            print(self.solution.constraintVec())
+            # print(self.solution.constraintVec())
 
             err = np.linalg.norm(self.solution.constraintVec())
             logger.info(f"Iteration {itCount:03d}: ||F|| = {err:.4e}")
