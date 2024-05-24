@@ -655,11 +655,11 @@ class TestCorrectionsProblem:
 
         self.clearCache(prob)
         prob.constraintVec()
-        self.assertCached(prob, fMap=True, fVec=True, cMap=True, cVec=True)
+        self.assertCached(prob, fMap=True, cMap=True, cVec=True)
 
         self.clearCache(prob)
         prob.jacobian()
-        self.assertCached(prob, fMap=True, fVec=True, cMap=True, jac=True)
+        self.assertCached(prob, fMap=True, cMap=True, jac=True)
 
         # Calling updateFreeVars clears most of the caches
         prob.updateFreeVars(np.array([2, 0, 1]))
@@ -700,6 +700,5 @@ class TestDifferentialCorrector:
         assert isinstance(corrector.solution, CorrectionsProblem)
         assert not id(corrector.solution) == id(problem)
 
-        breakpoint()
         assert isinstance(solution, CorrectionsProblem)
         # TODO check that constraints are met, etc.
