@@ -7,7 +7,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-from .corrections import AbstractConstraint, Variable
+from pika.corrections import AbstractConstraint, Variable
 
 
 class ContinuityConstraint(AbstractConstraint):
@@ -37,9 +37,11 @@ class ContinuityConstraint(AbstractConstraint):
     def size(self):
         return len(self.unmaskedIx)
 
+    def clearCache(self):
+        self.segment.resetProp()
+
     def evaluate(self, freeVarIndexMap):
         # F = propFinalState - terminalState
-        self.segment.resetProp()  # force re-propagation
         termVar = self.segment.terminus.state
         propState = self.segment.finalState()[~termVar.mask][self.unmaskedIx]
         termState = termVar.freeVals[self.unmaskedIx]
@@ -52,7 +54,6 @@ class ContinuityConstraint(AbstractConstraint):
         tofVar = self.segment.tof
         paramVar = self.segment.propParams
 
-        self.segment.resetProp()  # force re-propagation
         partials = {}
         if termVar in freeVarIndexMap:
             # Partials for terminal state are all -1
