@@ -66,18 +66,26 @@ class TestPropagator:
         assert all([tspan[0] <= t <= tspan[1] for t in sol.t])
         vecSize = emModel.stateSize(eoms)
         assert all([y.size == vecSize for y in sol.y.T])
+
+        # Check final state value; values from old MATLAB codes
+        assert pytest.approx(sol.y[0, -1], 1e-4) == 0.82129933
+        assert pytest.approx(sol.y[1, -1], 1e-4) == 0.00104217
+        assert pytest.approx(sol.y[2, -1], 1e-4) == 0.56899951
+        assert pytest.approx(sol.y[3, -1], 1e-4) == 0.00188573
+        assert pytest.approx(sol.y[4, -1], 1e-4) == -1.82139906
+        assert pytest.approx(sol.y[5, -1], 1e-4) == 0.00061782
         # TODO test that final state is close to initial?
 
-        # Check determinant of STM is unity
         if EOMVars.STM in eoms:
             stm = emModel.extractVars(sol.y[:, -1], EOMVars.STM)
+
+            # Check determinant of STM is unity
             assert pytest.approx(np.linalg.det(stm)) == 1.0
 
             # Diagonal is ~ 1
             assert pytest.approx(stm[0, 0]) == 1.00488725
             assert pytest.approx(stm[4, 4]) == 0.96591220
 
-            # Make sure orientation is correct; values from old MATLAB codes
             assert pytest.approx(stm[1, 0], 1e-4) == -3.3386919
             assert pytest.approx(stm[2, 0], 1e-4) == 0.0035160
             assert pytest.approx(stm[3, 0], 1e-4) == -6.0843220
