@@ -31,6 +31,10 @@ class Propagator(ModelBlockCopyMixin):
         dense (Optional, bool): whether or not to output dense propagation data;
             passed as the ``dense_output`` argument to
             :func:`~scipy.integrate.solve_ivp`
+        atol (Optional, float): absolute tolerance for the integrator; see
+            :func:`~scipy.integrate.solve_ivp` for more details
+        rtol (Optional, float): relative tolerance for the integrator; see
+            :func:`~scipy.integrate.solve_ivp` for more details
 
     Attributes:
         method (AbstractDynamicsModel): defines the dynamics model
@@ -39,11 +43,13 @@ class Propagator(ModelBlockCopyMixin):
         events ([AbstractEvent]): a list of integration events
     """
 
-    def __init__(self, model, method="DOP853", dense=True):
+    def __init__(self, model, method="DOP853", dense=True, atol=1e-12, rtol=1e-10):
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
         self.method = method
+        self.atol = atol
+        self.rtol = rtol
         self.model = model
         self.dense = dense
         self.events = []
@@ -81,7 +87,17 @@ class Propagator(ModelBlockCopyMixin):
         if not self.model.validForPropagation(eomVars):
             raise RuntimeError(f"EOMVars = {eomVars} is not valid for propagation")
 
-        kwargs_in = {"method": self.method, "dense_output": self.dense, **kwargs}
+        kwargs_in = {
+            "method": self.method,
+            "dense_output": self.dense,
+            "atol": self.atol,
+            "rtol": self.rtol,
+        }
+        kwargs.pop("method", None)
+        kwargs.pop("dense_output", None)
+        kwargs_in.update(**kwargs)
+
+        # kwargs_in = {"method": self.method, "dense_output": self.dense, **kwargs}
 
         if "args" in kwargs_in:
             logger.warning("Overwriting 'args' passed to propagate()")

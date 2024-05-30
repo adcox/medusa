@@ -44,7 +44,7 @@ class TestPropagator:
     @pytest.mark.parametrize(
         "eoms",
         [
-            EOMVars.STATE,
+            [EOMVars.STATE],
             [EOMVars.STATE, EOMVars.STM],
             [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS],
             [EOMVars.STATE, EOMVars.STM, EOMVars.PARAM_DEPS],
@@ -58,7 +58,7 @@ class TestPropagator:
         tspan = [0, 6.3111]
 
         prop = Propagator(emModel, dense=dense)
-        sol = prop.propagate(y0, tspan, eomVars=eoms)
+        sol = prop.propagate(y0, tspan, eomVars=eoms, atol=1e-12, rtol=1e-10)
 
         assert isinstance(sol, scipy.optimize.OptimizeResult)
         assert sol.status == 0
@@ -67,6 +67,21 @@ class TestPropagator:
         vecSize = emModel.stateSize(eoms)
         assert all([y.size == vecSize for y in sol.y.T])
         # TODO test that final state is close to initial?
+
+        # Check determinant of STM is unity
+        if EOMVars.STM in eoms:
+            stm = emModel.extractVars(sol.y[:, -1], EOMVars.STM)
+            assert pytest.approx(np.linalg.det(stm)) == 1.0
+
+            # Diagonal is ~ 1
+            assert pytest.approx(stm[0, 0]) == 1.00488725
+            assert pytest.approx(stm[4, 4]) == 0.96591220
+
+            # Make sure orientation is correct; values from old MATLAB codes
+            assert pytest.approx(stm[1, 0], 1e-4) == -3.3386919
+            assert pytest.approx(stm[2, 0], 1e-4) == 0.0035160
+            assert pytest.approx(stm[3, 0], 1e-4) == -6.0843220
+            assert pytest.approx(stm[1, 4], 1e-4) == -18.242672
 
         if dense:
             assert isinstance(sol.sol, scipy.integrate.OdeSolution)
