@@ -677,6 +677,7 @@ class TestDifferentialCorrector:
         q0 = Variable(
             [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], [True] * 3 + [False] * 3
         )
+
         origin = ControlPoint(model, 0, q0)
 
         # Target roughly halfway around

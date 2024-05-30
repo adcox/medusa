@@ -127,30 +127,30 @@ class DynamicsModel(AbstractDynamicsModel):
 
             # Compute STM derivative
             #   PhiDot = A * Phi
-            #   q[6] through q[42] represent the STM (Phi) in column-major order
+            #   q[6] through q[42] represent the STM (Phi) in row-major order
 
             # first three rows of PhiDot are the last three rows of Phi
             for r in range(3):
                 for c in range(6):
-                    qdot[6 + 6 * c + r] = q[6 + 6 * c + r + 3]
+                    qdot[6 + 6 * r + c] = q[6 + 6 * (r + 3) + c]
 
             for c in range(6):
-                qdot[6 + 6 * c + 3] = (
-                    U[0] * q[6 + 6 * c + 0]
-                    + U[3] * q[6 + 6 * c + 1]
-                    + U[4] * q[6 + 6 * c + 2]
-                    + 2 * q[6 + 6 * c + 4]
+                qdot[6 + 6 * 3 + c] = (
+                    U[0] * q[6 + 6 * 0 + c]
+                    + U[3] * q[6 + 6 * 1 + c]
+                    + U[4] * q[6 + 6 * 2 + c]
+                    + 2 * q[6 + 6 * 4 + c]
                 )
-                qdot[6 + 6 * c + 4] = (
-                    U[3] * q[6 + 6 * c + 0]
-                    + U[1] * q[6 + 6 * c + 1]
-                    + U[5] * q[6 + 6 * c + 2]
-                    - 2 * q[6 + 6 * c + 3]
+                qdot[6 + 6 * 4 + c] = (
+                    U[3] * q[6 + 6 * 0 + c]
+                    + U[1] * q[6 + 6 * 1 + c]
+                    + U[5] * q[6 + 6 * 2 + c]
+                    - 2 * q[6 + 6 * 3 + c]
                 )
-                qdot[6 + 6 * c + 5] = (
-                    U[4] * q[6 + 6 * c + 0]
-                    + U[5] * q[6 + 6 * c + 1]
-                    + U[2] * q[6 + 6 * c + 2]
+                qdot[6 + 6 * 5 + c] = (
+                    U[4] * q[6 + 6 * 0 + c]
+                    + U[5] * q[6 + 6 * 1 + c]
+                    + U[2] * q[6 + 6 * 2 + c]
                 )
 
         # There are no epoch or parameter dependencies
