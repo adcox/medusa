@@ -308,7 +308,7 @@ class AbstractDynamicsModel(ABC):
         In many cases, some groups of the variables are dependent upon others. E.g.,
         the STM equations of motion generally require the state variables to be
         propagated alongside the STM so ``EOMVars.STM`` would be an invalid set for
-        evaluation but ``EOMVars.STATE | EOMVars.STM`` would be valid.
+        evaluation but ``[EOMVars.STATE, EOMVars.STM]`` would be valid.
 
         Args:
             eomVars (EOMVars, [EOMVars]): the group(s) variables to be propagated

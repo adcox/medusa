@@ -74,7 +74,6 @@ class TestPropagator:
         assert pytest.approx(sol.y[3, -1], 1e-4) == 0.00188573
         assert pytest.approx(sol.y[4, -1], 1e-4) == -1.82139906
         assert pytest.approx(sol.y[5, -1], 1e-4) == 0.00061782
-        # TODO test that final state is close to initial?
 
         if EOMVars.STM in eoms:
             stm = emModel.extractVars(sol.y[:, -1], EOMVars.STM)

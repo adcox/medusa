@@ -312,11 +312,11 @@ class TestSegment:
     @pytest.mark.parametrize(
         "fcn, shapeOut",
         [
-            ["finalState", (6,)],
-            ["partials_finalState_wrt_time", (6,)],
-            ["partials_finalState_wrt_initialState", (6, 6)],
-            ["partials_finalState_wrt_epoch", (0,)],
-            ["partials_finalState_wrt_params", (0,)],
+            ["state", (6,)],
+            ["partials_state_wrt_time", (6,)],
+            ["partials_state_wrt_initialState", (6, 6)],
+            ["partials_state_wrt_epoch", (0,)],
+            ["partials_state_wrt_params", (0,)],
         ],
     )
     def test_getPropResults(self, origin, mocker, fcn, shapeOut):
@@ -330,11 +330,11 @@ class TestSegment:
 
     def test_getMultiplePropResults(self, origin):
         seg = Segment(origin, 1.0)
-        assert seg.partials_finalState_wrt_params().shape == (0,)
-        assert seg.partials_finalState_wrt_epoch().shape == (0,)
-        assert seg.partials_finalState_wrt_initialState().shape == (6, 6)
-        assert seg.partials_finalState_wrt_time().shape == (6,)
-        assert seg.finalState().shape == (6,)
+        assert seg.partials_state_wrt_params().shape == (0,)
+        assert seg.partials_state_wrt_epoch().shape == (0,)
+        assert seg.partials_state_wrt_initialState().shape == (6, 6)
+        assert seg.partials_state_wrt_time().shape == (6,)
+        assert seg.state().shape == (6,)
 
 
 # ------------------------------------------------------------------------------
@@ -581,6 +581,23 @@ class TestCorrectionsProblem:
     # -------------------------------------------
     # Jacobian
 
+    def jacProb(self, posMask, posVals):
+        prob = CorrectionsProblem()
+
+        pos = Variable([1.0, 2.0, 3.0], mask=posMask)
+        vel = Variable([4.0, 5.0, 6.0])
+
+        matchPos = constraints.VariableValueConstraint(pos, posVals)
+        matchDX = constraints.VariableValueConstraint(vel, [4.01, None, None])
+
+        prob.addVariable(pos)
+        prob.addVariable(vel)
+
+        prob.addConstraint(matchPos)
+        prob.addConstraint(matchDX)
+
+        return prob
+
     @pytest.mark.parametrize(
         "posMask, posVals",
         [
@@ -590,26 +607,55 @@ class TestCorrectionsProblem:
         ],
     )
     def test_jacobian(self, posMask, posVals):
-        prob = CorrectionsProblem()
-
-        pos = Variable([1.0, 2.0, 3.0], mask=posMask)
-        vel = Variable([4.0, 5.0, 6.0])
-
-        matchY = constraints.VariableValueConstraint(pos, posVals)
-        matchDX = constraints.VariableValueConstraint(vel, [4.01, None, None])
-
-        prob.addVariable(pos)
-        prob.addVariable(vel)
-
-        prob.addConstraint(matchY)
-        prob.addConstraint(matchDX)
-
+        prob = self.jacProb(posMask, posVals)
         jac = prob.jacobian()
         assert isinstance(jac, np.ndarray)
         assert jac.shape == (prob.numConstraints, prob.numFreeVars)
 
         # There should be a one in the Jacobian for each constraint
         assert sum(jac.flat) == prob.numConstraints
+
+    @pytest.mark.parametrize(
+        "posMask, posVals",
+        [
+            [[0, 0, 0], [None, 2.0, 3.0]],
+            [[1, 0, 1], [1.0]],
+            [[0, 0, 1], [1.0, 2.0]],
+        ],
+    )
+    def test_checkJacobian(self, posMask, posVals):
+        prob = self.jacProb(posMask, posVals)
+
+        # Save values for later
+        freeVarVec = copy.copy(prob.freeVarVec())
+        constraintVec = copy.copy(prob.constraintVec())
+        jacobian = copy.copy(prob.jacobian())
+
+        assert prob.checkJacobian(tol=1e-6, verbose=True)
+
+        # Make sure original problem has not been modified
+        assert np.array_equal(prob.freeVarVec(), freeVarVec)
+        assert np.array_equal(prob.constraintVec(), constraintVec)
+        assert np.array_equal(prob.jacobian(), jacobian)
+
+    @pytest.mark.parametrize("verbose", [True, False])
+    def test_checkJacobian_fails(self, capsys, verbose):
+        import re
+
+        prob = self.jacProb([0, 0, 0], [None, 2.0, 3.0])
+        assert not prob.checkJacobian(tol=1e-15, verbose=verbose)
+        cap = capsys.readouterr()
+
+        if not verbose:
+            assert cap.out == ""
+            assert cap.err == ""
+        else:
+            assert cap.err == ""
+            errs = [m.start() for m in re.finditer("Jacobian error", cap.out)]
+            assert len(errs) == 3  # two pos constraints, one velocity
+
+    # -------------------------------------------
+    # Caching
 
     def assertCached(
         self, prob, fVec=False, fMap=False, cVec=False, cMap=False, jac=False
@@ -694,12 +740,14 @@ class TestDifferentialCorrector:
         )
 
         corrector = DifferentialCorrector()
-        corrector.updateGenerator = corrections.minimumNormUpdate
-        corrector.convergenceCheck = corrections.constraintVecL2Norm
-        solution = corrector.solve(problem)
-
-        assert isinstance(corrector.solution, CorrectionsProblem)
-        assert not id(corrector.solution) == id(problem)
+        corrector.updateGenerator = corrections.MinimumNormUpdate()
+        corrector.convergenceCheck = corrections.L2NormConvergence(1e-8)
+        solution, log = corrector.solve(problem)
 
         assert isinstance(solution, CorrectionsProblem)
-        # TODO check that constraints are met, etc.
+        assert not id(solution) == id(problem)
+        assert corrector.convergenceCheck.isConverged(solution)
+
+        assert isinstance(log, dict)
+        assert log["status"] == "converged"
+        assert len(log["iterations"]) > 2

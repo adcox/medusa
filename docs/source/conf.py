@@ -30,7 +30,7 @@ extensions = [
     "matplotlib.sphinxext.plot_directive",
 ]
 
-intesphinx_mapping = {
+intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
