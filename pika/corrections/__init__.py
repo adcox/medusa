@@ -9,7 +9,7 @@ import numpy as np
 import numpy.ma as ma
 import scipy
 
-from pika import console
+from pika import console, util
 from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelBlockCopyMixin
 from pika.propagate import Propagator
 
@@ -26,6 +26,7 @@ __all__ = [
     "MinimumNormUpdate",
     "LeastSquaresUpdate",
     "L2NormConverged",
+    "ShootingProblem",
     # submodules
     "constraints",
 ]
@@ -200,11 +201,13 @@ class ControlPoint(ModelBlockCopyMixin):
             allows for :attr:`EOMVars.STATE`
     """
 
+    # TODO switch epoch and state order so that epoch=None is default?
     def __init__(self, model, epoch, state):
         if not isinstance(model, AbstractDynamicsModel):
             raise TypeError("Model must be derived from AbstractDynamicsModel")
 
         if not isinstance(epoch, Variable):
+            # TODO auto-set mask based on model.isTimeDependent()?
             epoch = Variable(epoch, name="Epoch")
 
         if not isinstance(state, Variable):
@@ -220,6 +223,9 @@ class ControlPoint(ModelBlockCopyMixin):
         self.model = model
         self.epoch = epoch
         self.state = state
+
+        # Define variables attribute for CorrectionsProblem.importVariables
+        self.importableVars = (self.state, self.epoch)
 
     @staticmethod
     def fromProp(solution, ix=0):
@@ -312,6 +318,9 @@ class Segment:
         self.prop = prop
         self.propParams = propParams
         self.propSol = None
+
+        # Define variables attribute for CorrectionsProblem.importVariables
+        self.importableVars = (self.tof, self.propParams)
 
     def resetProp(self):
         """
@@ -489,10 +498,12 @@ class CorrectionsProblem:
         Raises:
             ValueError: if ``variable`` is not a valid Variable object
         """
+        # TODO allow input to be an iterable
         if not isinstance(variable, Variable):
             raise ValueError("Can only add Variable objects")
 
         if variable.numFree == 0:
+            # TODO should this maybe be debug level?
             logger.error(f"Cannot add {variable}; it has no free values")
             return
 
@@ -503,6 +514,19 @@ class CorrectionsProblem:
         self._freeVarIndexMap = None
         self._freeVarVec = None
         self._jacobian = None
+
+    def importVariables(self, obj):
+        """
+        Imports variables from an object. The object must define a ``importableVars``
+        attribute that contains any variables that can be imported by the problem.
+        Variables are added via :func:`addVariable`, clearing the caches if
+        applicable.
+
+        Args:
+            obj: an object
+        """
+        for var in np.asarray(getattr(obj, "importableVars", [])):
+            self.addVariable(var)
 
     def rmVariable(self, variable):
         """
@@ -515,6 +539,7 @@ class CorrectionsProblem:
             variable (Variable): the variable to remove. If the variable is not
             part of the problem, no action is taken.
         """
+        # TODO allow input to be an iterable
         try:
             self._freeVars.remove(variable)
             self._freeVarIndexMap = None
@@ -619,7 +644,8 @@ class CorrectionsProblem:
 
     def addConstraint(self, constraint):
         """
-        Add a constraint to the problem
+        Add a constraint to the problem. If the constraint defines variables,
+        they are also added to the problem via :func:`importVariables`.
 
         This clears the caches for :func:`constraintIndexMap`,
         :func:`constraintVec`, and :func:`jacobian`
@@ -628,6 +654,7 @@ class CorrectionsProblem:
             constraint (AbstractConstraint): a constraint to add. Constraints
                 are stored by reference (they are not copied).
         """
+        # TODO allow input to be an iterable
         if not isinstance(constraint, AbstractConstraint):
             raise ValueError("Can only add AbstractConstraint objects")
 
@@ -639,13 +666,16 @@ class CorrectionsProblem:
             raise RuntimeError("Constraint has laredy been added")
 
         self._constraints.append(constraint)
+        self.importVariables(constraint)
+
         self._constraintIndexMap = None
         self._constraintVec = None
         self._jacobian = None
 
     def rmConstraint(self, constraint):
         """
-        Remove a constraint from the problem.
+        Remove a constraint from the problem. If the constraint defines variables,
+        they are also removed from the problem.
 
         This clears the caches for :func:`constraintIndexMap`,
         :func:`constraintVec`, and :func:`jacobian`
@@ -654,8 +684,12 @@ class CorrectionsProblem:
             constraint (AbstractConstraint): the constraint to remove. If the
                 constraint is not part of the problem, no action is taken.
         """
+        # TODO allow input to be an iterable
         try:
             self._constraints.remove(constraint)
+            for var in getattr(constraint, "importableVars", []):
+                self.rmVariable(var)
+
             self._constraintIndexMap = None
             self._constraintVec = None
             self._jacobian = None
@@ -877,6 +911,178 @@ class CorrectionsProblem:
                         )
 
         return equal
+
+
+class ShootingProblem(CorrectionsProblem):
+    def __init__(self):
+        super().__init__()
+
+        self._segments, self._points = [], []
+        self._adjMat = None  # adjacency matrix
+
+    def addSegments(self, segment):
+        for seg in util.toList(segment):
+            if not isinstance(seg, Segment):
+                logger.error(f"Cannot add {seg}; it isn't a segment")
+                continue
+
+            if not seg in self._segments:
+                self._segments.append(seg)
+
+        self._adjMat = None
+
+    def rmSegments(self, segment):
+        for seg in util.toList(segment):
+            try:
+                self._segments.remove(seg)
+            except ValueError:
+                logger.error(f"Can not remove {seg} from segments")
+
+        self._adjMat = None
+
+    def build(self):
+        # Clear caches
+        self._freeVarIndexMap = None
+        self._freeVarVec = None
+        self._jacobian = None
+        self._points = []
+        self._adjMat = None
+
+        # Loop through segments and add all variables
+        for seg in self._segments:
+            # Add control points to list and import their variables
+            if not seg.origin in self._points:
+                self._points.append(seg.origin)
+                self.importVariables(seg.origin)
+
+            if seg.terminus and not seg.terminus in self._points:
+                self._points.append(seg.terminus)
+                self.importVariables(seg.terminus)
+
+            self.importVariables(seg)
+
+        # Create directed graph
+        errors = self.checkValidGraph()
+        if len(errors) > 0:
+            for err in errors:
+                logger.error(err)
+            raise RuntimeError("Invalid directed graph")
+
+        # TODO set flag for built = True?
+
+    def adjacencyMatrix(self):
+        """
+        Create an adjacency matrix for the directed graph of control points and
+        segments.
+
+        Define the adjacency matrix as ``A[row, col]``; each row and column corresponds
+        to a control point in the internal storage list. The value of ``A[r, c]``
+        is the index of a segment within the segment storage list with an origin
+        at control point ``r`` and a terminus at control point ``c`` where
+        ``r`` and ``c`` are the indices of those points within the storage list.
+        A ``None`` value in the adjacency matrix indicates that there is not a
+        segment linking the two control points.
+
+        Returns:
+            numpy.ndarray: the adjacency matrix. This value is cached and reset
+            whenever segments are added or removed.
+
+        Raises:
+            ValueError: if an origin or terminus control point cannot be located
+                within the storage list
+        """
+        if self._adjMat is None:
+            # fill with None
+            N = len(self._points)
+            if N == 0:
+                raise RuntimeError(
+                    "No control points have been added; did you call build()?"
+                )
+
+            self._adjMat = np.full((N, N), None)
+
+            # Put segment indices in the spots that link control points
+            for segIx, seg in enumerate(self._segments):
+                try:
+                    ixO = self._points.index(seg.origin)
+                except ValueError:
+                    raise RuntimeError(
+                        f"{seg} origin ({seg.origin}) has not been added to problem"
+                    )
+
+                try:
+                    ixT = self._points.index(seg.terminus)
+                except ValueError:
+                    raise RuntimeError(
+                        f"{seg} terminus ({seg.terminus}) has not been added to problem"
+                    )
+
+                self._adjMat[ixO][ixT] = segIx
+
+        return self._adjMat
+
+    def checkValidGraph(self):
+        """
+        Check that the directed graph (adjacency matrix) is valid. Four rules apply:
+
+        1. Each origin point can be linked to a maximum of 2 segments
+        2. If 2 segments are linked to the same origin, they must have opposite TOF signs
+        3. Each terminal point can be linked to a maximum of 1 segment
+        4. Each control point must be linked to a segment (no floating points)
+        """
+        adjMat = self.adjacencyMatrix()
+        errors = []
+        pointIsLinked = np.full(len(self._points), False)
+
+        # Check origin control points
+        for r, row in enumerate(adjMat):
+            segCount = 0
+            tofSignSum = 0
+            for c in range(len(row)):
+                if adjMat[r, c] is not None:
+                    segCount += 1
+                    tof = self._segments[adjMat[r, c]].tof
+                    tofSignSum += int(np.sign(tof.allVals)[0])
+                    pointIsLinked[r] = True
+
+                    # A segment cannot link a point to itself!
+                    if r == c:
+                        errors.append(
+                            f"Segment {adjMat[r,c]} links point {r} to itself"
+                        )
+
+            # An origin can have, at most, 2 segments
+            if segCount > 2:
+                errors.append(
+                    f"Origin control point {r} has {segCount} linked segments but must have <= 2"
+                )
+            elif segCount == 2 and not tofSignSum == 0:
+                # TOF signs must be different
+                errors.append(
+                    f"Origin control point {r} is linked to two segments with sign(tof) = {tofSignSum/2}"
+                )
+
+        # Check terminal control points
+        for c in range(adjMat.shape[1]):
+            segCount = 0
+            for r in range(adjMat.shape[0]):
+                if adjMat[r, c] is not None:
+                    segCount += 1
+                    pointIsLinked[c] = True
+
+            # Only 1 segment can be linked to terminal node; 2 segments that end
+            #   at the same node is not allowed
+            if segCount > 1:
+                errors.append(
+                    f"Terminal control point {c} has {segCount} linked segments but must have <= 1"
+                )
+
+        # Check for floating (unlinked) points
+        for ix, val in enumerate(pointIsLinked):
+            if not val:
+                errors.append(f"Control point {r} is not linked to any segments")
+
+        return errors
 
 
 class DifferentialCorrector:
