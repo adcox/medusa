@@ -15,6 +15,7 @@ from pika.corrections import (
     CorrectionsProblem,
     DifferentialCorrector,
     Segment,
+    ShootingProblem,
     Variable,
 )
 from pika.dynamics import EOMVars
@@ -710,6 +711,182 @@ class TestCorrectionsProblem:
         # Calling updateFreeVars clears most of the caches
         prob.updateFreeVars(np.array([2, 0, 1]))
         self.assertCached(prob, fMap=True, cMap=True)
+
+
+class TestShootingProblem:
+    @pytest.fixture(scope="class")
+    def model(self):
+        earth, moon = loadBody("Earth"), loadBody("Moon")
+        return DynamicsModel(ModelConfig(earth, moon))
+
+    @pytest.fixture(scope="class")
+    def origin(self, model):
+        return ControlPoint(model, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
+
+    def test_constructor(self):
+        prob = ShootingProblem()
+        assert prob._segments == []
+        assert prob._points == []
+        assert prob._adjMat is None
+
+    def test_addSegments(self, origin):
+        prob = ShootingProblem()
+        seg = Segment(origin, 2.3)
+        prob.addSegments(seg)
+        assert seg in prob._segments
+
+    def test_addSegments_multiple(self, origin):
+        prob = ShootingProblem()
+        seg = Segment(origin, 2.3)
+        seg2 = Segment(origin, 1.2)
+        prob.addSegments([seg, seg2])
+
+        assert seg in prob._segments
+        assert seg2 in prob._segments
+
+    # TODO cannot add non-segment; logs error
+
+    def test_addSegments_multiple_duplicate(self, origin):
+        prob = ShootingProblem()
+        seg = Segment(origin, 2.3)
+        prob.addSegments([seg, seg])
+
+        assert seg in prob._segments
+        assert len(prob._segments) == 1
+
+    def test_rmSegments(self, origin):
+        prob = ShootingProblem()
+        seg = Segment(origin, 2.3)
+        prob.addSegments(seg)
+        prob.rmSegments(seg)
+        assert prob._segments == []
+
+    def test_rmSegments_multiple(self, origin):
+        prob = ShootingProblem()
+        seg = Segment(origin, 2.3)
+        seg2 = Segment(origin, 1.2)
+        prob.addSegments([seg, seg2])
+        prob.rmSegments([seg, seg2])
+        assert prob._segments == []
+
+    def test_adjacencyMatrix_fwrdTime(self, model):
+        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        seg1 = Segment(points[0], 0.1, points[1])
+        seg2 = Segment(points[1], 0.2, points[2])
+
+        prob = ShootingProblem()
+        prob.addSegments([seg1, seg2])
+        prob.build()
+        adjMat = prob.adjacencyMatrix()
+
+        assert isinstance(adjMat, np.ndarray)
+        assert np.array_equal(adjMat, [[None, 0, None], [None, None, 1], [None] * 3])
+
+    def test_adjacencyMatrix_revTime(self, model):
+        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        seg1 = Segment(points[0], -0.1, points[1])
+        seg2 = Segment(points[1], -0.2, points[2])
+
+        prob = ShootingProblem()
+        prob.addSegments([seg1, seg2])
+        prob.build()
+        adjMat = prob.adjacencyMatrix()
+
+        assert np.array_equal(adjMat, [[None, 0, None], [None, None, 1], [None] * 3])
+
+    # TODO test with segments that don't have a terminus defined - probably
+    #   need to catch that with a good error message at the ShooterProblem level
+
+    @pytest.mark.parametrize("sign", [1, -1])
+    def test_adjacencyMatrix_mixedTime(self, model, sign):
+        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        seg1 = Segment(points[0], sign * 0.1, points[1])
+        seg2 = Segment(points[0], -sign * 0.2, points[2])
+
+        prob = ShootingProblem()
+        prob.addSegments([seg1, seg2])
+        prob.build()
+        adjMat = prob.adjacencyMatrix()
+
+        assert np.array_equal(adjMat, [[None, 0, 1], [None] * 3, [None] * 3])
+
+    @pytest.mark.parametrize("sign", [1, -1])
+    def test_adjacencyMatrix_invalid_doubledOrigin(self, model, sign):
+        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        seg1 = Segment(points[0], sign * 0.1, points[1])
+        seg2 = Segment(points[0], sign * 0.2, points[2])
+
+        prob = ShootingProblem()
+        prob.addSegments([seg1, seg2])
+        with pytest.raises(RuntimeError):
+            prob.build()
+
+        adjMat = prob.adjacencyMatrix()
+        assert np.array_equal(adjMat, [[None, 0, 1], [None] * 3, [None] * 3])
+
+        errors = prob.checkValidGraph()
+        assert isinstance(errors, list)
+        assert len(errors) == 1
+        assert "Origin control point" in errors[0]
+        assert "linked to two segments" in errors[0]
+
+    @pytest.mark.parametrize("sign", [1, -1])
+    def test_adjacencyMatrix_invalid_tripleOrigin(self, model, sign):
+        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0, 3.0)]
+        seg1 = Segment(points[0], sign * 0.1, points[1])
+        seg2 = Segment(points[0], -sign * 0.2, points[2])
+        seg3 = Segment(points[0], sign * 0.3, points[3])
+
+        prob = ShootingProblem()
+        prob.addSegments([seg1, seg2, seg3])
+        with pytest.raises(RuntimeError):
+            prob.build()
+
+        adjMat = prob.adjacencyMatrix()
+        assert np.array_equal(
+            adjMat, [[None, 0, 1, 2], [None] * 4, [None] * 4, [None] * 4]
+        )
+
+        errors = prob.checkValidGraph()
+        assert len(errors) == 1
+        assert "Origin control point" in errors[0]
+        assert "has 3 linked segments" in errors[0]
+
+    @pytest.mark.parametrize("sign1", [1, -1])
+    @pytest.mark.parametrize("sign2", [1, -1])
+    def test_adjacencyMatrix_invalid_doubledTerminus(self, model, sign1, sign2):
+        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        seg1 = Segment(points[0], sign1 * 0.1, points[1])
+        seg2 = Segment(points[2], sign2 * 0.2, points[1])
+
+        prob = ShootingProblem()
+        prob.addSegments([seg1, seg2])
+        with pytest.raises(RuntimeError):
+            prob.build()
+
+        adjMat = prob.adjacencyMatrix()
+        assert np.array_equal(adjMat, [[None, 0, None], [None] * 3, [None, 1, None]])
+
+        errors = prob.checkValidGraph()
+        assert len(errors) == 1
+        assert "Terminal control point" in errors[0]
+
+    @pytest.mark.parametrize("sign", [1, -1])
+    def test_adjacencyMatrix_invalid_cycleSegment(self, model, sign):
+        points = [ControlPoint(model, v, [v] * 6) for v in [0.0]]
+        seg = Segment(points[0], sign * 0.1, points[0])
+
+        prob = ShootingProblem()
+        prob.addSegments(seg)
+        with pytest.raises(RuntimeError):
+            prob.build()
+
+        adjMat = prob.adjacencyMatrix()
+        assert np.array_equal(adjMat, [[0]])
+
+        errors = prob.checkValidGraph()
+        assert len(errors) == 1
+        assert "links point 0 to itself" in errors[0]
 
 
 class TestDifferentialCorrector:
