@@ -43,7 +43,7 @@ class ContinuityConstraint(AbstractConstraint):
     def evaluate(self, freeVarIndexMap):
         # F = propFinalState - terminalState
         termVar = self.segment.terminus.state
-        propState = self.segment.finalState()[~termVar.mask][self.unmaskedIx]
+        propState = self.segment.state(-1)[~termVar.mask][self.unmaskedIx]
         termState = termVar.freeVals[self.unmaskedIx]
         return propState - termState
 
@@ -65,23 +65,23 @@ class ContinuityConstraint(AbstractConstraint):
         # Partials for other variables come from integrated solution; ask for them
         #   in decreasing order of complexity to take advantage of lazy propagation
         if paramVar in freeVarIndexMap:
-            dState_dParams = self.segment.partials_finalState_wrt_params()
+            dState_dParams = self.segment.partials_state_wrt_params(-1)
             partials[paramVar] = dState_dParams[:, ~termVar.mask][:, self.unmaskedIx][
                 ~paramVar.mask, :
             ]
 
         if epochVar in freeVarIndexMap:
-            dState_dEpoch = self.segment.partials_finalState_wrt_epoch()
+            dState_dEpoch = self.segment.partials_state_wrt_epoch(-1)
             partials[epochVar] = dState_dEpoch[~termVar.mask][self.unmaskedIx]
 
         if originVar in freeVarIndexMap:
             # rows of STM correspond to terminal state, cols to origin state
-            stm = self.segment.partials_finalState_wrt_initialState()
+            stm = self.segment.partials_state_wrt_initialState(-1)
             stm_free = stm[~termVar.mask, :][self.unmaskedIx, :][:, ~originVar.mask]
             partials[originVar] = stm_free
 
         if tofVar in freeVarIndexMap:
-            dState_dtof = self.segment.partials_finalState_wrt_time()
+            dState_dtof = self.segment.partials_state_wrt_time(-1)
             partials[tofVar] = dState_dtof[~termVar.mask][self.unmaskedIx]
 
         return partials
@@ -93,7 +93,7 @@ class VariableValueConstraint(AbstractConstraint):
 
     Args:
         variable (Variable): the variable to cosntrain
-        values (numpy.ndarray<float>): values for the variable. The size of
+        values (numpy.ndarray of float): values for the variable. The size of
             ``values`` must match free values in ``variable``, i.e., excluding
             any masked elements. A ``None`` value in ``values`` indicates that
             the corresponding free value in ``variable`` is unconstrained.

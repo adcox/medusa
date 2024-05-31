@@ -67,14 +67,17 @@ and/or mark relevant times in the propagation.
 Corrections
 -----------
 
-Numerical corrections (e.g., single shooting, multiple shooting) leverage common
-base classes with derived classes for specific solution algorithms.
+Numerical corrections (e.g., single shooting, multiple shooting) problems
+contain variables, sometimes packaged into more complex data
+structures such as propagated segments and/or control points.
 
 .. autosummary::
    :nosignatures:
 
    ~corrections.CorrectionsProblem
    ~corrections.Variable
+   ~corrections.ControlPoint
+   ~corrections.Segment
 
 A variety of constraints can be added to the corrections problem.
 
@@ -82,8 +85,18 @@ A variety of constraints can be added to the corrections problem.
    :nosignatures:
 
    ~corrections.AbstractConstraint
+   ~corrections.constraints.ContinuityConstraint
    ~corrections.constraints.VariableValueConstraint
 
+Corrections problems are solved by a differential corrector.
+
+.. autosummary::
+   :nosignatures:
+
+   ~corrections.DifferentialCorrector
+   ~corrections.MinimumNormUpdate
+   ~corrections.LeastSquaresUpdate
+   ~corrections.L2NormConvergence
 
 Full API
 =========

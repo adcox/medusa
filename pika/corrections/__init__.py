@@ -9,6 +9,7 @@ import numpy as np
 import numpy.ma as ma
 import scipy
 
+from pika import console
 from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelBlockCopyMixin
 from pika.propagate import Propagator
 
@@ -22,9 +23,9 @@ __all__ = [
     "DifferentialCorrector",
     "Segment",
     "Variable",
-    "minimumNormUpdate",
-    "leastSquaresUpdate",
-    "constraintVecL2Norm",
+    "MinimumNormUpdate",
+    "LeastSquaresUpdate",
+    "L2NormConverged",
     # submodules
     "constraints",
 ]
@@ -42,9 +43,9 @@ class Variable:
     Contains a variable vector with an optional mask to flag non-variable values
 
     Args:
-        values (float, [float], np.ndarray<float>): scalar or array of variable
+        values (float, [float], numpy.ndarray of float): scalar or array of variable
             values
-        mask (bool, [bool], np.ndarray<bool>): ``True`` flags values as excluded
+        mask (bool, [bool], numpy.ndarray of bool): ``True`` flags values as excluded
             from the free variable vector; ``False`` flags values as included
     """
 
@@ -110,6 +111,10 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
     Defines the interface for a constraint object
     """
 
+    def __str__(self):
+        """Default to-string implementation"""
+        return f"<{type(self).__name__}>"
+
     @property
     @abstractmethod
     def size(self):
@@ -141,7 +146,7 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
                 :class:`Variable` within ``freeVars`` to the variable object
 
         Returns:
-            numpy.ndarray<float> the value of the constraint funection; evaluates
+            numpy.ndarray of float: the value of the constraint funection; evaluates
             to zero when the constraint is satisfied
 
         Raises:
@@ -161,8 +166,8 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
 
         Returns:
             dict: a dictionary mapping a :class:`Variable` object to the partial
-            derivatives of this constraint with respect to that variable⋅
-            (:class:`numpy.ndarray<float>`). The partial derivatives with respect
+            derivatives of this constraint with respect to that variable
+            (:class:`numpy.ndarray` of :class:`float`). The partial derivatives with respect
             to variables that are not included in the returned dict are assumed
             to be zero.
         """
@@ -239,6 +244,42 @@ class ControlPoint(ModelBlockCopyMixin):
 
 
 class Segment:
+    """
+    Defines a numerical propagation starting from an origin control point for a
+    specified time-of-flight.
+
+    Args:
+        origin (ControlPoint): the starting point for the propagated trajectory.
+            This control point defines the dynamics model, the initial state, and
+            the initial epoch.
+        tof (float, Variable): the time-of-flight for the propagated trajectory
+            in units consistent with the origin's model and state. If the input
+            is a float, a :class:`Variable` object with name "Time-of-flight"
+            is created.
+        terminus (Optional, ControlPoint): a control point located at the terminus
+            of the propagated arc. This is useful when defining differential
+            corrections problems that seek to constrain the numerical integration.
+            It is not required that the terminus state or epoch are numerically
+            consistent with the state or epoch values at the end of the arc. The
+            ``terminus`` is not used or modified by the Segment.
+        prop (Optional, Propagator): the propagator to use. If ``None``, a
+            :class:`~pika.propagate.Propagator` is constructed for the ``origin``
+            model with the ``dense`` flag set to False.
+        propParams (Optional, list, numpy.ndarray, Variable): parameters to be
+            passed to the model's equations of motion. If the input is not a
+            :class:`Variable`, a variable is constructed with a name "Params"
+
+    Attributes:
+        origin (ControlPoint): the starting point for the propagated trajectory
+        terminus (ControlPoint): the terminal point for the propagated trajectory.
+            This object is *not* updated by the Segment.
+        tof (Variable): the time-of-flight
+        prop (Propagtor): the propagator
+        propParams (Variable): propagation parameters
+        propSol (scipy.optimize.OptimizeResult): the propagation output, if
+            :func:`propagate` has been called, otherwise ``None``
+    """
+
     def __init__(self, origin, tof, terminus=None, prop=None, propParams=[]):
         if not isinstance(origin, ControlPoint):
             raise TypeError("origin must be a ControlPoint")
@@ -258,6 +299,9 @@ class Segment:
 
         if not isinstance(tof, Variable):
             tof = Variable(tof, name="Time-of-flight")
+        else:
+            if not tof.values.size == 1:
+                raise RuntimeError("Time-of-flight variable must define only one value")
 
         if not isinstance(propParams, Variable):
             propParams = Variable(propParams, name="Params")
@@ -270,43 +314,115 @@ class Segment:
         self.propSol = None
 
     def resetProp(self):
+        """
+        Reset the propagation cache, :attr:`propSol`, to ``None``
+        """
         self.propSol = None
 
-    def finalState(self):
-        self.propagate(EOMVars.STATE)
-        return self.origin.model.extractVars(self.propSol.y[:, -1], EOMVars.STATE)
+    def state(self, ix=-1):
+        """
+        Lazily propagate the trajectory and retrieve the state
 
-    def partials_finalState_wrt_time(self):
+        Args:
+            ix (int): the index within the :attr:`propSol` ``y`` array.
+
+        Returns:
+            numpy.ndarray: the propagated state (:class:`EOMVars` ``STATE``) on the
+            propagated trajectory
+        """
+        self.propagate(EOMVars.STATE)
+        return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.STATE)
+
+    def partials_state_wrt_time(self, ix=-1):
+        """
+        Lazily propagate the trajectory and retrieve the partial derivatives
+
+        Args:
+            ix (int): the index within the :attr:`propSol` ``y`` array.
+
+        Returns:
+            numpy.ndarray: the partials of the propagated state with respect to
+            :attr:`tof`, i.e., the time derivative of the
+            :attr:`~pika.dynamics.EOMVars.STATE` variables
+        """
         self.propagate(EOMVars.STATE)
         dy_dt = self.origin.model.evalEOMs(
-            self.propSol.t[-1],
-            self.propSol.y[:, -1],
+            self.propSol.t[ix],
+            self.propSol.y[:, ix],
             [EOMVars.STATE],
             self.propParams.values,
         )
         return self.origin.model.extractVars(dy_dt, EOMVars.STATE)
 
-    def partials_finalState_wrt_initialState(self):
+    def partials_state_wrt_initialState(self, ix=-1):
+        """
+        Lazily propagate the trajectory and retrieve the partial derivatives
+
+        Args:
+            ix (int): the index within the :attr:`propSol` ``y`` array.
+
+        Returns:
+            numpy.ndarray: the partials of the propagated state with respect to the
+            :attr:`origin` ``state``, i.e., the :attr:`~pika.dynamics.EOMVars.STM`.
+            The partials are returned in matrix form.
+        """
         # Assumes propagation begins at initial state
         self.propagate([EOMVars.STATE, EOMVars.STM])
-        return self.origin.model.extractVars(self.propSol.y[:, -1], EOMVars.STM)
+        return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.STM)
 
-    def partials_finalState_wrt_epoch(self):
+    def partials_state_wrt_epoch(self, ix=-1):
+        """
+        Lazily propagate the trajectory and retrieve the partial derivatives
+
+        Args:
+            ix (int): the index within the :attr:`propSol` ``y`` array.
+
+        Returns:
+            numpy.ndarray: the partials of the propagated state with respect to
+            the :attr:`origin` ``epoch``, i.e., the
+            :attr:`~pika.dynamics.EOMVars.EPOCH_DEPS`.
+        """
         self.propagate([EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS])
-        return self.origin.model.extractVars(self.propSol.y[:, -1], EOMVars.EPOCH_DEPS)
+        return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.EPOCH_DEPS)
 
-    def partials_finalState_wrt_params(self):
+    def partials_state_wrt_params(self, ix=-1):
+        """
+        Lazily propagate the trajectory and retrieve the partial derivatives
+
+        Args:
+            ix (int): the index within the :attr:`propSol` ``y`` array.
+
+        Returns:
+            numpy.ndarray: the partials of the propagated state with respect to
+            the :attr:`propParams`, i.e., the :attr:`~pika.dynamics.EOMVars.PARAM_DEPS`.
+        """
         self.propagate(
             [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS]
         )
-        return self.origin.model.extractVars(self.propSol.y[:, -1], EOMVars.PARAM_DEPS)
+        return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.PARAM_DEPS)
 
     def propagate(self, eomVars, lazy=True):
+        """
+        Propagate from the :attr:`origin` for the specified :attr:`tof`. Results
+        are stored in :attr:`propSol`.
+
+        Args:
+            eomVars ([EOMVars]): defines which equations of motion should be included
+                in the propagation.
+            lazy (Optional, bool): whether or not to lazily propagate the
+                trajectory. If True, the :attr:`prop` ``propagate()`` function is
+                called if :attr:`propSol` is ``None`` or if the previous propagation
+                did not include one or more of the ``eomVars``.
+
+        Returns:
+            scipy.optimize.OptimizeResult: the propagation result. This is also
+            stored in :attr:`propSol`.
+        """
         # Check to see if we can skip the propagation
         if lazy and self.propSol is not None:
             eomVars = np.array(eomVars, ndmin=1)
             if all([v in self.propSol.eomVars for v in eomVars]):
-                return
+                return self.propSol
 
         # Propagate from the origin for TOF, set self.propSol
         tspan = [0, self.tof.allVals[0]] + self.origin.epoch.allVals[0]
@@ -316,6 +432,8 @@ class Segment:
             params=self.propParams.allVals,
             eomVars=eomVars,
         )
+
+        return self.propSol
 
 
 # ------------------------------------------------------------------------------
@@ -347,10 +465,10 @@ class CorrectionsProblem:
         self._constraints = []
 
         # Other data objects are initialized to None and recomputed on demand
-        self._freeVarIndexMap = None  # {}
+        self._freeVarIndexMap = None
         self._constraintIndexMap = None
 
-        self._freeVarVec = None  # np.empty((0,))
+        self._freeVarVec = None
         self._constraintVec = None
         self._jacobian = None
 
@@ -361,8 +479,12 @@ class CorrectionsProblem:
         """
         Add a variable to the problem
 
+        This clears the caches for :func:`freeVarIndexMap`, :func:`freeVarVec`,
+        and :func:`jacobian`.
+
         Args:
-            variable (Variable): a variable to add
+            variable (Variable): a variable to add. Variables are stored by
+                reference (they are not copied).
 
         Raises:
             ValueError: if ``variable`` is not a valid Variable object
@@ -386,6 +508,9 @@ class CorrectionsProblem:
         """
         Remove a variable from the problem
 
+        This clears the caches for :func:`freeVarIndexMap`, :func:`freeVarVec`,
+        and :func:`jacobian`.
+
         Args:
             variable (Variable): the variable to remove. If the variable is not
             part of the problem, no action is taken.
@@ -401,6 +526,9 @@ class CorrectionsProblem:
     def clearVariables(self):
         """
         Remove all variables from the problem
+
+        This clears the caches for :func:`freeVarIndexMap`, :func:`freeVarVec`,
+        and :func:`jacobian`.
         """
         self._freeVars = []
         self._freeVarIndexMap = None
@@ -412,7 +540,8 @@ class CorrectionsProblem:
         Get the free variable vector
 
         Returns:
-            numpy.ndarray<float>: the free variable vector
+            numpy.ndarray<float>: the free variable vector. This result is cached
+            until the free variables are updated.
         """
         if self._freeVarVec is None:
             self._freeVarVec = np.zeros((self.numFreeVars,))
@@ -428,7 +557,8 @@ class CorrectionsProblem:
         Returns:
             dict: a dictionary mapping the variables included in the problem
             (as :class:`Variable` objects) to the index within the free variable
-            vector (as an :class:`int`).
+            vector (as an :class:`int`). This result is cached until the free
+            variables are modified.
         """
         if self._freeVarIndexMap is None:
             # TODO sort variables by type?
@@ -443,6 +573,10 @@ class CorrectionsProblem:
     def updateFreeVars(self, newVec):
         """
         Update the free variable vector and corresponding Variable objects
+
+        This clears the caches for :func:`freeVarVec`, :func:`constraintVec`,
+        and :func:`jacobian`. The :func:`AbstractConstraint.clearCache` method is
+        also called on all constraints in the problem.
 
         Args:
             newVec (numpy.ndarray): an updated free variable vector. It must
@@ -480,9 +614,6 @@ class CorrectionsProblem:
         """
         return sum([var.numFree for var in self._freeVars])
 
-    # TODO (internal?) function to update variable objects with values from
-    #   freeVarVec? Not sure if needed
-
     # -------------------------------------------
     # Constraints
 
@@ -490,8 +621,12 @@ class CorrectionsProblem:
         """
         Add a constraint to the problem
 
+        This clears the caches for :func:`constraintIndexMap`,
+        :func:`constraintVec`, and :func:`jacobian`
+
         Args:
-            constraint (AbstractConstraint): a constraint to add
+            constraint (AbstractConstraint): a constraint to add. Constraints
+                are stored by reference (they are not copied).
         """
         if not isinstance(constraint, AbstractConstraint):
             raise ValueError("Can only add AbstractConstraint objects")
@@ -510,7 +645,10 @@ class CorrectionsProblem:
 
     def rmConstraint(self, constraint):
         """
-        Remove a constraint from the problem
+        Remove a constraint from the problem.
+
+        This clears the caches for :func:`constraintIndexMap`,
+        :func:`constraintVec`, and :func:`jacobian`
 
         Args:
             constraint (AbstractConstraint): the constraint to remove. If the
@@ -526,7 +664,10 @@ class CorrectionsProblem:
 
     def clearConstraints(self):
         """
-        Remove all constraints from the problem
+        Remove all constraints from the problem.
+
+        This clears the caches for :func:`constraintIndexMap`,
+        :func:`constraintVec`, and :func:`jacobian`
         """
         self._constraints = []
         self._constraintIndexMap = None
@@ -543,7 +684,8 @@ class CorrectionsProblem:
                 must be called first (with ``recompute = True``).
 
         Returns:
-            numpy.ndarray<float>: the constraint vector
+            numpy.ndarray<float>: the constraint vector. This result is cached
+            until the free variables or constraints are updated.
         """
         if self._constraintVec is None:
             self._constraintVec = np.zeros((self.numConstraints,))
@@ -565,7 +707,8 @@ class CorrectionsProblem:
         Returns:
             dict: a dictionary mapping the constraints included in the problem
                 (as objects derived from :class:`AbstractConstraint`) to the index
-                within the constraint vector (as an :class:`int`).
+                within the constraint vector (as an :class:`int`). This result is
+                cached until the constraints are updated.
         """
         if self._constraintIndexMap is None:
             # TODO sort constraints by type?
@@ -593,6 +736,16 @@ class CorrectionsProblem:
     # Jacobian
 
     def jacobian(self):
+        """
+        Get the Jacobian matrix, i.e., the partial derivative of the constraint
+        vector with respect to the free variable vector. The rows of the matrix
+        correspond to the scalar constraints and the columns of the matrix
+        correspond to the scalar free variables.
+
+        Returns:
+            numpy.ndarray: the Jacobian matrix. This result is cached until either
+            the free variables or constraints are updated.
+        """
         if self._jacobian is None:
             self._jacobian = np.zeros((self.numConstraints, self.numFreeVars))
             # Loop through constraints and compute partials with respect to all
@@ -618,84 +771,323 @@ class CorrectionsProblem:
 
         return self._jacobian
 
+    def checkJacobian(self, stepSize=1e-8, tol=2e-3, verbose=False):
+        """
+        Use central differencing to check the jacobian values
+
+        Each element of the free variable vector is perturbed by +/- ``stepSize``;
+        a constraint vector is computed for each of these perturbations. The
+        difference between these vectors, divided by two times ``stepSize``, is
+        the central difference of the constraint vector w.r.t the perturbed variable.
+        Thus, by stepping through all of the free variables, each column of the
+        jacobian matrix can be computed.
+
+        The numerical Jacobian matrix is then differenced from the analytical
+        Jacobian (from :func:`jacobian`). For non-zero Jacobian entries with absolute
+        values larger than the step size, the relative difference is computed as
+        ``(numeric - analytical)/numeric``. For other Jacobian entries, the
+        absolute difference, ``(numeric - analytical)`` is stored. The two are
+        deemed equal if each difference is less than ``tol``.
+
+        This is not a foolproof method (numerics can be tricky) but is often a
+        helpful tool in debugging partial derivative derivations.
+
+        Args:
+            stepSize (Optional, float): the free variable step size
+            tol (Optional, float): tolerance for equality between the numeric and
+                analytical Jacobian matrices
+            verbose (Optional, bool): if True, any Jacobian entries that are not
+                equal to the tolerance are described in command-line messages.
+
+        Returns:
+            bool: True if the numeric and analytical Jacobian matrices are equal
+        """
+        analytic = self.jacobian()
+        numeric = np.zeros(analytic.shape)
+
+        prob = deepcopy(self)
+        for ix in range(prob.numFreeVars):
+            pertVars = copy(prob.freeVarVec())
+
+            # Take negative step w.r.t. center
+            pertVars[ix] -= stepSize
+            prob.updateFreeVars(pertVars)
+            constraintVec_minus = copy(prob.constraintVec())
+
+            # Take positive step w.r.t. center
+            pertVars[ix] += 2 * stepSize
+            prob.updateFreeVars(pertVars)
+            constraintVec_plus = copy(prob.constraintVec())
+
+            # Compute central difference and assign to column of numeric Jacobian
+            numeric[:, ix] = (constraintVec_plus - constraintVec_minus) / (2 * stepSize)
+
+        # Map indices to variable and constraint objects; used for better printouts
+        if verbose:
+            varMap, conMap = {}, {}
+            for var, ix0 in self.freeVarIndexMap().items():
+                for k in range(var.numFree):
+                    assert (
+                        not ix0 + k in varMap
+                    ), "duplicate entry in reversed freeVarIndexMap"
+                    varMap[ix0 + k] = var
+
+            for con, ix0 in self.constraintIndexMap().items():
+                for k in range(con.size):
+                    assert (
+                        not ix0 + k in conMap
+                    ), "duplicate entry in reversed constraintIndexMap"
+                    conMap[ix0 + k] = con
+
+        # Compute absolute and relative differences and determine equality
+        absDiff = numeric - analytic
+        relDiff = np.zeros(absDiff.shape)
+        equal = True
+        for r, row in enumerate(relDiff):
+            for c in range(len(row)):
+                if abs(analytic[r, c]) < stepSize:
+                    # If analytic partial is less than step size, set relative
+                    # error to the absolute error; otherwise relative error is
+                    # unity, which is not representative
+                    relDiff[r, c] = absDiff[r, c]
+                elif abs(numeric[r, c]) > 1e-12:
+                    # If numeric partial is nonzero, compute relative dif
+                    relDiff[r, c] = absDiff[r, c] / numeric[r, c]
+
+                if abs(relDiff[r, c]) > tol:
+                    equal = False
+
+                    if verbose:
+                        # TODO get constraint and free variable vector
+                        console.print(
+                            f"[red]Jacobian error at ({r}, {c})[/]: "
+                            f"Expected = {numeric[r,c]}, Actual = {analytic[r,c]} "
+                            f"(Rel err = {relDiff[r,c]:e}"
+                        )
+                        con, var = conMap[r], varMap[c]
+                        console.print(
+                            "  [gray50]Constraint (sub-index {}) = {}[/]".format(
+                                r - self.constraintIndexMap()[con], con
+                            )
+                        )
+                        console.print(
+                            "  [gray50]Variable (sub-index {}) = {}[/]".format(
+                                c - self.freeVarIndexMap()[var], var
+                            )
+                        )
+
+        return equal
+
 
 class DifferentialCorrector:
+    """
+    Apply a differential corrections method to solve a corrections problem
+
+    Attributes:
+        maxIterations (int): the maximum number of iterations to attempt
+        convergenceCheck (object): an object containing a "isConverged" method
+            that accepts a :class:`CorrectionsProblem` as an input and returns
+            a :class:`bool`.
+        updateGenerator (object): an object containing a "update" method that
+            accepts a :class:`CorrectionsProblem` as an input and returns a
+            :class:`~numpy.ndarray` representing the change in the free
+            variable vector. See :class:`MinimumNormUpdate` for an example.
+    """
+
     def __init__(self):
         self.maxIterations = 20
-
         self.convergenceCheck = None
         self.updateGenerator = None
-        self.solution = None
+
+    def _validateArgs(self):
+        """
+        Check the types and values of class attributes so that useful errors
+        can be thrown before those attributes are evaluated or used.
+        """
+        # maxIterations
+        if not isinstance(self.maxIterations, int):
+            raise TypeError("maxIterations must be an integer")
+        if not self.maxIterations > 0:
+            raise ValueError("maxIterations must be positive")
+
+        # convergence check
+        if self.convergenceCheck is None:
+            raise TypeError(
+                "convergenceCheck is None; please assign a convergence check"
+            )
+        if not hasattr(self.convergenceCheck, "isConverged"):
+            raise AttributeError("convergenceCheck needs a method named 'isConverged'")
+        if not callable(self.convergenceCheck.isConverged):
+            raise TypeError("convergenceCheck.isConverged must be callable")
+
+        # Update generator
+        if self.updateGenerator is None:
+            raise TypeError(
+                "updateGenerator is None; please assign an update generator"
+            )
+        if not hasattr(self.updateGenerator, "update"):
+            raise AttributeError("updateGenerator needs a method named 'update'")
+        if not callable(self.updateGenerator.update):
+            raise TypeError("updateGenerator.update must be callable")
 
     def solve(self, problem):
-        self.solution = deepcopy(problem)
+        """
+        Solve a corrections problem by iterating the :attr:`updateGenerator`
+        until the :attr:`convergenceCheck` returns True or the :attr:`maxIterations`
+        are reached.
+
+        Args:
+            problem (CorrectionsProblem): the corrections problem to be solved
+
+        Returns:
+            tuple: a Tuple with two elements. The first is a :class:`CorrectionsProblem`
+            that stores the solution after the final iteration of the solver. The
+            second is a :class:`dict` with the following keywords:
+
+            - ``status`` (:class:`str`): the status of the solver after the final
+              iteration. Can be "empty" if the problem contained no free variables
+              or constraints, "converged" if the convergence check was satisfied,
+              or "max-iterations" if the maximum number of iterations were completed
+              before convergence.
+            - ``iterations`` (:class:`list`): a list of `dict`; each dict represents
+              an iteration of the solver and includes a copy of the free variable
+              vector and the constraint vector.
+        """
+        self._validateArgs()
+
+        solution = deepcopy(problem)
         # TODO clear all caches in solution
 
-        if self.solution.numFreeVars == 0 or self.solution.numConstraints == 0:
-            return self.solution
+        log = {"status": "", "iterations": []}
+
+        if solution.numFreeVars == 0 or solution.numConstraints == 0:
+            log["status"] = "empty"
+            return solution
 
         itCount = 0
         while True:
             if itCount > 0:
-                freeVarStep = self.updateGenerator(self.solution)
-                newVec = self.solution.freeVarVec() + freeVarStep
-                self.solution.updateFreeVars(newVec)
+                freeVarStep = self.updateGenerator.update(solution)
+                newVec = solution.freeVarVec() + freeVarStep
+                solution.updateFreeVars(newVec)
 
-            print(self.solution.freeVarVec())
-            # print(self.solution.constraintVec())
+            log["iterations"].append(
+                {
+                    "free-vars": copy(solution.freeVarVec()),
+                    "constraints": copy(solution.constraintVec()),
+                }
+            )
 
-            err = np.linalg.norm(self.solution.constraintVec())
+            # TODO allow user to customize printout?
+            err = np.linalg.norm(solution.constraintVec())
             logger.info(f"Iteration {itCount:03d}: ||F|| = {err:.4e}")
             itCount += 1
 
-            if self.convergenceCheck(self.solution) or itCount >= self.maxIterations:
+            if self.convergenceCheck.isConverged(solution):
+                log["status"] = "converged"
+                break
+            elif itCount >= self.maxIterations:
+                log["status"] = "max-iterations"
                 break
 
-        if not self.convergenceCheck(self.solution):
-            return None
-
-        return self.solution
+        return solution, log
 
 
-def minimumNormUpdate(problem):
-    nFree = problem.numFreeVars
-    FX = -1 * problem.constraintVec()  # using -FX for all equations, so premultiply
+class MinimumNormUpdate:
+    """
+    Computes the minimum-norm update to the problem J @ dX + FX = 0
 
-    if len(FX) > nFree:
-        raise RuntimeError(
-            "Minimum Norm Update requires fewer or equal number of "
-            "constraints as free variables"
-        )
+    TODO link to math spec
+    """
 
-    jacobian = problem.jacobian()
-    if len(FX) == nFree:
-        # Jacobian is square; it must be full rank!
-        # Solve the linear system J @ dX = -FX for dX
-        return scipy.linalg.solve(jacobian, FX)
-    elif len(FX) < nFree:
-        # Compute Gramm matrix; J must have linearly independent rows; rank(J) == nRows
+    def update(self, problem):
+        """
+        Compute the minimum-norm update
+
+        Args:
+            problem (CorrectionsProblem): the corrections problem to be solved
+
+        Returns:
+            numpy.ndarray: the free variable vector step, `dX`
+        """
+        nFree = problem.numFreeVars
+        # using -FX for all equations, so premultiply
+        FX = -1 * problem.constraintVec()
+
+        if len(FX) > nFree:
+            raise RuntimeError(
+                "Minimum Norm Update requires fewer or equal number of "
+                "constraints as free variables"
+            )
+
+        jacobian = problem.jacobian()
+        if len(FX) == nFree:
+            # Jacobian is square; it must be full rank!
+            # Solve the linear system J @ dX = -FX for dX
+            return scipy.linalg.solve(jacobian, FX)
+        elif len(FX) < nFree:
+            # Compute Gramm matrix; J must have linearly independent rows;
+            #    rank(J) == nRows
+            JT = jacobian.T
+
+            # Solve (J @ J.T) @ W = -FX for W
+            # Minimum norm step is dX = JT @ W
+            W = scipy.linalg.solve(jacobian @ JT, FX)
+            return JT @ W
+
+
+class LeastSquaresUpdate:
+    """
+    Computes the least squares update to the problem J @ dX + FX = 0
+
+    TODO link to math spec
+    """
+
+    def update(self, problem):
+        """
+        Compute the least-squares update
+
+        Args:
+            problem (CorrectionsProblem): the corrections problem to be solved
+
+        Returns:
+            numpy.ndarray: the free variable vector step, `dX`
+        """
+        # Using -FX for all equations, so pre-multiply
+        FX = -1 * problem.constraintVec()
+
+        if len(FX) <= problem.numFreeVars:
+            raise RuntimeError(
+                "Least Squares UPdate requires more constraints than free variables"
+            )
+
+        # System is over-constrained; J must have linearly independent columns;
+        #   rank(J) == nCols
         JT = jacobian.T
-        W = scipy.linalg.solve(jacobian @ JT, FX)  # Solve (J @ J.T) @ W = -FX for W
-        return JT @ W  # Minimum norm step is dX = JT @ W
+        G = JT @ J
+
+        # Solve system (J' @ J) @ dX = -J' @ FX for dX
+        return scipy.linalg.solve(G, JT @ FX)
 
 
-def leastSquaresUpdate(problem):
-    FX = -1 * problem.constraintVec()  # using -FX for all equations, so premultiply
+class L2NormConvergence:
+    """
+    Define convergence via the L2 norm of the constraint vector
 
-    if len(FX) <= problem.numFreeVars:
-        raise RuntimeError(
-            "Least Squares UPdate requires more constraints than free variables"
-        )
+    Args:
+        tol (float): the maximum L2 norm for convergence
+    """
 
-    # System is over-constrained; J must have linearly independent columns;
-    #   rank(J) == nCols
-    JT = jacobian.T
-    G = JT @ J
+    def __init__(self, tol):
+        self.tol = tol
 
-    # Solve system (J' @ J) @ dX = -J' @ FX for dX
-    return scipy.linalg.solve(G, JT @ FX)
+    def isConverged(self, problem):
+        """
+        Args:
+            problem (CorrectionsProblem): the corrections problem to be evaluated
 
-
-def constraintVecL2Norm(problem):
-    # TODO this should be a class with a set-able tolerance
-    return np.linalg.norm(problem.constraintVec()) < 1e-4
+        Returns:
+            bool: True if the L2 norm of the :func:`~CorrectionsProblem.constraintVec`
+            is less than or equal to ``tol``
+        """
+        return np.linalg.norm(problem.constraintVec()) <= self.tol

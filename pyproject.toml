@@ -28,6 +28,7 @@ dependencies = [
     "numpy",
     "numba",
     "scipy",
+    "rich",
 ]
 
 [project.optional-dependencies]
@@ -41,7 +42,6 @@ dev = [
 test = [
     "pytest>=6.2.4",
     "pytest-mock",
-    "rich",
 ]
 
 [project.urls]
