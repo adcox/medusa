@@ -42,7 +42,7 @@ jobs:
       - name: Build docs
         run: |
           cd docs
-          sphinx make html
+          make html
           touch build/html/.nojekyll
       - name: Setup Pages
         uses: actions/configure-pages@v5
