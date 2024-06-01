@@ -1328,7 +1328,8 @@ class LeastSquaresUpdate:
 
         # System is over-constrained; J must have linearly independent columns;
         #   rank(J) == nCols
-        JT = jacobian.T
+        J = problem.jacobian()
+        JT = J.T
         G = JT @ J
 
         # Solve system (J' @ J) @ dX = -J' @ FX for dX
