@@ -122,10 +122,14 @@ class TestControlPoint:
             [Variable(0), Variable(np.arange(6))],
         ],
     )
-    def test_constructor(self, model, epoch, state):
-        cp = ControlPoint(model, epoch, state)
+    @pytest.mark.parametrize("autoMask", [True, False])
+    def test_constructor(self, model, epoch, state, autoMask):
+        cp = ControlPoint(model, copy.deepcopy(epoch), copy.deepcopy(state), autoMask)
 
         assert isinstance(cp.epoch, Variable)
+        # CR3BP is epoch-independent, so autoMask=True will set mask to True;
+        # without autoMask, the mask will be false
+        assert cp.epoch.mask == [autoMask]
         assert isinstance(cp.state, Variable)
 
     @pytest.mark.parametrize(
@@ -316,8 +320,8 @@ class TestSegment:
             ["state", (6,)],
             ["partials_state_wrt_time", (6,)],
             ["partials_state_wrt_initialState", (6, 6)],
-            ["partials_state_wrt_epoch", (0,)],
-            ["partials_state_wrt_params", (0,)],
+            ["partials_state_wrt_epoch", (6,)],
+            ["partials_state_wrt_params", (6,)],
         ],
     )
     def test_getPropResults(self, origin, mocker, fcn, shapeOut):
@@ -331,8 +335,8 @@ class TestSegment:
 
     def test_getMultiplePropResults(self, origin):
         seg = Segment(origin, 1.0)
-        assert seg.partials_state_wrt_params().shape == (0,)
-        assert seg.partials_state_wrt_epoch().shape == (0,)
+        assert seg.partials_state_wrt_params().shape == (6,)
+        assert seg.partials_state_wrt_epoch().shape == (6,)
         assert seg.partials_state_wrt_initialState().shape == (6, 6)
         assert seg.partials_state_wrt_time().shape == (6,)
         assert seg.state().shape == (6,)
@@ -343,19 +347,26 @@ class TestCorrectionsProblem:
     # -------------------------------------------
     # Variables
 
-    def test_addVariable(self):
+    def test_addVariables(self):
         prob = CorrectionsProblem()
         var = Variable([1.0, 2.0])
         assert prob._freeVars == []
 
-        prob.addVariable(var)
+        prob.addVariables(var)
         assert var in prob._freeVars  # successful add
+
+    def test_addVariables_multi(self):
+        prob = CorrectionsProblem()
+        var1, var2 = Variable([1.0, 2.0]), Variable([3.0, 4.0])
+        prob.addVariables([var1, var2])
+        assert var1 in prob._freeVars
+        assert var2 in prob._freeVars
 
     def test_addEmptyVariable(self):
         # A variable with no free values will not be added
         prob = CorrectionsProblem()
         var = Variable([1.0, 2.0], mask=[1, 1])
-        prob.addVariable(var)
+        prob.addVariables(var)
         assert not var in prob._freeVars
         # TODO check logging
 
@@ -366,27 +377,34 @@ class TestCorrectionsProblem:
             [Variable(1.0), Variable(2.0), Variable(3.0)],
         ],
     )
-    def test_rmVariable(self, variables):
+    def test_rmVariables(self, variables):
         prob = CorrectionsProblem()
         for var in variables:
-            prob.addVariable(var)
+            prob.addVariables(var)
 
         # remove one
-        prob.rmVariable(variables[0])
+        prob.rmVariables(variables[0])
         assert not variables[0] in prob._freeVars
 
         # check that original object is not affected
         assert all(variables[0].values.data)
 
+    def test_rmVariables_multi(self):
+        prob = CorrectionsProblem()
+        var1, var2 = Variable([1.0, 2.0]), Variable([3.0, 4.0])
+        prob.addVariables([var1, var2])
+        prob.rmVariables([var1, var2])
+        assert prob._freeVars == []
+
     @pytest.mark.parametrize("variables", [[], [Variable([3.0, 2.0])]])
-    def test_rmVariable_missing(self, variables):
+    def test_rmVariables_missing(self, variables):
         prob = CorrectionsProblem()
         for var in variables:
-            prob.addVariable(var)
+            prob.addVariables(var)
 
         # Should do nothing if asked to remove a variable
         # TODO check logging?  caplog
-        prob.rmVariable(Variable([1.2, 3.4]))
+        prob.rmVariables(Variable([1.2, 3.4]))
 
     @pytest.mark.parametrize(
         "variables",
@@ -398,7 +416,7 @@ class TestCorrectionsProblem:
     def test_clearVariables(self, variables):
         prob = CorrectionsProblem()
         for var in variables:
-            prob.addVariable(var)
+            prob.addVariables(var)
 
         prob.clearVariables()
         assert prob._freeVars == []
@@ -417,7 +435,7 @@ class TestCorrectionsProblem:
     def test_freeVarIndexMap(self, variables):
         prob = CorrectionsProblem()
         for var in variables:
-            prob.addVariable(var)
+            prob.addVariables(var)
 
         indexMap = prob.freeVarIndexMap()
         assert isinstance(indexMap, dict)
@@ -437,7 +455,7 @@ class TestCorrectionsProblem:
     def test_variableVec(self, variables):
         prob = CorrectionsProblem()
         for var in variables:
-            prob.addVariable(var)
+            prob.addVariables(var)
 
         vec = prob.freeVarVec()
         assert isinstance(vec, np.ndarray)
@@ -455,7 +473,7 @@ class TestCorrectionsProblem:
     def test_updateFreeVars(self, variables):
         prob = CorrectionsProblem()
         for var in variables:
-            prob.addVariable(var)
+            prob.addVariables(var)
 
         vec0 = prob.freeVarVec()
         newVec = np.random.rand(*vec0.shape)
@@ -485,21 +503,30 @@ class TestCorrectionsProblem:
     def test_numFreeVars(self, variables):
         prob = CorrectionsProblem()
         for var in variables:
-            prob.addVariable(var)
+            prob.addVariables(var)
 
         assert prob.numFreeVars == sum([var.numFree for var in variables])
 
     # -------------------------------------------
     # Constraints
 
-    def test_addConstraint(self):
+    def test_addConstraints(self):
         prob = CorrectionsProblem()
         assert prob._constraints == []  # empty to start
 
         var = Variable([1.1])
         con = constraints.VariableValueConstraint(var, [0.0])
-        prob.addConstraint(con)
+        prob.addConstraints(con)
         assert con in prob._constraints  # was added
+
+    def test_addConstraints_multi(self):
+        prob = CorrectionsProblem()
+        var = Variable([1.0])
+        con1 = constraints.VariableValueConstraint(var, [0.0])
+        con2 = constraints.VariableValueConstraint(var, [2.0])
+        prob.addConstraints([con1, con2])
+        assert con1 in prob._constraints
+        assert con2 in prob._constraints
 
     def test_addEmptyConstraint(self):
         prob = CorrectionsProblem()
@@ -507,33 +534,42 @@ class TestCorrectionsProblem:
         con = constraints.VariableValueConstraint(var, [None])
         assert con.size == 0
 
-        prob.addConstraint(con)
+        prob.addConstraints(con)
         assert not con in prob._constraints
         # TODO check logging
 
-    def test_rmConstraint(self):
+    def test_rmConstraints(self):
         prob = CorrectionsProblem()
         var = Variable([1.1])
         con = constraints.VariableValueConstraint(var, [0.0])
-        prob.addConstraint(con)
-        prob.rmConstraint(con)
+        prob.addConstraints(con)
+        prob.rmConstraints(con)
 
         assert not con in prob._constraints
 
-    def test_rmConstraint_missing(self):
+    def test_rmConstraints_multi(self):
+        prob = CorrectionsProblem()
+        var = Variable([1.0])
+        con1 = constraints.VariableValueConstraint(var, [0.0])
+        con2 = constraints.VariableValueConstraint(var, [2.0])
+        prob.addConstraints([con1, con2])
+        prob.rmConstraints([con1, con2])
+        assert prob._constraints == []
+
+    def test_rmConstraints_missing(self):
         prob = CorrectionsProblem()
         var = Variable([1.1])
         con = constraints.VariableValueConstraint(var, [0.0])
 
         # Should do nothing if asked to remove a constraint that hasn't been added
         # TODO check logging?
-        prob.rmConstraint(con)
+        prob.rmConstraints(con)
 
     def test_clearConstraints(self):
         prob = CorrectionsProblem()
         var = Variable([1.1])
         con = constraints.VariableValueConstraint(var, [0.0])
-        prob.addConstraint(con)
+        prob.addConstraints(con)
         prob.clearConstraints()
 
         assert not con in prob._constraints
@@ -542,7 +578,7 @@ class TestCorrectionsProblem:
         prob = CorrectionsProblem()
         var = Variable([1.1])
         con = constraints.VariableValueConstraint(var, [0.0])
-        prob.addConstraint(con)
+        prob.addConstraints(con)
 
         indexMap = prob.constraintIndexMap()
         assert isinstance(indexMap, dict)
@@ -552,9 +588,9 @@ class TestCorrectionsProblem:
     def test_constraintVec(self):
         prob = CorrectionsProblem()
         var = Variable([1.1])
-        prob.addVariable(var)
+        prob.addVariables(var)
         con = constraints.VariableValueConstraint(var, [0.0])
-        prob.addConstraint(con)
+        prob.addConstraints(con)
 
         vec = prob.constraintVec()
         assert isinstance(vec, np.ndarray)
@@ -575,7 +611,7 @@ class TestCorrectionsProblem:
         cons = np.array(cons, ndmin=1)
         prob = CorrectionsProblem()
         for con in cons:
-            prob.addConstraint(con)
+            prob.addConstraints(con)
 
         assert prob.numConstraints == sum([con.size for con in cons])
 
@@ -591,11 +627,11 @@ class TestCorrectionsProblem:
         matchPos = constraints.VariableValueConstraint(pos, posVals)
         matchDX = constraints.VariableValueConstraint(vel, [4.01, None, None])
 
-        prob.addVariable(pos)
-        prob.addVariable(vel)
+        prob.addVariables(pos)
+        prob.addVariables(vel)
 
-        prob.addConstraint(matchPos)
-        prob.addConstraint(matchDX)
+        prob.addConstraints(matchPos)
+        prob.addConstraints(matchDX)
 
         return prob
 
@@ -685,8 +721,8 @@ class TestCorrectionsProblem:
         prob = CorrectionsProblem()
         var = Variable([0, 1, 2])
         con = constraints.VariableValueConstraint(var, [None, 1.1, None])
-        prob.addVariable(var)
-        prob.addConstraint(con)
+        prob.addVariables(var)
+        prob.addConstraints(con)
         self.assertCached(prob)  # all caches are empty
 
         prob.freeVarIndexMap()
@@ -713,6 +749,7 @@ class TestCorrectionsProblem:
         self.assertCached(prob, fMap=True, cMap=True)
 
 
+# ------------------------------------------------------------------------------
 class TestShootingProblem:
     @pytest.fixture(scope="class")
     def model(self):
@@ -889,13 +926,14 @@ class TestShootingProblem:
         assert "links point 0 to itself" in errors[0]
 
 
+# ------------------------------------------------------------------------------
 class TestDifferentialCorrector:
     @pytest.fixture(scope="class")
     def model(self):
         earth, moon = loadBody("Earth"), loadBody("Moon")
         return DynamicsModel(ModelConfig(earth, moon))
 
-    def test_singleShooter(self, model):
+    def test_simpleCorrections(self, model):
         # Create an initial state with velocity states free
         q0 = Variable(
             [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], [True] * 3 + [False] * 3
@@ -908,11 +946,11 @@ class TestDifferentialCorrector:
         segment = Segment(origin, 3.1505, terminus)
 
         problem = CorrectionsProblem()
-        problem.addVariable(origin.state)
-        problem.addVariable(segment.tof)
+        problem.addVariables(origin.state)
+        problem.addVariables(segment.tof)
 
         # Constrain the position at the end of the arc to match the terminus
-        problem.addConstraint(
+        problem.addConstraints(
             constraints.ContinuityConstraint(segment, indices=[0, 1, 2])
         )
 
@@ -928,3 +966,37 @@ class TestDifferentialCorrector:
         assert isinstance(log, dict)
         assert log["status"] == "converged"
         assert len(log["iterations"]) > 2
+
+    def test_multipleShooter(self, model):
+        q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        period = 6.311
+        prop = Propagator(model, dense=False)
+        sol = prop.propagate(
+            q0,
+            [0, period],
+            t_eval=[0.0, period / 4, period / 2, 3 * period / 4, period],
+        )
+        points = [ControlPoint.fromProp(sol, ix) for ix in range(len(sol.t))]
+        segments = [
+            Segment(points[ix], period / 4, terminus=points[ix + 1], prop=prop)
+            for ix in range(len(points) - 1)
+        ]
+
+        # make terminus of final arc the origin of the first
+        segments[-1].terminus = points[0]
+
+        problem = ShootingProblem()
+        problem.addSegments(segments)
+
+        # Create continuity constraints
+        for seg in segments:
+            problem.addConstraints(constraints.ContinuityConstraint(seg))
+
+        problem.build()
+        corrector = DifferentialCorrector()
+        corrector.updateGenerator = corrections.MinimumNormUpdate()
+        corrector.convergenceCheck = corrections.L2NormConvergence(1e-8)
+        solution, log = corrector.solve(problem)
+
+        assert isinstance(solution, ShootingProblem)
+        assert log["status"] == "converged"

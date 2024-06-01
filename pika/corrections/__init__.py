@@ -193,6 +193,10 @@ class ControlPoint(ModelBlockCopyMixin):
             input ``float`` is converted to a :class:`Variable` with name "Epoch"
         state ([float], Variable): the state at which the propagation begins. An
             input list of floats is converted to a :class:`Variable` with name "State"
+        autoMask (Optional, bool): whether or not to auto-mask the ``epoch`` variable.
+            If True and ``model``
+            :func:`~pika.dynamics.AbstractDynamicsModel.epochIndependent` is True,
+            the ``epoch`` variable has its mask set to True.
 
     Raises:
         TypeError: if the model is not derived from AbstractDynamicsModel
@@ -201,8 +205,7 @@ class ControlPoint(ModelBlockCopyMixin):
             allows for :attr:`EOMVars.STATE`
     """
 
-    # TODO switch epoch and state order so that epoch=None is default?
-    def __init__(self, model, epoch, state):
+    def __init__(self, model, epoch, state, autoMask=True):
         if not isinstance(model, AbstractDynamicsModel):
             raise TypeError("Model must be derived from AbstractDynamicsModel")
 
@@ -220,6 +223,9 @@ class ControlPoint(ModelBlockCopyMixin):
         if not state.values.size == sz:
             raise RuntimeError("State must have {sz} values")
 
+        if autoMask:
+            epoch.values.mask = model.epochIndependent
+
         self.model = model
         self.epoch = epoch
         self.state = state
@@ -228,13 +234,17 @@ class ControlPoint(ModelBlockCopyMixin):
         self.importableVars = (self.state, self.epoch)
 
     @staticmethod
-    def fromProp(solution, ix=0):
+    def fromProp(solution, ix=0, autoMask=True):
         """
         Construct a control point from a propagated arc
 
         Args:
             solution (scipy.integrate.OptimizeResult): the output from the propagation
             ix (Optional, int): the index of the point within the ``solution``
+            autoMask (Optional, bool): whether or not to auto-mask the ``epoch``
+                variable. If True and ``solution.model``
+                :func:`~pika.dynamics.AbstractDynamicsModel.epochIndependent`
+                is True, the ``epoch`` variable has its mask set to True.
 
         Returns:
             ControlPoint: a control point with epoch and state retrieved from the
@@ -246,7 +256,7 @@ class ControlPoint(ModelBlockCopyMixin):
         if ix > len(solution.t):
             raise ValueError(f"ix = {ix} is out of bounds (max = {len(solution.t)})")
 
-        return ControlPoint(solution.model, solution.t[ix], solution.y[:, ix])
+        return ControlPoint(solution.model, solution.t[ix], solution.y[:, ix], autoMask)
 
 
 class Segment:
@@ -375,7 +385,6 @@ class Segment:
             :attr:`origin` ``state``, i.e., the :attr:`~pika.dynamics.EOMVars.STM`.
             The partials are returned in matrix form.
         """
-        # Assumes propagation begins at initial state
         self.propagate([EOMVars.STATE, EOMVars.STM])
         return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.STM)
 
@@ -392,7 +401,15 @@ class Segment:
             :attr:`~pika.dynamics.EOMVars.EPOCH_DEPS`.
         """
         self.propagate([EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS])
-        return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.EPOCH_DEPS)
+        partials = self.origin.model.extractVars(
+            self.propSol.y[:, ix], EOMVars.EPOCH_DEPS
+        )
+
+        # Handle models that don't depend on epoch by setting partials to zero
+        if partials.size == 0:
+            partials = np.zeros((self.origin.model.stateSize(EOMVars.STATE),))
+
+        return partials
 
     def partials_state_wrt_params(self, ix=-1):
         """
@@ -408,7 +425,16 @@ class Segment:
         self.propagate(
             [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS]
         )
-        return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.PARAM_DEPS)
+        partials = self.origin.model.extractVars(
+            self.propSol.y[:, ix], EOMVars.PARAM_DEPS
+        )
+
+        # Handle models that don't depend on propagator params by setting partials
+        # to zero
+        if partials.size == 0:
+            partials = np.zeros((self.origin.model.stateSize(EOMVars.STATE),))
+
+        return partials
 
     def propagate(self, eomVars, lazy=True):
         """
@@ -484,36 +510,36 @@ class CorrectionsProblem:
     # -------------------------------------------
     # Variables
 
-    def addVariable(self, variable):
+    def addVariables(self, variable):
         """
-        Add a variable to the problem
+        Add one or more variables to the problem
 
         This clears the caches for :func:`freeVarIndexMap`, :func:`freeVarVec`,
         and :func:`jacobian`.
 
         Args:
-            variable (Variable): a variable to add. Variables are stored by
-                reference (they are not copied).
+            variable (Variable, [Variable]): one or more variables to add.
+                Variables are stored by reference (they are not copied).
 
         Raises:
-            ValueError: if ``variable`` is not a valid Variable object
+            ValueError: if any of the inputs are not :class:`Variable: objects
         """
-        # TODO allow input to be an iterable
-        if not isinstance(variable, Variable):
-            raise ValueError("Can only add Variable objects")
+        for var in util.toList(variable):
+            if not isinstance(var, Variable):
+                raise ValueError("Can only add Variable objects")
 
-        if variable.numFree == 0:
-            # TODO should this maybe be debug level?
-            logger.error(f"Cannot add {variable}; it has no free values")
-            return
+            if var.numFree == 0:
+                logger.debug(f"Cannot add {var}; it has no free values")
+                continue
 
-        if variable in self._freeVars:
-            raise RuntimeError("Variable has already been added")
+            if var in self._freeVars:
+                logger.debug(f"Skipping add {var}; it has already been added")
+                continue
 
-        self._freeVars.append(variable)
-        self._freeVarIndexMap = None
-        self._freeVarVec = None
-        self._jacobian = None
+            self._freeVars.append(var)
+            self._freeVarIndexMap = None
+            self._freeVarVec = None
+            self._jacobian = None
 
     def importVariables(self, obj):
         """
@@ -525,28 +551,27 @@ class CorrectionsProblem:
         Args:
             obj: an object
         """
-        for var in np.asarray(getattr(obj, "importableVars", [])):
-            self.addVariable(var)
+        self.addVariables(util.toList(getattr(obj, "importableVars", [])))
 
-    def rmVariable(self, variable):
+    def rmVariables(self, variable):
         """
-        Remove a variable from the problem
+        Remove one or more variables from the problem
 
         This clears the caches for :func:`freeVarIndexMap`, :func:`freeVarVec`,
         and :func:`jacobian`.
 
         Args:
-            variable (Variable): the variable to remove. If the variable is not
-            part of the problem, no action is taken.
+            variable (Variable, [Variable]): the variable(s) to remove. If the
+                variable is not part of the problem, no action is taken.
         """
-        # TODO allow input to be an iterable
-        try:
-            self._freeVars.remove(variable)
-            self._freeVarIndexMap = None
-            self._freeVarVec = None
-            self._jacobian = None
-        except ValueError:
-            logger.error(f"Could not remove variable {variable}")
+        for var in util.toList(variable):
+            try:
+                self._freeVars.remove(var)
+                self._freeVarIndexMap = None
+                self._freeVarVec = None
+                self._jacobian = None
+            except ValueError:
+                logger.debug(f"Could not remove variable {var}")
 
     def clearVariables(self):
         """
@@ -642,59 +667,61 @@ class CorrectionsProblem:
     # -------------------------------------------
     # Constraints
 
-    def addConstraint(self, constraint):
+    def addConstraints(self, constraint):
         """
-        Add a constraint to the problem. If the constraint defines variables,
+        Add one or more constraints to the problem. If the constraint defines variables,
         they are also added to the problem via :func:`importVariables`.
 
         This clears the caches for :func:`constraintIndexMap`,
         :func:`constraintVec`, and :func:`jacobian`
 
         Args:
-            constraint (AbstractConstraint): a constraint to add. Constraints
-                are stored by reference (they are not copied).
+            constraint (AbstractConstraint, [AbstractConstraint]): one or more
+                constraints to add. Constraints are stored by reference (they are
+                not copied).
         """
-        # TODO allow input to be an iterable
-        if not isinstance(constraint, AbstractConstraint):
-            raise ValueError("Can only add AbstractConstraint objects")
+        for con in util.toList(constraint):
+            # TODO allow input to be an iterable
+            if not isinstance(con, AbstractConstraint):
+                raise ValueError("Can only add AbstractConstraint objects")
 
-        if constraint.size == 0:
-            logger.error(f"Cannot add {constraint}; its size is zero")
-            return
+            if con.size == 0:
+                logger.debug(f"Cannot add {con}; its size is zero")
+                continue
 
-        if constraint in self._constraints:
-            raise RuntimeError("Constraint has laredy been added")
+            if con in self._constraints:
+                logger.debug(f"Constraint {con} has laredy been added")
+                continue
 
-        self._constraints.append(constraint)
-        self.importVariables(constraint)
+            self._constraints.append(con)
+            self.importVariables(con)
 
-        self._constraintIndexMap = None
-        self._constraintVec = None
-        self._jacobian = None
+            self._constraintIndexMap = None
+            self._constraintVec = None
+            self._jacobian = None
 
-    def rmConstraint(self, constraint):
+    def rmConstraints(self, constraint):
         """
-        Remove a constraint from the problem. If the constraint defines variables,
-        they are also removed from the problem.
+        Remove one or more constraints from the problem. If the constraint defines
+        variables, they are also removed from the problem.
 
         This clears the caches for :func:`constraintIndexMap`,
         :func:`constraintVec`, and :func:`jacobian`
 
         Args:
-            constraint (AbstractConstraint): the constraint to remove. If the
-                constraint is not part of the problem, no action is taken.
+            constraint (AbstractConstraint, [AbstractConstraint]): the constraint(s)
+                to remove. If the constraint is not part of the problem, no action
+                is taken.
         """
-        # TODO allow input to be an iterable
-        try:
-            self._constraints.remove(constraint)
-            for var in getattr(constraint, "importableVars", []):
-                self.rmVariable(var)
-
-            self._constraintIndexMap = None
-            self._constraintVec = None
-            self._jacobian = None
-        except ValueError:
-            logger.error(f"Could not remove constraint {constraint}")
+        for con in util.toList(constraint):
+            try:
+                self._constraints.remove(con)
+                self.rmVariables(util.toList(getattr(con, "importableVars", [])))
+                self._constraintIndexMap = None
+                self._constraintVec = None
+                self._jacobian = None
+            except ValueError:
+                logger.debug(f"Could not remove constraint {con}")
 
     def clearConstraints(self):
         """
@@ -914,6 +941,13 @@ class CorrectionsProblem:
 
 
 class ShootingProblem(CorrectionsProblem):
+    """
+    A specialized version of the :class:`CorrectionsProblem` that accepts
+    :class:`Segment` objects as inputs; variables are automatically extracted
+    from the segments and their control points. Additionally, a directed
+    graph is constructed to ensure the collection of segments make physical sense.
+    """
+
     def __init__(self):
         super().__init__()
 
@@ -921,26 +955,51 @@ class ShootingProblem(CorrectionsProblem):
         self._adjMat = None  # adjacency matrix
 
     def addSegments(self, segment):
+        """
+        Add one or more segments to the problem. Segments are not added if they
+        already exist in the problem.
+
+        Args:
+            segment (Segment, [Segment]): a single or multiple segments to add
+                to the problem
+
+        Raises:
+            ValueError: if one of the inputs is not a :class:`Segment`
+        """
         for seg in util.toList(segment):
             if not isinstance(seg, Segment):
-                logger.error(f"Cannot add {seg}; it isn't a segment")
-                continue
+                raise ValueError("Can only add segment objects")
 
             if not seg in self._segments:
                 self._segments.append(seg)
-
-        self._adjMat = None
+                self._adjMat = None
 
     def rmSegments(self, segment):
+        """
+        Remove one or more segments from the problem. Segments that are not
+        in the problem are ignored.
+        """
         for seg in util.toList(segment):
             try:
                 self._segments.remove(seg)
+                self._adjMat = None
             except ValueError:
-                logger.error(f"Can not remove {seg} from segments")
-
-        self._adjMat = None
+                logger.debug(f"Can not remove {seg} from segments")
 
     def build(self):
+        """
+        Call this method after all segments, variables, and constraints have
+        been added to the problem (i.e., right before calling
+        :func:`DifferentialCorrector.solve`).
+
+        The control points from each segment are extracted and their free variables
+        added to the problem. Similarly, the segment free variables are added to
+        the problem. The :func:`checkValidGraph` function is called afteward to
+        validate the configuration.
+
+        Raises:
+            RuntimeError: if the graph validation fails
+        """
         # Clear caches
         self._freeVarIndexMap = None
         self._freeVarVec = None
