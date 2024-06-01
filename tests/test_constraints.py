@@ -36,10 +36,10 @@ class TestContinuityConstraint:
     @pytest.fixture
     def problem(self, segment):
         prob = CorrectionsProblem()
-        prob.addVariable(segment.origin.state)
-        prob.addVariable(segment.terminus.state)
-        prob.addVariable(segment.tof)
-        prob.addVariable(segment.propParams)
+        prob.addVariables(segment.origin.state)
+        prob.addVariables(segment.terminus.state)
+        prob.addVariables(segment.tof)
+        prob.addVariables(segment.propParams)
 
         return prob
 
@@ -135,8 +135,8 @@ class TestContinuityConstraint:
     def test_excludeTerminus(self, segment, indices):
         # Don't include the terminus in the free variable vector
         prob = CorrectionsProblem()
-        prob.addVariable(segment.origin.state)
-        prob.addVariable(segment.tof)
+        prob.addVariables(segment.origin.state)
+        prob.addVariables(segment.tof)
         con = pcons.ContinuityConstraint(segment, indices=indices)
         err = con.evaluate(prob.freeVarIndexMap())
         assert isinstance(err, np.ndarray)
