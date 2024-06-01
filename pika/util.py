@@ -1,6 +1,7 @@
 """
 Utilities
 """
+import numpy as np
 
 
 def _iterate(val):
