@@ -19,7 +19,7 @@ from pika.corrections import (
     Variable,
 )
 from pika.dynamics import EOMVars
-from pika.dynamics.crtbp import DynamicsModel, ModelConfig
+from pika.dynamics.crtbp import DynamicsModel
 from pika.propagate import Propagator
 
 
@@ -112,8 +112,7 @@ class TestControlPoint:
     @pytest.fixture(scope="class")
     def model(self):
         earth, moon = loadBody("Earth"), loadBody("Moon")
-        config = ModelConfig(earth, moon)
-        return DynamicsModel(config)
+        return DynamicsModel(earth, moon)
 
     @pytest.mark.parametrize(
         "epoch, state",
@@ -194,8 +193,7 @@ class TestSegment:
     @pytest.fixture(scope="class")
     def model(self):
         earth, moon = loadBody("Earth"), loadBody("Moon")
-        config = ModelConfig(earth, moon)
-        return DynamicsModel(config)
+        return DynamicsModel(earth, moon)
 
     @pytest.fixture(scope="class")
     def prop(self, model):
@@ -240,7 +238,7 @@ class TestSegment:
 
     def test_constructor_altProp(self, origin, request):
         sun, earth = loadBody("Sun"), loadBody("Earth")
-        model = DynamicsModel(ModelConfig(sun, earth))
+        model = DynamicsModel(sun, earth)
         prop = Propagator(model)
         seg = Segment(origin, 2.3, prop=prop)
         assert seg.prop.model == origin.model
@@ -754,7 +752,7 @@ class TestShootingProblem:
     @pytest.fixture(scope="class")
     def model(self):
         earth, moon = loadBody("Earth"), loadBody("Moon")
-        return DynamicsModel(ModelConfig(earth, moon))
+        return DynamicsModel(earth, moon)
 
     @pytest.fixture(scope="class")
     def origin(self, model):
@@ -931,7 +929,7 @@ class TestDifferentialCorrector:
     @pytest.fixture(scope="class")
     def model(self):
         earth, moon = loadBody("Earth"), loadBody("Moon")
-        return DynamicsModel(ModelConfig(earth, moon))
+        return DynamicsModel(earth, moon)
 
     def test_simpleCorrections(self, model):
         # Create an initial state with velocity states free

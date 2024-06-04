@@ -948,6 +948,8 @@ class ShootingProblem(CorrectionsProblem):
     graph is constructed to ensure the collection of segments make physical sense.
     """
 
+    # TODO need public access to segments
+
     def __init__(self):
         super().__init__()
 

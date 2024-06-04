@@ -7,47 +7,39 @@ from conftest import loadBody
 
 from pika.data import Body
 from pika.dynamics import EOMVars
-from pika.dynamics.crtbp import DynamicsModel, ModelConfig
+from pika.dynamics.crtbp import DynamicsModel
 
 earth = loadBody("Earth")
 moon = loadBody("Moon")
 sun = loadBody("Sun")
 
 
-@pytest.fixture(scope="module")
-def emConfig():
-    return ModelConfig(earth, moon)
-
-
-class TestModelConfig:
+class TestDynamicsModel:
     @pytest.mark.parametrize("bodies", [[earth, moon], [moon, earth]])
     def test_bodyOrder(self, bodies):
-        config = ModelConfig(*bodies)
+        model = DynamicsModel(*bodies)
 
-        assert isinstance(config.bodies, tuple)
-        assert len(config.bodies) == 2
-        assert config.bodies[0].gm > config.bodies[1].gm
+        assert isinstance(model.bodies, tuple)
+        assert len(model.bodies) == 2
+        assert model.bodies[0].gm > model.bodies[1].gm
 
-        assert "mu" in config.params
-        assert config.params["mu"] < 0.5
-        assert config.charL > 1.0
-        assert config.charM > 1.0
-        assert config.charT > 1.0
+        assert "mu" in model.params
+        assert model.params["mu"] < 0.5
+        assert model.charL > 1.0
+        assert model.charM > 1.0
+        assert model.charT > 1.0
 
     def test_equals(self):
-        config1 = ModelConfig(earth, moon)
-        config2 = ModelConfig(moon, earth)
-        config3 = ModelConfig(earth, sun)
+        model1 = DynamicsModel(earth, moon)
+        model2 = DynamicsModel(moon, earth)
+        model3 = DynamicsModel(earth, sun)
 
-        assert config1 == config1
-        assert config1 == config2
-        assert not config1 == config3
+        assert model1 == model1
+        assert model1 == model2
+        assert not model1 == model3
 
-
-@pytest.mark.usefixtures("emConfig")
-class TestDynamicsModel:
-    def test_stateSize(self, emConfig):
-        model = DynamicsModel(emConfig)
+    def test_stateSize(self):
+        model = DynamicsModel(earth, moon)
         assert model.stateSize(EOMVars.STATE) == 6
         assert model.stateSize(EOMVars.STM) == 36
         assert model.stateSize([EOMVars.STATE, EOMVars.STM]) == 42
@@ -57,23 +49,23 @@ class TestDynamicsModel:
     @pytest.mark.parametrize(
         "append", [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS]
     )
-    def test_appendICs(self, emConfig, append):
-        model = DynamicsModel(emConfig)
+    def test_appendICs(self, append):
+        model = DynamicsModel(earth, moon)
         q0 = np.array([0, 1, 2, 3, 4, 5])
         q0_mod = model.appendICs(q0, append)
 
         assert q0_mod.shape == (q0.size + model.stateSize(append),)
 
     @pytest.mark.parametrize("ix", [0, 1])
-    def test_bodyPos(self, emConfig, ix):
-        model = DynamicsModel(emConfig)
+    def test_bodyPos(self, ix):
+        model = DynamicsModel(earth, moon)
         pos = model.bodyPos(ix, 0.0)
         assert isinstance(pos, np.ndarray)
         assert pos.shape == (3,)
 
     @pytest.mark.parametrize("ix", [0, 1])
-    def test_bodyVel(self, emConfig, ix):
-        model = DynamicsModel(emConfig)
+    def test_bodyVel(self, ix):
+        model = DynamicsModel(earth, moon)
         pos = model.bodyVel(ix, 0.0)
         assert isinstance(pos, np.ndarray)
         assert pos.shape == (3,)

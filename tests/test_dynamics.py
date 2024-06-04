@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
-from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelConfig
+from pika.dynamics import AbstractDynamicsModel, EOMVars
 
 earth, moon, sun = loadBody("Earth"), loadBody("Moon"), loadBody("Sun")
 
@@ -38,16 +38,10 @@ class DummyModel(AbstractDynamicsModel):
         )
 
 
-class TestModelConfig:
-    # TODO test
-    pass
-
-
 class TestAbstractDynamicsModel:
     @pytest.fixture(scope="class")
     def model(self):
-        config = ModelConfig(sun, earth, moon)
-        return DummyModel(config)
+        return DummyModel(sun, earth, moon)
 
     @pytest.mark.parametrize(
         "eomVars, sz",

@@ -10,7 +10,7 @@ import scipy.optimize
 from conftest import loadBody
 
 from pika.dynamics import EOMVars
-from pika.dynamics.crtbp import DynamicsModel, ModelConfig
+from pika.dynamics.crtbp import DynamicsModel
 from pika.propagate import (
     ApseEvent,
     BodyDistanceEvent,
@@ -24,7 +24,7 @@ from pika.propagate import (
 def emModel():
     earth = loadBody("Earth")
     moon = loadBody("Moon")
-    return DynamicsModel(ModelConfig(earth, moon))
+    return DynamicsModel(earth, moon)
 
 
 @pytest.mark.usefixtures("emModel")

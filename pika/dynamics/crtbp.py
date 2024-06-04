@@ -5,12 +5,12 @@ import numpy as np
 from numba import njit
 
 from pika.data import GRAV_PARAM
-from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelConfig as BaseModelConfig
+from pika.dynamics import AbstractDynamicsModel, EOMVars
 
 
-class ModelConfig(BaseModelConfig):
+class DynamicsModel(AbstractDynamicsModel):
     """
-    CRTBP Model Configuration
+    CRTBP Dynamics Model
 
     Args:
         body1 (Body): one of the two primary bodies
@@ -30,27 +30,18 @@ class ModelConfig(BaseModelConfig):
         self._charM = totalGM / GRAV_PARAM
         self._charT = np.sqrt(self._charL**3 / totalGM)
 
-
-class DynamicsModel(AbstractDynamicsModel):
-    """
-    CRTBP Dynamics Model
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-
     @property
     def epochIndependent(self):
         return True
 
     def evalEOMs(self, t, q, eomVars, params=None):
-        return DynamicsModel._eoms(t, q, self.config.params["mu"], eomVars)
+        return DynamicsModel._eoms(t, q, self.params["mu"], eomVars)
 
     def bodyPos(self, ix, t, params=None):
         if ix == 0:
-            return np.array([-self.config.params["mu"], 0.0, 0.0])
+            return np.array([-self.params["mu"], 0.0, 0.0])
         elif ix == 1:
-            return np.array([1 - self.config.params["mu"], 0.0, 0.0])
+            return np.array([1 - self.params["mu"], 0.0, 0.0])
         else:
             raise ValueError(f"Index {ix} must be zero or one")
 

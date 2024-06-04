@@ -6,4 +6,4 @@ from rich.console import Console
 
 console = Console()
 
-__all__ = ["corrections", "data", "dynamics", "propagate", "util"]
+__all__ = ["corrections", "data", "dynamics", "propagate", "plots", "util"]

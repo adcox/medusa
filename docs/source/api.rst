@@ -28,7 +28,6 @@ motion of bodies in space.
 
    ~data.Body
    ~dynamics.AbstractDynamicsModel
-   ~dynamics.ModelConfig
    ~dynamics.EOMVars
 
 Some of these objects are purly abstract classes and cannot be instantiated.
@@ -38,7 +37,6 @@ Individual models extend the base classes to provide concrete implementations.
    :nosignatures:
 
    dynamics.crtbp.DynamicsModel
-   dynamics.crtbp.ModelConfig
 
 
 Propagation

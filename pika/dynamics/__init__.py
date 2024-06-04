@@ -56,13 +56,18 @@ class EOMVars(IntEnum):
     """
 
 
-class ModelConfig:
+class AbstractDynamicsModel(ABC):
     """
-    Basic class to store a model configuration
+    Contains the mathematics that define a dynamical model
+
+    Args:
+        bodies ([Body]): one or more primary bodies
+        params: keyword arguments that define model parameters
 
     Attributes:
         bodies (tuple): a tuple of :class:`~pika.data.Body` objects
         params (dict): the parameters associated with this configuration
+        numParams (int): number of parameters this model supports
         charL (float): a characteristic length (km) used to nondimensionalize lengths
         charT (float): a characteristic time (sec) used to nondimensionalize times
         charM (float): a characteristic mass (kg) used to nondimensionalize masses
@@ -101,10 +106,10 @@ class ModelConfig:
 
     def __eq__(self, other):
         """
-        Compare two ModelConfig objects. This can be overridden for more specific
+        Compare two Model objects. This can be overridden for more specific
         comparisons in derived classes
         """
-        if not isinstance(other, ModelConfig):
+        if not isinstance(other, AbstractDynamicsModel):
             return False
 
         if not type(self) == type(other):
@@ -120,22 +125,7 @@ class ModelConfig:
             and self.charM == other.charM
         )
 
-
-class AbstractDynamicsModel(ABC):
-    """
-    Contains the mathematics that define a dynamical model
-
-    Attributes:
-        config (ModelConfig): model configuration
-        numParams (int): number of parameters this model supports
-    """
-
-    def __init__(self, config):
-        if not isinstance(config, ModelConfig):
-            raise TypeError("config input must be a ModelConfig object")
-
-        self.config = config
-
+    # TODO combine bodyPos and bodyVel into "bodyState"
     @abstractmethod
     def bodyPos(self, ix, t, params):
         """
@@ -318,15 +308,6 @@ class AbstractDynamicsModel(ABC):
         """
         # General principle: STATE vars are always required
         return EOMVars.STATE in np.array(eomVars, ndmin=1)
-
-    def __eq__(self, other):
-        """
-        Evaluate equality between this object and another
-        """
-        if not isinstance(other, AbstractDynamicsModel):
-            return False
-
-        return type(self) == type(other) and self.config == other.config
 
 
 class ModelBlockCopyMixin:
