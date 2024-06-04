@@ -7,7 +7,7 @@ import scipy.optimize
 
 from pika import corrections
 
-# TODO this should be defined in each model
+# TODO this should be defined in each dynamics model
 coordMap = {
     "t": None,
     "x": 0,

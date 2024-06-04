@@ -1220,6 +1220,8 @@ class DifferentialCorrector:
               an iteration of the solver and includes a copy of the free variable
               vector and the constraint vector.
         """
+        import warnings
+
         self._validateArgs()
 
         solution = deepcopy(problem)
@@ -1231,31 +1233,47 @@ class DifferentialCorrector:
             log["status"] = "empty"
             return solution
 
-        itCount = 0
-        while True:
-            if itCount > 0:
-                freeVarStep = self.updateGenerator.update(solution)
-                newVec = solution.freeVarVec() + freeVarStep
-                solution.updateFreeVars(newVec)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.filterwarnings("error", module="scipy.linalg")
+            itCount = 0
+            while True:
+                if itCount > 0:
+                    freeVarStep = self.updateGenerator.update(solution)
+                    newVec = solution.freeVarVec() + freeVarStep
+                    solution.updateFreeVars(newVec)
 
-            log["iterations"].append(
-                {
-                    "free-vars": copy(solution.freeVarVec()),
-                    "constraints": copy(solution.constraintVec()),
-                }
-            )
+                log["iterations"].append(
+                    {
+                        "free-vars": copy(solution.freeVarVec()),
+                        "constraints": copy(solution.constraintVec()),
+                    }
+                )
 
-            # TODO allow user to customize printout?
-            err = np.linalg.norm(solution.constraintVec())
-            logger.info(f"Iteration {itCount:03d}: ||F|| = {err:.4e}")
-            itCount += 1
+                # TODO allow user to customize printout?
+                err = np.linalg.norm(solution.constraintVec())
+                logger.info(f"Iteration {itCount:03d}: ||F|| = {err:.4e}")
 
-            if self.convergenceCheck.isConverged(solution):
-                log["status"] = "converged"
-                break
-            elif itCount >= self.maxIterations:
-                log["status"] = "max-iterations"
-                break
+                while len(caught) > 0:
+                    record = logger.makeRecord(
+                        "warning",
+                        logging.WARNING,
+                        caught[0].filename,
+                        caught[0].lineno,
+                        caught[0].message,
+                        {},
+                        None,
+                    )
+                    caught.pop(0)
+                    logger.handle(record)
+
+                itCount += 1
+
+                if self.convergenceCheck.isConverged(solution):
+                    log["status"] = "converged"
+                    break
+                elif itCount >= self.maxIterations:
+                    log["status"] = "max-iterations"
+                    break
 
         return solution, log
 

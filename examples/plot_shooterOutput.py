@@ -4,9 +4,11 @@ Test script to plot a ShooterProblem outout
 """
 import os
 import sys
+import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from rich.logging import RichHandler
 
 import pika.corrections.constraints as constraints
 from pika.corrections import (
@@ -22,8 +24,13 @@ from pika.dynamics.crtbp import DynamicsModel
 from pika.plots import TrajPlotter
 from pika.propagate import Propagator
 
+logger = logging.getLogger("pika")
+logger.addHandler(RichHandler(show_time=False, show_path=False, enable_link_path=False))
+logger.setLevel(logging.INFO)
+
+
 BODIES = Path(__file__).parent.parent / "resources/body-data.xml"
-assert BODIES.exists()
+assert BODIES.exists(), "Cannot find body-data.xml file"
 
 earth = Body.fromXML(BODIES, "Earth")
 moon = Body.fromXML(BODIES, "Moon")
