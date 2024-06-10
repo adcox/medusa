@@ -40,3 +40,8 @@ def test_constructor_opts():
 def test_readXML(name):
     body = Body.fromXML(BODY_XML, name)
     assert body.name == name
+
+
+def test_readXML_notFound():
+    with pytest.raises(RuntimeError):
+        Body.fromXML(BODY_XML, "Kolob")

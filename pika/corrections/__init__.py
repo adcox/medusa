@@ -2,12 +2,16 @@
 Core objects for differential corrections
 """
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from copy import copy, deepcopy
 
 import numpy as np
 import numpy.ma as ma
 import scipy
+from rich.columns import Columns
+from rich.panel import Panel
+from rich.table import Table
 
 from pika import console, util
 from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelBlockCopyMixin
@@ -230,8 +234,12 @@ class ControlPoint(ModelBlockCopyMixin):
         self.epoch = epoch
         self.state = state
 
+    @property
+    def importableVars(self):
         # Define variables attribute for CorrectionsProblem.importVariables
-        self.importableVars = (self.state, self.epoch)
+        # Defined as property so that evaluation occurs at runtime, allowing
+        #   user to modify/reassign the variables
+        return self.state, self.epoch
 
     @staticmethod
     def fromProp(solution, ix=0, autoMask=True):
@@ -329,8 +337,12 @@ class Segment:
         self.propParams = propParams
         self.propSol = None
 
+    @property
+    def importableVars(self):
         # Define variables attribute for CorrectionsProblem.importVariables
-        self.importableVars = (self.tof, self.propParams)
+        # Defined as property so that evaluation occurs at runtime, allowing
+        #   user to modify/reassign the variables
+        return self.tof, self.propParams
 
     def resetProp(self):
         """
@@ -620,6 +632,16 @@ class CorrectionsProblem:
 
         return self._freeVarIndexMap
 
+    def freeVarIndexMap_reversed(self):
+        varMap = {}
+        for var, ix0 in self.freeVarIndexMap().items():
+            for k in range(var.numFree):
+                assert (
+                    not ix0 + k in varMap
+                ), "duplicate entry in reversed freeVarIndexMap"
+                varMap[ix0 + k] = var
+        return varMap
+
     def updateFreeVars(self, newVec):
         """
         Update the free variable vector and corresponding Variable objects
@@ -781,6 +803,16 @@ class CorrectionsProblem:
 
         return self._constraintIndexMap
 
+    def constraintIndexMap_reversed(self):
+        conMap = {}
+        for con, ix0 in self.constraintIndexMap().items():
+            for k in range(con.size):
+                assert (
+                    not ix0 + k in conMap
+                ), "duplicate entry in reversed constraintIndexMap"
+                conMap[ix0 + k] = con
+        return conMap
+
     @property
     def numConstraints(self):
         """
@@ -885,20 +917,8 @@ class CorrectionsProblem:
 
         # Map indices to variable and constraint objects; used for better printouts
         if verbose:
-            varMap, conMap = {}, {}
-            for var, ix0 in self.freeVarIndexMap().items():
-                for k in range(var.numFree):
-                    assert (
-                        not ix0 + k in varMap
-                    ), "duplicate entry in reversed freeVarIndexMap"
-                    varMap[ix0 + k] = var
-
-            for con, ix0 in self.constraintIndexMap().items():
-                for k in range(con.size):
-                    assert (
-                        not ix0 + k in conMap
-                    ), "duplicate entry in reversed constraintIndexMap"
-                    conMap[ix0 + k] = con
+            varMap = self.freeVarIndexMap_reversed()
+            conMap = self.constraintIndexMap_reversed()
 
         # Compute absolute and relative differences and determine equality
         absDiff = numeric - analytic
@@ -938,6 +958,86 @@ class CorrectionsProblem:
                         )
 
         return equal
+
+    # -------------------------------------------
+    # Printing
+    def printFreeVars(self):
+        """
+        Print free variables to the screen
+        """
+        # TODO include flag to show values?
+        columns = Columns(title="Free Variables")
+        for var, ix0 in self.freeVarIndexMap().items():
+            name = var.name if var.name else var.__class__.__name__
+            if var.numFree <= 1:
+                indices = f"Index: {ix0}"
+            else:
+                indices = f"Indices: {ix0} - {ix0+var.numFree-1}"
+
+            columns.add_renderable(Panel(indices, title=f"[b]{name}[/b]"))
+        console.print(columns)
+
+    def printConstraints(self):
+        """
+        Print constraints to the screen
+        """
+        # TODO include flag to show values?
+        columns = Columns(title="Constraints")
+        for con, ix0 in self.constraintIndexMap().items():
+            name = con.__class__.__name__.replace("Constraint", "")
+            if con.size <= 1:
+                indices = f"Index: {ix0}"
+            else:
+                indices = f"Indices: {ix0} - {ix0+con.size-1}"
+
+            columns.add_renderable(Panel(indices, title=f"[b]{name}[/b]"))
+        console.print(columns)
+
+    def printJacobian(self):
+        """
+        Print the Jacobian matrix to the screen
+        """
+        jacobian = self.jacobian()
+        varMap = self.freeVarIndexMap_reversed()
+        conMap = self.constraintIndexMap_reversed()
+
+        columns = Columns(title="Jacobian", padding=(0, 0))
+        for var, ix0 in self.freeVarIndexMap().items():
+            name = var.name if var.name else var.__class__.__name__
+            header = [f"{ix:02d}" for ix in range(ix0, ix0 + var.numFree)]
+            if ix0 == 0:
+                header.insert(0, "")
+            table = Table(
+                *header,
+                collapse_padding=True,
+                show_edge=False,
+                pad_edge=False,
+                expand=True,
+            )
+            lastConIx = 0
+
+            for ix, row in enumerate(jacobian[:, ix0 : ix0 + var.numFree]):
+                rowText = [f"[bold]{ix:02d}[/bold]"] if ix0 == 0 else []
+                for val in row:
+                    if val is None or val == 0.0:
+                        rowText.append("[gray50]0[/gray50]")
+                    elif int(val) == val:
+                        rowText.append(f"[green]{int(val):d}[/green]")
+                    elif abs(np.log10(abs(val))) < 3:
+                        rowText.append(f"[blue]{val:.2f}[/blue]")
+                    else:
+                        rowText.append(f"[blue]{val:.2e}[/blue]")
+
+                if ix < jacobian.shape[0] - 1:
+                    nextConIx = self._constraints.index(conMap[ix + 1])
+                    end_section = nextConIx > lastConIx
+                    lastConIx = nextConIx
+
+                table.add_row(*rowText, end_section=end_section)
+
+            columns.add_renderable(Panel(table, title=f"[b]{name}[/b]", expand=False))
+
+        console.print(columns)
 
 
 class ShootingProblem(CorrectionsProblem):
@@ -1163,8 +1263,8 @@ class DifferentialCorrector:
 
     def __init__(self):
         self.maxIterations = 20
-        self.convergenceCheck = None
-        self.updateGenerator = None
+        self.convergenceCheck = L2NormConvergence(1e-8)
+        self.updateGenerator = MinimumNormUpdate()
 
     def _validateArgs(self):
         """
@@ -1220,8 +1320,6 @@ class DifferentialCorrector:
               an iteration of the solver and includes a copy of the free variable
               vector and the constraint vector.
         """
-        import warnings
-
         self._validateArgs()
 
         solution = deepcopy(problem)
@@ -1236,6 +1334,7 @@ class DifferentialCorrector:
         with warnings.catch_warnings(record=True) as caught:
             warnings.filterwarnings("error", module="scipy.linalg")
             itCount = 0
+            logger.info("Beginning differential corrections")
             while True:
                 if itCount > 0:
                     freeVarStep = self.updateGenerator.update(solution)

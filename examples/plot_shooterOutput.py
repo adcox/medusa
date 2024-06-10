@@ -2,8 +2,6 @@
 """
 Test script to plot a ShooterProblem outout
 """
-import os
-import sys
 import logging
 from pathlib import Path
 

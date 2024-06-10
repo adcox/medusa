@@ -89,7 +89,7 @@ class Body:
                     parentId=pid,
                 )
 
-        return None
+        raise RuntimeError(f"Cannot find a body named {name}")
 
     def __eq__(self, other):
         if not isinstance(other, Body):

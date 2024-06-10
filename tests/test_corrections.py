@@ -62,6 +62,7 @@ class TestVariable:
     def test_deepCopy(self):
         var = Variable([1.0, 2.0], [True, False], "variable")
         var2 = copy.deepcopy(var)
+
         assert np.array_equal(var.values, var2.values)
         assert var.name == var2.name
 
@@ -223,18 +224,29 @@ class TestSegment:
         seg = Segment(origin, tof, term, _prop, params)
 
         assert seg.origin == origin
+        assert id(seg.origin) == id(origin)
+        assert id(seg.origin.state) == id(origin.state)
+        assert id(seg.origin.epoch) == id(origin.epoch)
+
         assert seg.terminus == term
+        if term:
+            assert id(seg.terminus.state) == id(term.state)
+            assert id(seg.terminus.epoch) == id(term.epoch)
 
         assert isinstance(seg.tof, Variable)
         assert seg.tof.values.size == 1
         assert seg.tof.allVals[0] == 1.0
+        if isinstance(tof, Variable):
+            assert id(seg.tof) == id(tof)
 
         assert isinstance(seg.prop, Propagator)
         assert not id(seg.prop) == id(_prop)  # should make a copy
-        assert seg.prop.model == origin.model
+        assert id(seg.prop.model) == id(origin.model)
 
         assert isinstance(seg.propParams, Variable)
         assert seg.propParams.values.size == 0
+        if isinstance(params, Variable):
+            assert id(seg.propParams) == id(params)
 
     def test_constructor_altProp(self, origin, request):
         sun, earth = loadBody("Sun"), loadBody("Earth")
@@ -953,8 +965,6 @@ class TestDifferentialCorrector:
         )
 
         corrector = DifferentialCorrector()
-        corrector.updateGenerator = corrections.MinimumNormUpdate()
-        corrector.convergenceCheck = corrections.L2NormConvergence(1e-8)
         solution, log = corrector.solve(problem)
 
         assert isinstance(solution, CorrectionsProblem)
@@ -983,6 +993,10 @@ class TestDifferentialCorrector:
         # make terminus of final arc the origin of the first
         segments[-1].terminus = points[0]
 
+        # use single TOF for all arcs
+        for seg in segments[1:]:
+            seg.tof = segments[0].tof
+
         problem = ShootingProblem()
         problem.addSegments(segments)
 
@@ -991,9 +1005,19 @@ class TestDifferentialCorrector:
             problem.addConstraints(constraints.ContinuityConstraint(seg))
 
         problem.build()
+
+        # Check that variables have been added correctly
+        for point in points[:-1]:
+            assert point.state in problem._freeVars
+            assert not point.epoch in problem._freeVars  # epoch-independent problem
+        assert not points[-1].state in problem._freeVars
+        assert not points[-1].epoch in problem._freeVars
+        assert segments[0].tof in problem._freeVars
+
+        # Free variables:  4x state + 1x TOF = 5
+        assert len(problem._freeVars) == 5
+
         corrector = DifferentialCorrector()
-        corrector.updateGenerator = corrections.MinimumNormUpdate()
-        corrector.convergenceCheck = corrections.L2NormConvergence(1e-8)
         solution, log = corrector.solve(problem)
 
         assert isinstance(solution, ShootingProblem)
