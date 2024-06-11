@@ -115,11 +115,10 @@ class AbstractDynamicsModel(ABC):
             and self.charM == other.charM
         )
 
-    # TODO combine bodyPos and bodyVel into "bodyState"
     @abstractmethod
-    def bodyPos(self, ix, t, params):
+    def bodyState(self, ix, t, params):
         """
-        Evaluate the position of a body at a time
+        Evaluate a body state vector at a time
 
         Args:
             ix (int): index of the body within :attr:`bodies`
@@ -127,22 +126,7 @@ class AbstractDynamicsModel(ABC):
             params (float, [float]): one or more parameter values
 
         Returns:
-            numpy.ndarray: Cartesian position vector
-        """
-        pass
-
-    @abstractmethod
-    def bodyVel(self, ix, t, params):
-        """
-        Evaluate the velocity of a body at a time
-
-        Args:
-            ix (int): index of the body within :attr:`bodies`
-            t (float): time value
-            params (float, [float]): one or more parameter values
-
-        Returns:
-            numpy.ndarray: Cartesian velocity vector
+            numpy.ndarray: state vector for the body
         """
         pass
 

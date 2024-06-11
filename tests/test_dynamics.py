@@ -15,10 +15,7 @@ class DummyModel(AbstractDynamicsModel):
     A dummy model to test base class functionality with
     """
 
-    def bodyPos(self, ix, t, params):
-        pass
-
-    def bodyVel(self, ix, t, params):
+    def bodyState(self, ix, t, params):
         pass
 
     def evalEOMs(self, t, y, eomVars, params):

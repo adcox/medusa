@@ -37,17 +37,11 @@ class DynamicsModel(AbstractDynamicsModel):
     def evalEOMs(self, t, q, eomVars, params=None):
         return DynamicsModel._eoms(t, q, self.params["mu"], tuple(eomVars))
 
-    def bodyPos(self, ix, t, params=None):
+    def bodyState(self, ix, t, params=None):
         if ix == 0:
-            return np.array([-self.params["mu"], 0.0, 0.0])
+            return np.asarray([-self.params["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
         elif ix == 1:
-            return np.array([1 - self.params["mu"], 0.0, 0.0])
-        else:
-            raise ValueError(f"Index {ix} must be zero or one")
-
-    def bodyVel(self, ix, t, params=None):
-        if ix in [0, 1]:
-            return np.zeros((3,))
+            return np.asarray([1 - self.params["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
         else:
             raise ValueError(f"Index {ix} must be zero or one")
 

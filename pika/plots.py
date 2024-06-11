@@ -66,8 +66,7 @@ def plotPrimaries(ax, model, coords):
 
     handles = []
     for ix, body in enumerate(model.bodies):
-        pos = model.bodyPos(ix, t, params)
-        state = np.append(pos, model.bodyVel(ix, t, params))
+        state = model.bodyState(ix, t, params)
         vals = _getVals(model, t, state, coords)
         handles.append(ax.plot(*vals, "k.", markersize=16))
 

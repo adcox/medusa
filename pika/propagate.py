@@ -232,13 +232,18 @@ class ApseEvent(AbstractEvent):
         return self._eval(t, y, params, self._model, self._ix)
 
     @staticmethod
-    # @njit  # would need to pass bodyPos and bodyVel in as args (TODO?)
+    # @njit  # would need to pass bodyState in as arg (TODO?)
     def _eval(t, y, params, model, ix):
         # apse occurs where dot product between primary-relative position and
         # velocity is zero
-        relPos = y[:3] - model.bodyPos(ix, t, params)
-        relVel = y[3:6] - model.bodyVel(ix, t, params)
-        return relPos[0] * relVel[0] + relPos[1] * relVel[1] + relPos[2] * relVel[2]
+        # TODO this assumes the state vector is the Cartesian position and velocity
+        #   vectors
+        relState = y[:6] - model.bodyState(ix, t, params)
+        return (
+            relState[0] * relState[3]
+            + relState[1] * relState[4]
+            + relState[2] * relState[5]
+        )
 
 
 class BodyDistanceEvent(AbstractEvent):
@@ -269,7 +274,8 @@ class BodyDistanceEvent(AbstractEvent):
         self._dist = dist * dist  # evaluation uses squared value
 
     def eval(self, t, y, eomVars, params):
-        relPos = y[:3] - self._model.bodyPos(self._ix, t, params)
+        # TODO assumes Cartesian position vector is the first piece of state vector
+        relPos = y[:3] - self._model.bodyState(self._ix, t, params)[:3]
         return sum([x * x for x in relPos]) - self._dist
 
 

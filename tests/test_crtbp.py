@@ -57,15 +57,8 @@ class TestDynamicsModel:
         assert q0_mod.shape == (q0.size + model.stateSize(append),)
 
     @pytest.mark.parametrize("ix", [0, 1])
-    def test_bodyPos(self, ix):
+    def test_bodyState(self, ix):
         model = DynamicsModel(earth, moon)
-        pos = model.bodyPos(ix, 0.0)
-        assert isinstance(pos, np.ndarray)
-        assert pos.shape == (3,)
-
-    @pytest.mark.parametrize("ix", [0, 1])
-    def test_bodyVel(self, ix):
-        model = DynamicsModel(earth, moon)
-        pos = model.bodyVel(ix, 0.0)
-        assert isinstance(pos, np.ndarray)
-        assert pos.shape == (3,)
+        state = model.bodyState(ix, 0.0)
+        assert isinstance(state, np.ndarray)
+        assert state.shape == (6,)
