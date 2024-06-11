@@ -12,7 +12,7 @@ from pika.corrections import ControlPoint, CorrectionsProblem, Segment, Variable
 class TestContinuityConstraint:
     @pytest.fixture(scope="class")
     def model(self):
-        from pika.dynamics.crtbp import DynamicsModel
+        from pika.crtbp import DynamicsModel
 
         earth, moon = loadBody("Earth"), loadBody("Moon")
         return DynamicsModel(earth, moon)

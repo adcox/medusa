@@ -9,8 +9,8 @@ import scipy.integrate
 import scipy.optimize
 from conftest import loadBody
 
+from pika.crtbp import DynamicsModel
 from pika.dynamics import EOMVars
-from pika.dynamics.crtbp import DynamicsModel
 from pika.propagate import (
     ApseEvent,
     BodyDistanceEvent,

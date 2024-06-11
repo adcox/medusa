@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
+from pika.crtbp import DynamicsModel
 from pika.data import Body
 from pika.dynamics import EOMVars
-from pika.dynamics.crtbp import DynamicsModel
 
 earth = loadBody("Earth")
 moon = loadBody("Moon")

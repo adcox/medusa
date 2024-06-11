@@ -18,8 +18,8 @@ from pika.corrections import (
     ShootingProblem,
     Variable,
 )
+from pika.crtbp import DynamicsModel
 from pika.dynamics import EOMVars
-from pika.dynamics.crtbp import DynamicsModel
 from pika.propagate import Propagator
 
 

@@ -35,7 +35,7 @@ class DynamicsModel(AbstractDynamicsModel):
         return True
 
     def evalEOMs(self, t, q, eomVars, params=None):
-        return DynamicsModel._eoms(t, q, self.params["mu"], eomVars)
+        return DynamicsModel._eoms(t, q, self.params["mu"], tuple(eomVars))
 
     def bodyPos(self, ix, t, params=None):
         if ix == 0:
@@ -56,7 +56,7 @@ class DynamicsModel(AbstractDynamicsModel):
         return 6 * (EOMVars.STATE in eomVars) + 36 * (EOMVars.STM in eomVars)
 
     @staticmethod
-    # @njit
+    @njit
     def _eoms(t, q, mu, eomVars):
         qdot = np.zeros(q.shape)
 
