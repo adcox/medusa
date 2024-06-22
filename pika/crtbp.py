@@ -4,8 +4,9 @@ Circular Restricted Three Body Problem Dynamics
 import numpy as np
 from numba import njit
 
+import pika.util as util
 from pika.data import GRAV_PARAM
-from pika.dynamics import AbstractDynamicsModel, EOMVars
+from pika.dynamics import AbstractDynamicsModel, VarGroups
 
 
 class DynamicsModel(AbstractDynamicsModel):
@@ -34,24 +35,30 @@ class DynamicsModel(AbstractDynamicsModel):
     def epochIndependent(self):
         return True
 
-    def evalEOMs(self, t, q, eomVars, params=None):
-        return DynamicsModel._eoms(t, q, self.params["mu"], tuple(eomVars))
+    def diffEqs(self, t, q, varGroups, params=None):
+        return DynamicsModel._eoms(t, q, self._properties["mu"], varGroups)
 
     def bodyState(self, ix, t, params=None):
         if ix == 0:
-            return np.asarray([-self.params["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
+            return np.asarray([-self._properties["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
         elif ix == 1:
-            return np.asarray([1 - self.params["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
+            return np.asarray([1 - self._properties["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
         else:
             raise ValueError(f"Index {ix} must be zero or one")
 
-    def stateSize(self, eomVars):
-        eomVars = np.array(eomVars, ndmin=1)
-        return 6 * (EOMVars.STATE in eomVars) + 36 * (EOMVars.STM in eomVars)
+    def stateSize(self, varGroups):
+        varGroups = util.toList(varGroups)
+        return 6 * (VarGroups.STATE in varGroups) + 36 * (VarGroups.STM in varGroups)
+
+    def varNames(self, varGroups):
+        if varGroups == VarGroups.STATE:
+            return ["x", "y", "z", "dx", "dy", "dz"]
+        else:
+            return super().varNames(varGroups)  # defaults are fine for the rest
 
     @staticmethod
     @njit
-    def _eoms(t, q, mu, eomVars):
+    def _eoms(t, q, mu, varGroups):
         qdot = np.zeros(q.shape)
 
         # Pre-compute some values; multiplication is faster than exponents
@@ -62,9 +69,7 @@ class DynamicsModel(AbstractDynamicsModel):
         r13_3 = r13 * r13 * r13
 
         # State variable derivatives
-        qdot[0] = q[3]
-        qdot[1] = q[4]
-        qdot[2] = q[5]
+        qdot[:3] = q[3:6]
         qdot[3] = (
             2 * q[4] + q[0] - omm * (q[0] + mu) / r13_3 - mu * (q[0] - omm) / r23_3
         )
@@ -72,7 +77,7 @@ class DynamicsModel(AbstractDynamicsModel):
         qdot[5] = -omm * q[2] / r13_3 - mu * q[2] / r23_3
 
         # Compute STM elements
-        if EOMVars.STM in eomVars:
+        if VarGroups.STM in varGroups:
             r13_5 = r13_3 * r13 * r13
             r23_5 = r23_3 * r23 * r23
 
@@ -138,5 +143,5 @@ class DynamicsModel(AbstractDynamicsModel):
                     + U[2] * q[6 + 6 * 2 + c]
                 )
 
-        # There are no epoch or parameter dependencies
+        # There are no epoch or parameter partials
         return qdot

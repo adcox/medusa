@@ -19,7 +19,7 @@ from pika.corrections import (
     Variable,
 )
 from pika.crtbp import DynamicsModel
-from pika.dynamics import EOMVars
+from pika.dynamics import VarGroups
 from pika.propagate import Propagator
 
 
@@ -285,42 +285,47 @@ class TestSegment:
         assert not id(seg.propParams) == id(seg2.propParams)
 
     @pytest.mark.parametrize(
-        "eomVars",
+        "varGroups",
         [
-            [EOMVars.STATE],
-            [EOMVars.STATE, EOMVars.STM],
-            [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS],
-            [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS],
+            [VarGroups.STATE],
+            [VarGroups.STATE, VarGroups.STM],
+            [VarGroups.STATE, VarGroups.STM, VarGroups.EPOCH_PARTIALS],
+            [
+                VarGroups.STATE,
+                VarGroups.STM,
+                VarGroups.EPOCH_PARTIALS,
+                VarGroups.PARAM_PARTIALS,
+            ],
         ],
     )
-    def test_propagate(self, origin, eomVars):
+    def test_propagate(self, origin, varGroups):
         seg = Segment(origin, 1.0)
         assert seg.propSol is None
-        seg.propagate(eomVars)
+        seg.propagate(varGroups)
         assert seg.propSol is not None
-        assert seg.propSol.y[:, 0].size == origin.model.stateSize(eomVars)
+        assert seg.propSol.y[:, 0].size == origin.model.stateSize(varGroups)
         assert seg.propSol.t[0] == origin.epoch.allVals[0]
         assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
 
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize(
-        "eomVars1, eomVars2",
+        "varGroups1, varGroups2",
         [
-            [EOMVars.STATE, EOMVars.STATE],
-            [[EOMVars.STATE, EOMVars.STM], EOMVars.STATE],
+            [VarGroups.STATE, VarGroups.STATE],
+            [[VarGroups.STATE, VarGroups.STM], VarGroups.STATE],
         ],
     )
-    def test_propagate_lazy(self, origin, mocker, eomVars1, eomVars2, lazy):
+    def test_propagate_lazy(self, origin, mocker, varGroups1, varGroups2, lazy):
         seg = Segment(origin, 1.0)
         spy = mocker.spy(Propagator, "propagate")
 
-        seg.propagate(eomVars1)
+        seg.propagate(varGroups1)
         assert spy.call_count == 1
 
-        seg.propagate(eomVars2, lazy)
+        seg.propagate(varGroups2, lazy)
         assert spy.call_count == 1 if lazy else 2
         assert seg.propSol is not None
-        assert seg.propSol.y[:, 0].size >= origin.model.stateSize(eomVars2)
+        assert seg.propSol.y[:, 0].size >= origin.model.stateSize(varGroups2)
         assert seg.propSol.t[0] == origin.epoch.allVals[0]
         assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
 

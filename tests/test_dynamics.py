@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
-from pika.dynamics import AbstractDynamicsModel, EOMVars
+from pika.dynamics import AbstractDynamicsModel, VarGroups
 
 earth, moon, sun = loadBody("Earth"), loadBody("Moon"), loadBody("Sun")
 
@@ -18,20 +18,20 @@ class DummyModel(AbstractDynamicsModel):
     def bodyState(self, ix, t, params):
         pass
 
-    def evalEOMs(self, t, y, eomVars, params):
+    def diffEqs(self, t, y, varGroups, params):
         pass
 
     def epochIndependent(self):
         return False
 
-    def stateSize(self, eomVars):
+    def stateSize(self, varGroups):
         # A model with 2 state variables, epoch dependencies, and three parameters
-        eomVars = np.array(eomVars, ndmin=1)
+        varGroups = np.array(varGroups, ndmin=1)
         return (
-            2 * (EOMVars.STATE in eomVars)
-            + 4 * (EOMVars.STM in eomVars)
-            + 2 * (EOMVars.EPOCH_DEPS in eomVars)
-            + 6 * (EOMVars.PARAM_DEPS in eomVars)
+            2 * (VarGroups.STATE in varGroups)
+            + 4 * (VarGroups.STM in varGroups)
+            + 2 * (VarGroups.EPOCH_PARTIALS in varGroups)
+            + 6 * (VarGroups.PARAM_PARTIALS in varGroups)
         )
 
 
@@ -41,47 +41,55 @@ class TestAbstractDynamicsModel:
         return DummyModel(sun, earth, moon)
 
     @pytest.mark.parametrize(
-        "eomVars, sz",
+        "varGroups, sz",
         [
-            [EOMVars.STATE, 2],
-            [EOMVars.STM, 4],
-            [EOMVars.EPOCH_DEPS, 2],
-            [EOMVars.PARAM_DEPS, 6],
-            [[EOMVars.STATE, EOMVars.STM], 6],
-            [[EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS], 8],
-            [[EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS], 14],
+            [VarGroups.STATE, 2],
+            [VarGroups.STM, 4],
+            [VarGroups.EPOCH_PARTIALS, 2],
+            [VarGroups.PARAM_PARTIALS, 6],
+            [[VarGroups.STATE, VarGroups.STM], 6],
+            [[VarGroups.STATE, VarGroups.STM, VarGroups.EPOCH_PARTIALS], 8],
+            [
+                [
+                    VarGroups.STATE,
+                    VarGroups.STM,
+                    VarGroups.EPOCH_PARTIALS,
+                    VarGroups.PARAM_PARTIALS,
+                ],
+                14,
+            ],
         ],
     )
-    def test_stateSize(self, model, eomVars, sz):
-        assert model.stateSize(eomVars) == sz
+    def test_stateSize(self, model, varGroups, sz):
+        assert model.stateSize(varGroups) == sz
 
     @pytest.mark.parametrize(
-        "eomVars, out",
+        "varGroups, out",
         [
-            [EOMVars.STATE, [0, 1]],
-            [EOMVars.STM, [[2, 3], [4, 5]]],
-            [EOMVars.EPOCH_DEPS, [6, 7]],
-            [EOMVars.PARAM_DEPS, [[8, 9], [10, 11], [12, 13]]],
+            [VarGroups.STATE, [0, 1]],
+            [VarGroups.STM, [[2, 3], [4, 5]]],
+            [VarGroups.EPOCH_PARTIALS, [6, 7]],
+            [VarGroups.PARAM_PARTIALS, [[8, 9], [10, 11], [12, 13]]],
         ],
     )
-    def test_extractVars(self, model, eomVars, out):
+    def test_extractVars(self, model, varGroups, out):
         # standard use case: y has all the variable groups, we want subset out
         y = np.arange(14)
-        assert model.extractVars(y, eomVars).tolist() == out
+        assert model.extractVars(y, varGroups).tolist() == out
 
     @pytest.mark.parametrize(
         "y, varIn, varOut, yOut",
         [
             [
                 np.arange(4),
-                [EOMVars.STATE, EOMVars.EPOCH_DEPS],
-                EOMVars.EPOCH_DEPS,
+                [VarGroups.STATE, VarGroups.EPOCH_PARTIALS],
+                VarGroups.EPOCH_PARTIALS,
                 [2, 3],
             ],
             [
                 np.arange(8),
-                [EOMVars.STATE, EOMVars.PARAM_DEPS],
-                EOMVars.PARAM_DEPS,
+                [VarGroups.STATE, VarGroups.PARAM_PARTIALS],
+                VarGroups.PARAM_PARTIALS,
                 [[2, 3], [4, 5], [6, 7]],
             ],
         ],
@@ -92,13 +100,21 @@ class TestAbstractDynamicsModel:
     @pytest.mark.parametrize(
         "y, varIn, varOut",
         [
-            [np.arange(2), EOMVars.STATE, EOMVars.STM],
-            [np.arange(2), EOMVars.STATE, EOMVars.EPOCH_DEPS],
-            [np.arange(2), EOMVars.STATE, EOMVars.PARAM_DEPS],
-            [np.arange(4), [EOMVars.STATE, EOMVars.EPOCH_DEPS], EOMVars.STM],
-            [np.arange(4), [EOMVars.STATE, EOMVars.EPOCH_DEPS], EOMVars.PARAM_DEPS],
-            [np.arange(8), [EOMVars.STATE, EOMVars.PARAM_DEPS], EOMVars.STM],
-            [np.arange(8), [EOMVars.STATE, EOMVars.PARAM_DEPS], EOMVars.EPOCH_DEPS],
+            [np.arange(2), VarGroups.STATE, VarGroups.STM],
+            [np.arange(2), VarGroups.STATE, VarGroups.EPOCH_PARTIALS],
+            [np.arange(2), VarGroups.STATE, VarGroups.PARAM_PARTIALS],
+            [np.arange(4), [VarGroups.STATE, VarGroups.EPOCH_PARTIALS], VarGroups.STM],
+            [
+                np.arange(4),
+                [VarGroups.STATE, VarGroups.EPOCH_PARTIALS],
+                VarGroups.PARAM_PARTIALS,
+            ],
+            [np.arange(8), [VarGroups.STATE, VarGroups.PARAM_PARTIALS], VarGroups.STM],
+            [
+                np.arange(8),
+                [VarGroups.STATE, VarGroups.PARAM_PARTIALS],
+                VarGroups.EPOCH_PARTIALS,
+            ],
         ],
     )
     def test_extractVars_invalid(self, model, y, varIn, varOut):
@@ -106,45 +122,65 @@ class TestAbstractDynamicsModel:
             model.extractVars(y, varOut, varIn)
 
     @pytest.mark.parametrize(
-        "eomVars, out",
+        "varGroups, out",
         [
-            [EOMVars.STATE, [0] * 2],
-            [EOMVars.STM, [1, 0, 0, 1]],
-            [EOMVars.EPOCH_DEPS, [0] * 2],
-            [EOMVars.PARAM_DEPS, [0] * 6],
+            [VarGroups.STATE, [0] * 2],
+            [VarGroups.STM, [1, 0, 0, 1]],
+            [VarGroups.EPOCH_PARTIALS, [0] * 2],
+            [VarGroups.PARAM_PARTIALS, [0] * 6],
         ],
     )
-    def test_defaultICs(self, model, eomVars, out):
-        assert model.defaultICs(eomVars).tolist() == out
+    def test_defaultICs(self, model, varGroups, out):
+        assert model.defaultICs(varGroups).tolist() == out
 
     @pytest.mark.parametrize(
-        "eomVars, appended",
+        "varGroups, appended",
         [
-            [EOMVars.STM, [1, 0, 0, 1]],
-            [EOMVars.EPOCH_DEPS, [0] * 2],
-            [EOMVars.PARAM_DEPS, [0] * 6],
-            [EOMVars.STATE, [0] * 2],
-            [[EOMVars.STM, EOMVars.EPOCH_DEPS], [1, 0, 0, 1, 0, 0]],
-            [[EOMVars.EPOCH_DEPS, EOMVars.STM], [1, 0, 0, 1, 0, 0]],
+            [VarGroups.STM, [1, 0, 0, 1]],
+            [VarGroups.EPOCH_PARTIALS, [0] * 2],
+            [VarGroups.PARAM_PARTIALS, [0] * 6],
+            [VarGroups.STATE, [0] * 2],
+            [[VarGroups.STM, VarGroups.EPOCH_PARTIALS], [1, 0, 0, 1, 0, 0]],
+            [[VarGroups.EPOCH_PARTIALS, VarGroups.STM], [1, 0, 0, 1, 0, 0]],
         ],
     )
-    def test_appendICs(self, model, eomVars, appended):
+    def test_appendICs(self, model, varGroups, appended):
         y = np.arange(3)  # arbitrary vector
-        y0 = model.appendICs(y, eomVars)
+        y0 = model.appendICs(y, varGroups)
         assert np.array_equal(y0[:3], y)
         assert y0[3:].tolist() == appended
 
     @pytest.mark.parametrize(
-        "eomVars, tf",
+        "varGroups, tf",
         [
-            [EOMVars.STATE, True],
-            [EOMVars.STM, False],
-            [EOMVars.EPOCH_DEPS, False],
-            [EOMVars.PARAM_DEPS, False],
-            [[EOMVars.STATE, EOMVars.STM], True],
+            [VarGroups.STATE, True],
+            [VarGroups.STM, False],
+            [VarGroups.EPOCH_PARTIALS, False],
+            [VarGroups.PARAM_PARTIALS, False],
+            [[VarGroups.STATE, VarGroups.STM], True],
         ],
     )
-    def test_validForPropagation(self, model, eomVars, tf):
-        assert model.validForPropagation(eomVars) == tf
+    def test_validForPropagation(self, model, varGroups, tf):
+        assert model.validForPropagation(varGroups) == tf
+
+    def test_varNames(self, model):
+        stateNames = model.varNames(VarGroups.STATE)
+        assert stateNames == ["State 0", "State 1"], stateNames
+
+        stmNames = model.varNames(VarGroups.STM)
+        assert stmNames == ["STM(0,0)", "STM(0,1)", "STM(1,0)", "STM(1,1)"], stmNames
+
+        epochNames = model.varNames(VarGroups.EPOCH_PARTIALS)
+        assert epochNames == ["Epoch Dep 0", "Epoch Dep 1"], epochNames
+
+        paramNames = model.varNames(VarGroups.PARAM_PARTIALS)
+        assert paramNames == [
+            "Param Dep(0,0)",
+            "Param Dep(0,1)",
+            "Param Dep(0,2)",
+            "Param Dep(1,0)",
+            "Param Dep(1,1)",
+            "Param Dep(1,2)",
+        ], paramNames
 
     # TODO test __eq__

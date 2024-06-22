@@ -8,21 +8,16 @@ import numpy as np
 import scipy.optimize
 
 from pika import corrections
-from pika.dynamics import EOMVars
-
-# TODO this should be defined in each dynamics model
-coordMap = {
-    "t": None,
-    "x": 0,
-    "y": 1,
-    "z": 2,
-    "dx": 3,
-    "dy": 4,
-    "dz": 5,
-}
+from pika.dynamics import VarGroups
 
 
 def _getVals(model, times, states, coords):
+    # Build a dict mapping coordinate name to state index
+    stateNames = model.varNames(VarGroups.STATE)
+    coordMap = {"t": None}
+    for ix, name in enumerate(stateNames):
+        coordMap[name] = ix
+
     vals = []
     for coord in coords:
         ix = coordMap[coord]
@@ -39,7 +34,7 @@ def _getVals(model, times, states, coords):
 
 def plotSegment(ax, segment, coords, **kwargs):
     if segment.propSol is None:
-        segment.propagate(EOMVars.STATE)
+        segment.propagate(VarGroups.STATE)
 
     return (
         plotPropagation(ax, segment.propSol, coords, **kwargs),

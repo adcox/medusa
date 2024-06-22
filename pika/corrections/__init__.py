@@ -14,7 +14,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from pika import console, util
-from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelBlockCopyMixin
+from pika.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
 from pika.propagate import Propagator
 
 logger = logging.getLogger(__name__)
@@ -206,7 +206,7 @@ class ControlPoint(ModelBlockCopyMixin):
         TypeError: if the model is not derived from AbstractDynamicsModel
         RuntimeError: if the epoch specifies more than one value
         RuntimeError: if the state specifies more values than the dynamics model
-            allows for :attr:`EOMVars.STATE`
+            allows for :attr:`VarGroups.STATE`
     """
 
     def __init__(self, model, epoch, state, autoMask=True):
@@ -223,7 +223,7 @@ class ControlPoint(ModelBlockCopyMixin):
         if not epoch.values.size == 1:
             raise RuntimeError("Epoch can only have one value")
 
-        sz = model.stateSize(EOMVars.STATE)
+        sz = model.stateSize(VarGroups.STATE)
         if not state.values.size == sz:
             raise RuntimeError("State must have {sz} values")
 
@@ -358,11 +358,11 @@ class Segment:
             ix (int): the index within the :attr:`propSol` ``y`` array.
 
         Returns:
-            numpy.ndarray: the propagated state (:class:`EOMVars` ``STATE``) on the
+            numpy.ndarray: the propagated state (:class:`VarGroups` ``STATE``) on the
             propagated trajectory
         """
-        self.propagate(EOMVars.STATE)
-        return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.STATE)
+        self.propagate(VarGroups.STATE)
+        return self.origin.model.extractVars(self.propSol.y[:, ix], VarGroups.STATE)
 
     def partials_state_wrt_time(self, ix=-1):
         """
@@ -374,16 +374,16 @@ class Segment:
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
             :attr:`tof`, i.e., the time derivative of the
-            :attr:`~pika.dynamics.EOMVars.STATE` variables
+            :attr:`~pika.dynamics.VarGroups.STATE` variables
         """
-        self.propagate(EOMVars.STATE)
-        dy_dt = self.origin.model.evalEOMs(
+        self.propagate(VarGroups.STATE)
+        dy_dt = self.origin.model.diffEqs(
             self.propSol.t[ix],
             self.propSol.y[:, ix],
-            [EOMVars.STATE],
+            (VarGroups.STATE,),
             self.propParams.values,
         )
-        return self.origin.model.extractVars(dy_dt, EOMVars.STATE)
+        return self.origin.model.extractVars(dy_dt, VarGroups.STATE)
 
     def partials_state_wrt_initialState(self, ix=-1):
         """
@@ -394,11 +394,11 @@ class Segment:
 
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to the
-            :attr:`origin` ``state``, i.e., the :attr:`~pika.dynamics.EOMVars.STM`.
+            :attr:`origin` ``state``, i.e., the :attr:`~pika.dynamics.VarGroups.STM`.
             The partials are returned in matrix form.
         """
-        self.propagate([EOMVars.STATE, EOMVars.STM])
-        return self.origin.model.extractVars(self.propSol.y[:, ix], EOMVars.STM)
+        self.propagate([VarGroups.STATE, VarGroups.STM])
+        return self.origin.model.extractVars(self.propSol.y[:, ix], VarGroups.STM)
 
     def partials_state_wrt_epoch(self, ix=-1):
         """
@@ -410,16 +410,16 @@ class Segment:
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
             the :attr:`origin` ``epoch``, i.e., the
-            :attr:`~pika.dynamics.EOMVars.EPOCH_DEPS`.
+            :attr:`~pika.dynamics.VarGroups.EPOCH_PARTIALS`.
         """
-        self.propagate([EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS])
+        self.propagate([VarGroups.STATE, VarGroups.STM, VarGroups.EPOCH_PARTIALS])
         partials = self.origin.model.extractVars(
-            self.propSol.y[:, ix], EOMVars.EPOCH_DEPS
+            self.propSol.y[:, ix], VarGroups.EPOCH_PARTIALS
         )
 
         # Handle models that don't depend on epoch by setting partials to zero
         if partials.size == 0:
-            partials = np.zeros((self.origin.model.stateSize(EOMVars.STATE),))
+            partials = np.zeros((self.origin.model.stateSize(VarGroups.STATE),))
 
         return partials
 
@@ -432,34 +432,39 @@ class Segment:
 
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
-            the :attr:`propParams`, i.e., the :attr:`~pika.dynamics.EOMVars.PARAM_DEPS`.
+            the :attr:`propParams`, i.e., the :attr:`~pika.dynamics.VarGroups.PARAM_PARTIALS`.
         """
         self.propagate(
-            [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS]
+            [
+                VarGroups.STATE,
+                VarGroups.STM,
+                VarGroups.EPOCH_PARTIALS,
+                VarGroups.PARAM_PARTIALS,
+            ]
         )
         partials = self.origin.model.extractVars(
-            self.propSol.y[:, ix], EOMVars.PARAM_DEPS
+            self.propSol.y[:, ix], VarGroups.PARAM_PARTIALS
         )
 
         # Handle models that don't depend on propagator params by setting partials
         # to zero
         if partials.size == 0:
-            partials = np.zeros((self.origin.model.stateSize(EOMVars.STATE),))
+            partials = np.zeros((self.origin.model.stateSize(VarGroups.STATE),))
 
         return partials
 
-    def propagate(self, eomVars, lazy=True):
+    def propagate(self, varGroups, lazy=True):
         """
         Propagate from the :attr:`origin` for the specified :attr:`tof`. Results
         are stored in :attr:`propSol`.
 
         Args:
-            eomVars ([EOMVars]): defines which equations of motion should be included
+            varGroups ([VarGroups]): defines which equations of motion should be included
                 in the propagation.
             lazy (Optional, bool): whether or not to lazily propagate the
                 trajectory. If True, the :attr:`prop` ``propagate()`` function is
                 called if :attr:`propSol` is ``None`` or if the previous propagation
-                did not include one or more of the ``eomVars``.
+                did not include one or more of the ``varGroups``.
 
         Returns:
             scipy.optimize.OptimizeResult: the propagation result. This is also
@@ -467,8 +472,8 @@ class Segment:
         """
         # Check to see if we can skip the propagation
         if lazy and self.propSol is not None:
-            eomVars = np.array(eomVars, ndmin=1)
-            if all([v in self.propSol.eomVars for v in eomVars]):
+            varGroups = np.array(varGroups, ndmin=1)
+            if all([v in self.propSol.varGroups for v in varGroups]):
                 return self.propSol
 
         # Propagate from the origin for TOF, set self.propSol
@@ -477,7 +482,7 @@ class Segment:
             self.origin.state.allVals,
             tspan,
             params=self.propParams.allVals,
-            eomVars=eomVars,
+            varGroups=varGroups,
         )
 
         return self.propSol

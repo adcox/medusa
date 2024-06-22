@@ -12,37 +12,43 @@ from pika.data import Body
 
 
 # numba JIT compilation only supports Enum and IntEnum
-class EOMVars(IntEnum):
+class VarGroups(IntEnum):
     """
-    Specify the variable groups included in the equations of motion. The integer
+    Specify the variable groups included in a model variable array. The integer
     values of the groups correspond to their location in a variable array. I.e.,
     the ``STATE`` variables are always first, followed by the ``STM``,
-    ``EPOCH_DEPS``, and ``PARAM_DEPS``. All matrix objects are stored in column-major
-    order
+    ``EPOCH_PARTIALS``, and ``PARAM_PARTIALS``. All matrix objects are stored in
+    row-major order
     """
 
     STATE = 0
-    """: State variables; usually includes the position and velocity coordinates """
+    """
+    State variables; usually includes the position and velocity coordinates
+    """
 
     STM = 1
     """ 
     State Transition Matrix; An N**2 matrix of the time-evolving partial derivatives
-    of the propagated state w.r.t. the initial state, where N is the size of the 
+    of the propagated state w.r.t. the initial state, where N is the size of the
     ``STATE`` component
     """
 
-    EPOCH_DEPS = 2
+    EPOCH_PARTIALS = 2
     """
-    Epoch dependencies; An N-element vector of the time-evolving partial derivatives
+    Epoch partials; An N-element vector of the time-evolving partial derivatives
     of the propagated state w.r.t. the initial epoch where N is the size of the
     ``STATE`` component
     """
 
-    PARAM_DEPS = 3
+    PARAM_PARTIALS = 3
     """
-    Parameter dependencies; An NxM matrix of the time-evolving partial derivatives
+    Parameter partials; An NxM matrix of the time-evolving partial derivatives
     of the propagated state w.r.t. the parameter values where N is the size of
     the ``STATE`` component and ``M`` is the number of parameters.
+
+    Parameters are constant through an integration, i.e., they do not have their
+    own governing differential equations. Parameters can include thrust magnitude,
+    solar pressure coefficients, etc.
     """
 
 
@@ -52,18 +58,19 @@ class AbstractDynamicsModel(ABC):
 
     Args:
         bodies ([Body]): one or more primary bodies
-        params: keyword arguments that define model parameters
+        properties: keyword arguments that define model properties
 
     Attributes:
         bodies (tuple): a tuple of :class:`~pika.data.Body` objects
-        params (dict): the parameters associated with this configuration
-        numParams (int): number of parameters this model supports
+        properties (dict): the model properties; these are constant across all
+            integrations; e.g., a mass ratio for the CR3BP, or the initial phasing
+            of multiple bodies in a four-body problem.
         charL (float): a characteristic length (km) used to nondimensionalize lengths
         charT (float): a characteristic time (sec) used to nondimensionalize times
         charM (float): a characteristic mass (kg) used to nondimensionalize masses
     """
 
-    def __init__(self, *bodies, **params):
+    def __init__(self, *bodies, **properties):
         if any([not isinstance(body, Body) for body in bodies]):
             raise TypeError("Expecting Body objects")
 
@@ -71,7 +78,7 @@ class AbstractDynamicsModel(ABC):
         self.bodies = tuple(copy(body) for body in bodies)
 
         # Unpack parameters into internal dict
-        self._params = {**params}
+        self._properties = {**properties}
 
         # Define default characteristic quantities as unity
         self._charL = 1.0  # km
@@ -79,8 +86,8 @@ class AbstractDynamicsModel(ABC):
         self._charM = 1.0  # kg
 
     @property
-    def params(self):
-        return self._params.copy()
+    def properties(self):
+        return copy(self._properties)
 
     @property
     def charL(self):
@@ -108,8 +115,9 @@ class AbstractDynamicsModel(ABC):
         if not all([b1 == b2 for b1, b2 in zip(self.bodies, other.bodies)]):
             return False
 
+        # TODO need to compare dicts by value??
         return (
-            self.params == other.params
+            self.properties == other.properties
             and self.charL == other.charL
             and self.charT == other.charT
             and self.charM == other.charM
@@ -131,23 +139,22 @@ class AbstractDynamicsModel(ABC):
         pass
 
     @abstractmethod
-    def evalEOMs(self, t, y, eomVars, params):
+    def diffEqs(self, t, y, varGroups, params):
         """
-        Evaluate the equations of motion
+        Evaluate the differential equations that govern the variable array
 
         Args:
             t (float): time value
             y (numpy.ndarray<float>): One-dimensional variable array
-            eomVars (tuple of EOMVars): describes the variable groups included
-                in the state vector
+            varGroups (tuple of VarGroups): describes the variable groups included
+                in the ``y`` vector
             params (float, [float]): one or more parameter values. These are
                 generally constants that may vary integration to integration
                 within a model (e.g., thrust magnitude) but are not constants
                 of the model itself (e.g., mass ratio).
 
         Returns:
-            numpy.ndarray: the time derivative of the state vector; the array
-            has the same size and shape as ``y``
+            numpy.ndarray: the time derivative of the ``y`` vector
         """
         pass
 
@@ -162,79 +169,79 @@ class AbstractDynamicsModel(ABC):
         pass
 
     @abstractmethod
-    def stateSize(self, eomVars):
+    def stateSize(self, varGroups):
         """
         Get the size (i.e., number of elements) for one or more variable groups
 
         Args:
-            eomVars (EOMVars, [EOMVars]): describes onre or more groups of variables
+            varGroups (VarGroups, [VarGroups]): describes one or more groups of variables
 
         Returns:
             int: the size of a variable array with the specified variable groups
         """
         pass
 
-    def extractVars(self, y, eomVars, eomVarsIn=None):
+    def extractVars(self, y, varGroups, varGroupsIn=None):
         """
         Extract a variable group from a vector
 
         Args:
-            y (numpy.ndarray): the variable vector
-            eomVars (EOMVars): the variable group to extract
-            eomVarsIn ([EOMVars]): the variable groups in ``y``. If ``None``, it
+            y (numpy.ndarray): the state vector
+            varGroups (VarGroups): the variable group to extract
+            varGroupsIn ([VarGroups]): the variable groups in ``y``. If ``None``, it
                 is assumed that all variable groups with lower indices than
-                ``eomVars`` are included in ``y``.
+                ``varGroups`` are included in ``y``.
 
         Returns:
-            numpy.ndarray: the subset of ``y`` that corresponds to the ``eomVars``
+            numpy.ndarray: the subset of ``y`` that corresponds to the ``varGroups``
             group. The vector elements are reshaped into a matrix if applicable.
 
         Raises:
             ValueError: if ``y`` doesn't have enough elements to extract the
                 requested variable groups
         """
-        if eomVarsIn is None:
-            eomVarsIn = [v for v in range(eomVars + 1)]
-        eomVarsIn = np.array(eomVarsIn, ndmin=1)
+        if varGroupsIn is None:
+            varGroupsIn = [v for v in range(varGroups + 1)]
+        varGroupsIn = np.array(varGroupsIn, ndmin=1)
 
-        if not eomVars in eomVarsIn:
+        if not varGroups in varGroupsIn:
             raise RuntimeError(
-                f"Requested variable group {eomVars} is not part of input set, {eomVarsIn}"
+                f"Requested variable group {varGroups} is not part of input set, {varGroupsIn}"
             )
 
-        nPre = sum([self.stateSize(tp) for tp in eomVarsIn if not tp == eomVars])
-        sz = self.stateSize(eomVars)
+        nPre = sum([self.stateSize(tp) for tp in varGroupsIn if not tp == varGroups])
+        sz = self.stateSize(varGroups)
 
         if y.size < nPre + sz:
             raise ValueError(
-                f"Need {nPre + sz} vector elements to extract {eomVars} "
+                f"Need {nPre + sz} vector elements to extract {varGroups} "
                 f"but y has size {y.size}"
             )
 
-        nState = self.stateSize(EOMVars.STATE)
+        nState = self.stateSize(VarGroups.STATE)
         nCol = int(sz / nState)
         if nCol > 1:
             return np.reshape(y[nPre : nPre + sz], (nCol, nState))
         else:
             return np.array(y[nPre : nPre + sz])
 
-    def defaultICs(self, eomVars):
+    def defaultICs(self, varGroups):
         """
         Get the default initial conditions for a set of equations. This basic
-        implementation returns a flattened identity matrix for the :attr:`~EOMVars.STM`
+        implementation returns a flattened identity matrix for the :attr:`~VarGroups.STM`
         and zeros for the other equation types. Derived classes can override
         this method to provide other values.
 
         Args:
-            eomVars (EOMVars): describes the group of variables
+            varGroups (VarGroups): describes the group of variables
 
         Returns:
             numpy.ndarray: initial conditions for the specified equation type
         """
-        if eomVars == EOMVars.STM:
-            return np.identity(self.stateSize(EOMVars.STATE)).flatten()
+        if varGroups == VarGroups.STM:
+            return np.identity(self.stateSize(VarGroups.STATE)).flatten()
         else:
-            return np.zeros((self.stateSize(eomVars),))
+            return np.zeros((self.stateSize(varGroups),))
 
     def appendICs(self, y0, varsToAppend):
         """
@@ -242,9 +249,9 @@ class AbstractDynamicsModel(ABC):
         provided state vector
 
         Args:
-            y0 (numpy.ndarray): state vector of arbitrary length
-            varsToAppend (EOMVars): the variable group(s) to append initial
-                conditions for. Note that
+            y0 (numpy.ndarray): variable vector of arbitrary length
+            varsToAppend (VarGroups): the variable group(s) to append initial
+                conditions for.
 
         Returns:
             numpy.ndarray: an initial condition vector, duplicating ``q`` at
@@ -265,26 +272,67 @@ class AbstractDynamicsModel(ABC):
 
         return y0_out
 
-    def validForPropagation(self, eomVars):
+    def validForPropagation(self, varGroups):
         """
-        Check that the set of EOM variables can be propagated.
+        Check that the set of variables can be propagated.
 
         In many cases, some groups of the variables are dependent upon others. E.g.,
         the STM equations of motion generally require the state variables to be
-        propagated alongside the STM so ``EOMVars.STM`` would be an invalid set for
-        evaluation but ``[EOMVars.STATE, EOMVars.STM]`` would be valid.
+        propagated alongside the STM so ``VarGroups.STM`` would be an invalid set for
+        evaluation but ``[VarGroups.STATE, VarGroups.STM]`` would be valid.
 
         Args:
-            eomVars (EOMVars, [EOMVars]): the group(s) variables to be propagated
+            varGroups (VarGroups, [VarGroups]): the group(s) variables to be propagated
 
         Returns:
             bool: True if the set is valid, False otherwise
         """
         # General principle: STATE vars are always required
-        return EOMVars.STATE in np.array(eomVars, ndmin=1)
+        return VarGroups.STATE in np.array(varGroups, ndmin=1)
+
+    def varNames(self, varGroups):
+        """
+        Get names for the variables in each group.
+
+        This implementation provides basic representations of the variables and
+        should be overridden by derived classes to give more descriptive names.
+
+        Args:
+            varGroups (VarGroups): the variable group
+
+        Returns:
+            list of str: a list containing the names of the variables in the order
+            they would appear in a variable vector.
+        """
+        N = self.stateSize(VarGroups.STATE)
+        if varGroups == VarGroups.STATE:
+            return [f"State {ix:d}" for ix in range(N)]
+        elif varGroups == VarGroups.STM:
+            return [f"STM({r:d},{c:d})" for r in range(N) for c in range(N)]
+        elif varGroups == VarGroups.EPOCH_PARTIALS:
+            return [
+                f"Epoch Dep {ix:d}"
+                for ix in range(self.stateSize(VarGroups.EPOCH_PARTIALS))
+            ]
+        elif varGroups == VarGroups.PARAM_PARTIALS:
+            return [
+                f"Param Dep({r:d},{c:d})"
+                for r in range(N)
+                for c in range(int(self.stateSize(VarGroups.PARAM_PARTIALS) / N))
+            ]
+        else:
+            raise ValueError(f"Unrecognized enum: VarGroups = {varGroups}")
+
+    def indexToVarName(self, ix, varGroups):
+        # TODO test and document
+        allNames = np.asarray(
+            [self.varNames(varTp) for varTp in util.toList(varGroups)]
+        ).flatten()
+        return allNames[ix]
 
 
 class ModelBlockCopyMixin:
+    # A mixin class to prevent another class from copying stored DynamicsModels
     def __deepcopy__(self, memo):
         cls = self.__class__
         result = cls.__new__(cls)

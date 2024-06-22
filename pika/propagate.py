@@ -9,7 +9,7 @@ import numpy as np
 from numba import njit
 from scipy.integrate import solve_ivp
 
-from pika.dynamics import AbstractDynamicsModel, EOMVars, ModelBlockCopyMixin
+from pika.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class Propagator(ModelBlockCopyMixin):
         self.dense = dense
         self.events = []
 
-    def propagate(self, y0, tspan, *, params=None, eomVars=EOMVars.STATE, **kwargs):
+    def propagate(self, y0, tspan, *, params=None, varGroups=VarGroups.STATE, **kwargs):
         """
         Perform a propagation
 
@@ -64,7 +64,7 @@ class Propagator(ModelBlockCopyMixin):
                 for the propagation
             params (Optional, [float]): parameters that are passed to the dynamics
                 model
-            eomVars (Optional, [EOMVars]): the variable groups that are included
+            varGroups (Optional, [VarGroups]): the variable groups that are included
                  in ``y0``.
             kwargs: additional arguments passed to :func:`scipy.integrate.solve_ivp`.
                 Note that the ``method`` and ``dense_output`` arguments, defined
@@ -76,16 +76,16 @@ class Propagator(ModelBlockCopyMixin):
             states, event data, and other integration metadata.
 
         Raises:
-            RuntimeError: if ``eomVars`` is not valid for the propagation as
+            RuntimeError: if ``varGroups`` is not valid for the propagation as
                 checked via :func:`AbstractDynamicsModel.validForPropagation`
-            RuntimeError: if the size of ``y0`` is inconsistent with ``eomVars``
+            RuntimeError: if the size of ``y0`` is inconsistent with ``varGroups``
                 as checked via :func:`AbstractDynamicsModel.stateSize`
             RuntimeError: if any of the objects in :attr:`events` are not derived
                 from the :class:`AbstractEvent` base class
         """
         # Checks
-        if not self.model.validForPropagation(eomVars):
-            raise RuntimeError(f"EOMVars = {eomVars} is not valid for propagation")
+        if not self.model.validForPropagation(varGroups):
+            raise RuntimeError(f"VarGroups = {varGroups} is not valid for propagation")
 
         kwargs_in = {
             "method": self.method,
@@ -104,26 +104,26 @@ class Propagator(ModelBlockCopyMixin):
 
         # Ensure state is an array with the right number of elements
         y0 = np.array(y0, ndmin=1)
-        if not y0.size == self.model.stateSize(eomVars):
+        if not y0.size == self.model.stateSize(varGroups):
             # Likely scenario: user wants default ICs for other variable groups
-            if y0.size == self.model.stateSize(EOMVars.STATE):
+            if y0.size == self.model.stateSize(VarGroups.STATE):
                 y0 = self.model.appendICs(
-                    y0, [v for v in eomVars if not v == EOMVars.STATE]
+                    y0, [v for v in varGroups if not v == VarGroups.STATE]
                 )
             else:
                 raise RuntimeError(
                     f"y0 size is {y0.size}, which is not the STATE size "
-                    f"({self.model.stateSize(EOMVars.STATE)}); don't know how to respond."
+                    f"({self.model.stateSize(VarGroups.STATE)}); don't know how to respond."
                     " Please pass in a STATE-sized vector or a vector with all "
-                    "initial conditions defined for the specified EOMVars"
+                    "initial conditions defined for the specified VarGroups"
                 )
 
-        # make eomVars an array and then cast to tuple; need simple type for
+        # make varGroups an array and then cast to tuple; need simple type for
         #   JIT compilation support
-        eomVars = tuple(sorted(np.array(eomVars, ndmin=1)))
+        varGroups = tuple(sorted(np.array(varGroups, ndmin=1)))
 
         # TODO also cast params to tuple?
-        kwargs_in["args"] = (eomVars, params)
+        kwargs_in["args"] = (varGroups, params)
 
         # Gather event functions and assign attributes
         for event in self.events:
@@ -136,12 +136,12 @@ class Propagator(ModelBlockCopyMixin):
         kwargs_in["events"] = eventFcns
 
         # Run propagation
-        sol = solve_ivp(self.model.evalEOMs, tspan, y0, **kwargs_in)
+        sol = solve_ivp(self.model.diffEqs, tspan, y0, **kwargs_in)
 
         # Append our own metadata
         sol.model = self.model
         sol.params = copy(params)
-        sol.eomVars = eomVars
+        sol.varGroups = varGroups
 
         return sol
 
@@ -188,14 +188,14 @@ class AbstractEvent(ABC):
         self.eval.__func__.direction = self.direction
 
     @abstractmethod
-    def eval(self, t, y, eomVars, params):
+    def eval(self, t, y, varGroups, params):
         """
         Event evaluation method
 
         Args:
             t (float): time value
             y (numpy.ndarray<float>): variable vector
-            eomVars (tuple<EOMVars>): describes the variable groups in ``y``
+            varGroups (tuple<VarGroups>): describes the variable groups in ``y``
             params ([float]): extra parameters passed from the integrator
 
         Returns:
@@ -228,7 +228,7 @@ class ApseEvent(AbstractEvent):
         self._model = model
         self._ix = bodyIx
 
-    def eval(self, t, y, eomVars, params):
+    def eval(self, t, y, varGroups, params):
         return self._eval(t, y, params, self._model, self._ix)
 
     @staticmethod
@@ -273,7 +273,7 @@ class BodyDistanceEvent(AbstractEvent):
         self._ix = ix
         self._dist = dist * dist  # evaluation uses squared value
 
-    def eval(self, t, y, eomVars, params):
+    def eval(self, t, y, varGroups, params):
         # TODO assumes Cartesian position vector is the first piece of state vector
         relPos = y[:3] - self._model.bodyState(self._ix, t, params)[:3]
         return sum([x * x for x in relPos]) - self._dist
@@ -307,7 +307,7 @@ class DistanceEvent(AbstractEvent):
         self._ixs = ixs
         self._dist = dist * dist  # evaluation uses squared value
 
-    def eval(self, t, y, eomVars, params):
+    def eval(self, t, y, varGroups, params):
         dist = self._vec - y[self._ixs]
         return sum([x * x for x in dist]) - self._dist
 
@@ -335,7 +335,7 @@ class VariableValueEvent(AbstractEvent):
         self._ix = varIx
         self._val = varValue
 
-    def eval(self, t, y, eomVars, params):
+    def eval(self, t, y, varGroups, params):
         return self._eval(y, self._ix, self._val)
 
     @staticmethod

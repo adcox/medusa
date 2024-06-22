@@ -10,7 +10,7 @@ import scipy.optimize
 from conftest import loadBody
 
 from pika.crtbp import DynamicsModel
-from pika.dynamics import EOMVars
+from pika.dynamics import VarGroups
 from pika.propagate import (
     ApseEvent,
     BodyDistanceEvent,
@@ -42,29 +42,34 @@ class TestPropagator:
 
     @pytest.mark.parametrize("dense", [True, False])
     @pytest.mark.parametrize(
-        "eoms",
+        "groups",
         [
-            [EOMVars.STATE],
-            [EOMVars.STATE, EOMVars.STM],
-            [EOMVars.STATE, EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS],
-            [EOMVars.STATE, EOMVars.STM, EOMVars.PARAM_DEPS],
-            [EOMVars.STATE, EOMVars.PARAM_DEPS],
-            [EOMVars.EPOCH_DEPS, EOMVars.STATE],
+            [VarGroups.STATE],
+            [VarGroups.STATE, VarGroups.STM],
+            [
+                VarGroups.STATE,
+                VarGroups.STM,
+                VarGroups.EPOCH_PARTIALS,
+                VarGroups.PARAM_PARTIALS,
+            ],
+            [VarGroups.STATE, VarGroups.STM, VarGroups.PARAM_PARTIALS],
+            [VarGroups.STATE, VarGroups.PARAM_PARTIALS],
+            [VarGroups.EPOCH_PARTIALS, VarGroups.STATE],
         ],
     )
-    def test_propagate(self, emModel, dense, eoms):
+    def test_propagate(self, emModel, dense, groups):
         # ICs and tspan for EM L3 vertical periodic orbit
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         tspan = [0, 6.3111]
 
         prop = Propagator(emModel, dense=dense)
-        sol = prop.propagate(y0, tspan, eomVars=eoms, atol=1e-12, rtol=1e-10)
+        sol = prop.propagate(y0, tspan, varGroups=groups, atol=1e-12, rtol=1e-10)
 
         assert isinstance(sol, scipy.optimize.OptimizeResult)
         assert sol.status == 0
 
         assert all([tspan[0] <= t <= tspan[1] for t in sol.t])
-        vecSize = emModel.stateSize(eoms)
+        vecSize = emModel.stateSize(groups)
         assert all([y.size == vecSize for y in sol.y.T])
 
         # Check final state value; values from old MATLAB codes
@@ -75,8 +80,8 @@ class TestPropagator:
         assert pytest.approx(sol.y[4, -1], 1e-4) == -1.82139906
         assert pytest.approx(sol.y[5, -1], 1e-4) == 0.00061782
 
-        if EOMVars.STM in eoms:
-            stm = emModel.extractVars(sol.y[:, -1], EOMVars.STM)
+        if VarGroups.STM in groups:
+            stm = emModel.extractVars(sol.y[:, -1], VarGroups.STM)
 
             # Check determinant of STM is unity
             assert pytest.approx(np.linalg.det(stm)) == 1.0
@@ -98,33 +103,33 @@ class TestPropagator:
         assert sol.model == emModel
         assert hasattr(sol, "params")
         assert sol.params == None
-        assert hasattr(sol, "eomVars")
-        assert np.array_equal(sorted(np.array(eoms, ndmin=1)), sol.eomVars)
+        assert hasattr(sol, "varGroups")
+        assert np.array_equal(sorted(np.array(groups, ndmin=1)), sol.varGroups)
 
     @pytest.mark.parametrize(
-        "eoms", [EOMVars.STM, EOMVars.EPOCH_DEPS, EOMVars.PARAM_DEPS]
+        "groups", [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
     )
-    def test_propagate_invalidEOMs(self, emModel, eoms):
+    def test_propagate_invalidgroups(self, emModel, groups):
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         tspan = [0, 6.3111]
 
         prop = Propagator(emModel)
         with pytest.raises(RuntimeError):
-            prop.propagate(y0, tspan, eomVars=eoms)
+            prop.propagate(y0, tspan, varGroups=groups)
 
     @pytest.mark.parametrize(
-        "y0, eoms",
+        "y0, groups",
         [
-            [[0.2] * 5, EOMVars.STATE],
-            [[0.3] * 43, (EOMVars.STATE, EOMVars.STM)],
+            [[0.2] * 5, VarGroups.STATE],
+            [[0.3] * 43, (VarGroups.STATE, VarGroups.STM)],
         ],
     )
-    def test_propagate_invalidY0(self, emModel, y0, eoms):
+    def test_propagate_invalidY0(self, emModel, y0, groups):
         tspan = [0, 6.3111]
 
         prop = Propagator(emModel)
         with pytest.raises(RuntimeError):
-            prop.propagate(y0, tspan, eomVars=eoms)
+            prop.propagate(y0, tspan, varGroups=groups)
 
     @pytest.mark.parametrize(
         "evtArgs",
