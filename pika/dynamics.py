@@ -8,6 +8,7 @@ from enum import IntEnum
 import numba
 import numpy as np
 
+from pika import console
 from pika.data import Body
 
 
@@ -181,6 +182,118 @@ class AbstractDynamicsModel(ABC):
         """
         pass
 
+    def checkPartials(
+        self, y0, tspan, params=None, initStep=1e-4, tol=1e-6, verbose=False
+    ):
+        from pika import numerics
+        from pika.propagate import Propagator
+
+        allVars = [
+            VarGroups.STATE,
+            VarGroups.STM,
+            VarGroups.EPOCH_PARTIALS,
+            VarGroups.PARAM_PARTIALS,
+        ]
+
+        if not len(y0) == self.stateSize(allVars):
+            raise ValueError(
+                "y0 must define the full vector (STATE + STM + EPOCH_PARTIALS + PARAM_PARTIALS"
+            )
+
+        # TODO ensure tolerances are tight enough?
+        prop = Propagator(self, dense=False)
+        state0 = self.extractVars(y0, VarGroups.STATE, varGroupsIn=allVars)
+
+        solution = prop.propagate(y0, tspan, params=params, varGroups=allVars)
+        sol_vec = np.concatenate(
+            [
+                self.extractVars(solution.y[:, -1], grp, varGroupsIn=allVars).flatten()
+                for grp in allVars[1:]
+            ]
+        )
+
+        # Compute state partials (STM)
+        def prop_state(y):
+            sol = prop.propagate(y, tspan, params=params, varGroups=VarGroups.STATE)
+            return sol.y[:, -1]
+
+        num_stm = numerics.derivative_multivar(prop_state, state0, initStep)
+
+        # Compute epoch partials
+        if self.stateSize(VarGroups.EPOCH_PARTIALS) > 0:
+
+            def prop_epoch(epoch):
+                sol = prop.propagate(
+                    state0,
+                    [epoch + t for t in tspan],
+                    params=params,
+                    varGroups=VarGroups.STATE,
+                )
+                return sol.y[:, -1]
+
+            num_epochPartials = numerics.derivative_multivar(
+                prop_epoch, tspan[0], initStep
+            )
+        else:
+            num_epochPartials = np.array([])
+
+        # Compute parameter partials
+        if self.stateSize(VarGroups.PARAM_PARTIALS) > 0:
+
+            def prop_params(param):
+                sol = prop.propagate(
+                    state0, tspan, params=params, varGroups=VarGroups.STATE
+                )
+                return sol.y[:, -1]
+
+            num_paramPartials = numerics.derivative_multivar(
+                prop_params, params, initStep
+            )
+        else:
+            num_paramPartials = np.array([])
+
+        # Combine into flat vector
+        num_vec = np.concatenate(
+            (
+                num_stm.flatten(),
+                num_epochPartials.flatten(),
+                num_paramPartials.flatten(),
+            )
+        )
+
+        # Now compare
+        absDiff = num_vec - sol_vec
+        relDiff = np.zeros(absDiff.shape)
+        equal = True
+        varNames = None
+        for ix in range(sol_vec.size):
+            # Compute relative difference
+            if abs(sol_vec[ix]) < initStep:
+                # If analytic partial is less than step size, set relative error
+                #   to the absolute error; otherwise relative error is unity,
+                #   which is not accurate
+                # TODO revisit this logic with new numerics method doing the computation
+                relDiff[ix] = absDiff[ix]
+            elif abs(num_vec[ix]) > 1e-12:
+                relDiff[ix] = absDiff[ix] / num_vec[ix]
+
+            if abs(relDiff[ix]) > tol:
+                equal = False
+
+                if verbose:
+                    if varNames is None:
+                        varNames = np.concatenate(
+                            [self.varNames(grp) for grp in allVars[1:]]
+                        )
+
+                    console.print(
+                        f"[red]Partial error in element {ix+len(state0)} ({varNames[ix]})[/]: "
+                        f"Expected = {num_vec[ix]}, Actual = {sol_vec[ix]} "
+                        f"(Rel err = {relDiff[ix]:e}"
+                    )
+
+        return equal
+
     def extractVars(self, y, varGroups, varGroupsIn=None):
         """
         Extract a variable group from a vector
@@ -209,7 +322,7 @@ class AbstractDynamicsModel(ABC):
                 f"Requested variable group {varGroups} is not part of input set, {varGroupsIn}"
             )
 
-        nPre = sum([self.stateSize(tp) for tp in varGroupsIn if not tp == varGroups])
+        nPre = sum([self.stateSize(tp) for tp in varGroupsIn if tp < varGroups])
         sz = self.stateSize(varGroups)
 
         if y.size < nPre + sz:
@@ -258,6 +371,7 @@ class AbstractDynamicsModel(ABC):
             the start of the array with the additional initial conditions
             appended afterward
         """
+        y0 = np.asarray(y0)
         varsToAppend = np.array(varsToAppend, ndmin=1)
         nIn = y0.size
         nOut = self.stateSize(varsToAppend)

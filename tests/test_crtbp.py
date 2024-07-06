@@ -87,3 +87,39 @@ class TestDynamicsModel:
 
         paramNames = model.varNames(VarGroups.PARAM_PARTIALS)
         assert paramNames == []
+
+    def test_checkPartials(self, capsys):
+        model = DynamicsModel(earth, moon)
+        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        y0 = model.appendICs(
+            y0, [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
+        )
+        tspan = [1.0, 2.0]
+
+        assert model.checkPartials(y0, tspan, verbose=True)
+        cap = capsys.readouterr()
+        assert cap.out == ""
+        assert cap.err == ""
+
+    @pytest.mark.parametrize("verbose", [True, False])
+    def test_checkPartials_fails(self, capsys, verbose):
+        import re
+
+        model = DynamicsModel(earth, moon)
+        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        y0 = model.appendICs(
+            y0, [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
+        )
+        tspan = [1.0, 2.0]
+
+        # An absurdly small tolerance will trigger failure
+        assert not model.checkPartials(y0, tspan, verbose=verbose, tol=1e-24)
+        cap = capsys.readouterr()
+
+        if not verbose:
+            assert cap.out == ""
+            assert cap.err == ""
+        else:
+            assert cap.err == ""
+            errs = [m.start() for m in re.finditer("Partial error", cap.out)]
+            assert len(errs) == 36

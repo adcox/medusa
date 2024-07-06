@@ -13,7 +13,7 @@ from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
 
-from pika import console, util
+from pika import console, numerics, util
 from pika.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
 from pika.propagate import Propagator
 
@@ -869,16 +869,17 @@ class CorrectionsProblem:
 
         return self._jacobian
 
-    def checkJacobian(self, stepSize=1e-8, tol=2e-3, verbose=False):
+    def checkJacobian(self, stepSize=0.1, tol=1e-6, verbose=False):
         """
-        Use central differencing to check the jacobian values
+        Compute a numerical Jacobian and compare against the analytically-computed
+        one.
 
-        Each element of the free variable vector is perturbed by +/- ``stepSize``;
-        a constraint vector is computed for each of these perturbations. The
-        difference between these vectors, divided by two times ``stepSize``, is
-        the central difference of the constraint vector w.r.t the perturbed variable.
-        Thus, by stepping through all of the free variables, each column of the
-        jacobian matrix can be computed.
+        The "Richardson's deferred approach to the limit" algorithm, implemented in
+        :func:`~pika.numerics.derivative`, is employed to compute the numerical
+        version of the Jacobian matrix. Each element of the free variable vector
+        is perturbed, yielding a similarly perturbed constraint vector. By
+        differencing these constraint vectors, a derivative with respect to the
+        perturbed free variable is obtained, i.e., a column of the Jacobian matrix.
 
         The numerical Jacobian matrix is then differenced from the analytical
         Jacobian (from :func:`jacobian`). For non-zero Jacobian entries with absolute
@@ -891,7 +892,9 @@ class CorrectionsProblem:
         helpful tool in debugging partial derivative derivations.
 
         Args:
-            stepSize (Optional, float): the free variable step size
+            stepSize (Optional, float): the initial free variable step size; this
+            value should be sufficiently large such that the constraint vector
+            changes *substantially* as a result.
             tol (Optional, float): tolerance for equality between the numeric and
                 analytical Jacobian matrices
             verbose (Optional, bool): if True, any Jacobian entries that are not
@@ -901,24 +904,14 @@ class CorrectionsProblem:
             bool: True if the numeric and analytical Jacobian matrices are equal
         """
         analytic = self.jacobian()
-        numeric = np.zeros(analytic.shape)
-
         prob = deepcopy(self)
-        for ix in range(prob.numFreeVars):
-            pertVars = copy(prob.freeVarVec())
 
-            # Take negative step w.r.t. center
-            pertVars[ix] -= stepSize
-            prob.updateFreeVars(pertVars)
-            constraintVec_minus = copy(prob.constraintVec())
+        # A simple function to evaluate the constraint vector
+        def evalCons(freeVars):
+            prob.updateFreeVars(freeVars)
+            return copy(prob.constraintVec())
 
-            # Take positive step w.r.t. center
-            pertVars[ix] += 2 * stepSize
-            prob.updateFreeVars(pertVars)
-            constraintVec_plus = copy(prob.constraintVec())
-
-            # Compute central difference and assign to column of numeric Jacobian
-            numeric[:, ix] = (constraintVec_plus - constraintVec_minus) / (2 * stepSize)
+        numeric = numerics.derivative_multivar(evalCons, copy(prob.freeVarVec()), 0.1)
 
         # Map indices to variable and constraint objects; used for better printouts
         if verbose:

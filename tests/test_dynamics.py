@@ -63,6 +63,7 @@ class TestAbstractDynamicsModel:
     def test_stateSize(self, model, varGroups, sz):
         assert model.stateSize(varGroups) == sz
 
+    @pytest.mark.parametrize("varIn", [None, [0, 1, 2, 3]])
     @pytest.mark.parametrize(
         "varGroups, out",
         [
@@ -72,10 +73,10 @@ class TestAbstractDynamicsModel:
             [VarGroups.PARAM_PARTIALS, [[8, 9], [10, 11], [12, 13]]],
         ],
     )
-    def test_extractVars(self, model, varGroups, out):
+    def test_extractVars(self, model, varGroups, out, varIn):
         # standard use case: y has all the variable groups, we want subset out
         y = np.arange(14)
-        assert model.extractVars(y, varGroups).tolist() == out
+        assert model.extractVars(y, varGroups, varGroupsIn=varIn).tolist() == out
 
     @pytest.mark.parametrize(
         "y, varIn, varOut, yOut",

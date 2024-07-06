@@ -695,7 +695,9 @@ class TestCorrectionsProblem:
         import re
 
         prob = self.jacProb([0, 0, 0], [None, 2.0, 3.0])
-        assert not prob.checkJacobian(tol=1e-15, verbose=verbose)
+
+        # An absurdly small tolerance will trigger failure
+        assert not prob.checkJacobian(tol=1e-24, verbose=verbose)
         cap = capsys.readouterr()
 
         if not verbose:
