@@ -4,7 +4,6 @@ Plotting
 from copy import deepcopy
 
 import matplotlib.pyplot as plt
-import numpy as np
 import scipy.optimize
 
 from pika import corrections

@@ -24,7 +24,6 @@ class LowThrustCrtbpDynamics(CrtbpDynamics):
     def stateSize(self, varGroups):
         varGroups = util.toList(varGroups)
         N = 6 + self.ctrlLaw.numStates
-        nCtrlState = self.ctrlLaw.numStates
         nCtrlParam = len(self.ctrlLaw.params)
 
         return (
@@ -37,7 +36,7 @@ class LowThrustCrtbpDynamics(CrtbpDynamics):
     def varNames(self, varGroups):
         if varGroups == VarGroups.STATE:
             baseNames = super().varNames(varGroups)
-            return baseNames + ctrlLaw.stateNames
+            return baseNames + self.law.stateNames
         else:
             return super().varNames(varGroups)
 

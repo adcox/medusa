@@ -33,6 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "flake8",
     "black>=23.1.0",
     "pre-commit==2.13.0",
     "isort>=5.12.0",

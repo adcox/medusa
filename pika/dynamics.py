@@ -6,9 +6,9 @@ from abc import ABC, abstractmethod
 from copy import copy, deepcopy
 from enum import IntEnum
 
-import numba
 import numpy as np
 
+from pika import util
 from pika.data import Body
 
 logger = logging.getLogger(__name__)
