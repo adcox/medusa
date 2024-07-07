@@ -7,10 +7,15 @@ from pika import util
 from pika.crtbp import DynamicsModel as CrtbpDynamics
 from pika.dynamics import VarGroups
 
+from .control import ControlLaw
+
 
 class LowThrustCrtbpDynamics(CrtbpDynamics):
     def __init__(self, body1, body2, ctrlLaw):
         super().__init__(body1, body2)
+
+        if not isinstance(ctrlLaw, ControlLaw):
+            raise TypeError("ctrlLaw must be a ControlLaw object")
 
         self.ctrlLaw = ctrlLaw
 

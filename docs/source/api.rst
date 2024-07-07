@@ -36,7 +36,22 @@ Individual models extend the base classes to provide concrete implementations.
 .. autosummary::
    :nosignatures:
 
-   dynamics.crtbp.DynamicsModel
+   crtbp.DynamicsModel
+   lowthrust.dynamics.LowThrustCrtbpDynamics
+
+The low-thrust model defines additional objects that specify the acceleration 
+that is added to the dynamics.
+
+.. autosummary::
+   :nosignatures:
+
+   lowthrust.control.ControlTerm
+   lowthrust.control.ConstThrustTerm
+   lowthrust.control.ConstMassTerm
+   lowthrust.control.ConstOrientTerm
+   lowthrust.control.ControlLaw
+   lowthrust.control.SeparableControlLaw
+   lowthrust.control.ForceMassOrientLaw
 
 
 Propagation
@@ -105,23 +120,57 @@ Core Classes
 
 .. automodule:: pika.data
    :members:
+   :show-inheritance:
 
 .. automodule:: pika.dynamics
    :members:
+   :show-inheritance:
+
 
 .. automodule:: pika.propagate
    :members:
+   :show-inheritance:
 
 .. automodule:: pika.corrections
    :members:
+   :show-inheritance:
 
 .. automodule:: pika.corrections.constraints
    :members:
+   :show-inheritance:
+
 
 
 Circular Restricted Three-Body Problem
 --------------------------------------
 
-.. automodule:: pika.dynamics.crtbp
+.. automodule:: pika.crtbp
    :members:
+   :show-inheritance:
 
+
+Low-Thrust Modeling
+--------------------
+
+.. automodule:: pika.lowthrust.dynamics
+   :members:
+   :show-inheritance:
+
+.. automodule:: pika.lowthrust.control
+   :members:
+   :show-inheritance:
+
+Utilities
+----------------
+
+.. automodule:: pika.numerics
+   :members:
+   :show-inheritance:
+
+.. automodule:: pika.plots
+   :members:
+   :show-inheritance:
+
+.. automodule:: pika.util
+   :members:
+   :show-inheritance:

@@ -179,17 +179,17 @@ class TestControlTerm:
             assert partials.shape == (term.numStates, 1)
 
 
-class TestControlLaw_noStates:
+class TestForceMassOrientLaw_noStates:
     @pytest.fixture()
     def law(self):
         force = ConstThrustTerm(0.011)
         mass = ConstMassTerm(1.0)
         orient = ConstOrientTerm(np.pi / 2, 0.02)
-        return ControlLaw(force, mass, orient)
+        return ForceMassOrientLaw(force, mass, orient)
 
     @pytest.fixture
     def integArgs(self, law):
-        nCore = law.force.coreStateSize
+        nCore = law.terms[0].coreStateSize
         t = 1.23
         y = np.arange(nCore)
         if law.numStates > 0:
@@ -217,14 +217,12 @@ class TestControlLaw_noStates:
         pass
 
     def test_registerParams(self, law):
-        assert law.force.paramIx0 is None
-        assert law.mass.paramIx0 is None
-        assert law.orient.paramIx0 is None
+        assert all(term.paramIx0 is None for term in law.terms)
 
         law.registerParams(3)
-        assert law.force.paramIx0 == 3
-        assert law.mass.paramIx0 == law.force.paramIx0 + len(law.force.params)
-        assert law.orient.paramIx0 == law.mass.paramIx0 + len(law.mass.params)
+        assert law.terms[0].paramIx0 == 3
+        assert law.terms[1].paramIx0 == law.terms[0].paramIx0 + len(law.terms[0].params)
+        assert law.terms[2].paramIx0 == law.terms[1].paramIx0 + len(law.terms[1].params)
 
     def test_params(self, law):
         params = law.params
@@ -238,8 +236,10 @@ class TestControlLaw_noStates:
 
         mag = np.linalg.norm(accel)
         unit = accel / mag
-        assert mag == law.force.evalTerm(*integArgs) / law.mass.evalTerm(*integArgs)
-        a, b = law.orient.alpha, law.orient.beta
+        assert mag == law.terms[0].evalTerm(*integArgs) / law.terms[1].evalTerm(
+            *integArgs
+        )
+        a, b = law.terms[2].alpha, law.terms[2].beta
         assert unit[0] == np.cos(b) * np.cos(a)
         assert unit[1] == np.cos(b) * np.sin(a)
         assert unit[2] == np.sin(b)
@@ -247,7 +247,7 @@ class TestControlLaw_noStates:
     def test_partials_accel_wrt_coreState(self, law, integArgs):
         partials = law.partials_accel_wrt_coreState(*integArgs)
         assert isinstance(partials, np.ndarray)
-        assert partials.shape == (3, law.force.coreStateSize)
+        assert partials.shape == (3, law.terms[0].coreStateSize)
 
         # Check partials
         # TODO separate core and ctrl states
@@ -309,11 +309,11 @@ class TestLowThrustCrtbpDynamics:
         force = ConstThrustTerm(0.011)
         mass = ConstMassTerm(1.0)
         orient = ConstOrientTerm(np.pi / 2, 0.02)
-        return ControlLaw(force, mass, orient)
+        return ForceMassOrientLaw(force, mass, orient)
 
     @pytest.fixture
     def integArgs(self, law):
-        nCore = law.force.coreStateSize
+        nCore = law.terms[0].coreStateSize
         t = 1.23
         y = np.arange(nCore)
         if law.numStates > 0:

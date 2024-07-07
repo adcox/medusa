@@ -4,7 +4,7 @@ Routines for numerical approximations of calculus evaluations
 import numpy as np
 
 
-def derivative(func, x, step, meta={}, nIter=10, maxRelChange=2.0):
+def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
     """
     Compute the derivative of a function at ``x``.
 

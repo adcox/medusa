@@ -11,7 +11,7 @@ from pika import numerics
 def test_derivative_sin(val):
     # Test derivative computation with simple sin function
     meta = {}
-    deriv = numerics.derivative(np.sin, val, 0.25, meta, nIter=11)
+    deriv = numerics.derivative(np.sin, val, 0.25, nIter=11, meta=meta)
     assert isinstance(deriv, float)
 
     # Test correct computation of derivative
