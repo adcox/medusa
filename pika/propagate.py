@@ -97,8 +97,6 @@ class Propagator(ModelBlockCopyMixin):
         kwargs.pop("dense_output", None)
         kwargs_in.update(**kwargs)
 
-        # kwargs_in = {"method": self.method, "dense_output": self.dense, **kwargs}
-
         if "args" in kwargs_in:
             logger.warning("Overwriting 'args' passed to propagate()")
 

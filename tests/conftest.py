@@ -25,11 +25,14 @@ def loadBody(name):
     return Body.fromXML(BODY_XML, name)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def logger():
-    logger = logging.getLogger("pika")
-    logger.handlers.clear()
-    logger.addHandler(RichHandler(show_time=False, enable_link_path=False))
-    logger.setLevel(logging.DEBUG)
-    logger.propagate = False
-    return logger.name
+# @pytest.fixture(scope="session", autouse=True)
+# def logger():
+#    """
+#    Configure the logger for unit test output
+#    """
+#    logger = logging.getLogger("pika")
+#    logger.handlers.clear()
+#    logger.addHandler(RichHandler(show_time=False, enable_link_path=False))
+#    logger.setLevel(logging.DEBUG)
+#    logger.propagate = False
+#    return logger.name

@@ -1,6 +1,7 @@
 """
 Dynamics Classes and Interfaces
 """
+import logging
 from abc import ABC, abstractmethod
 from copy import copy, deepcopy
 from enum import IntEnum
@@ -8,8 +9,9 @@ from enum import IntEnum
 import numba
 import numpy as np
 
-from pika import console
 from pika.data import Body
+
+logger = logging.getLogger(__name__)
 
 
 # numba JIT compilation only supports Enum and IntEnum
@@ -172,7 +174,7 @@ class AbstractDynamicsModel(ABC):
     @abstractmethod
     def stateSize(self, varGroups):
         """
-        Get the size (i.e., number of elements) for one or more variable groups
+        Get the size (i.e., number of elements) for one or more variable groups.
 
         Args:
             varGroups (VarGroups, [VarGroups]): describes one or more groups of variables
@@ -182,9 +184,12 @@ class AbstractDynamicsModel(ABC):
         """
         pass
 
-    def checkPartials(
-        self, y0, tspan, params=None, initStep=1e-4, tol=1e-6, verbose=False
-    ):
+    def checkPartials(self, y0, tspan, params=None, initStep=1e-4, tol=1e-6):
+        """
+        This method logs information about the accuracy of the partials via the
+        "pika.dynamics" logger. Erroneous partial values are logged at ERROR
+        while all others are logged at INFO.
+        """
         from pika import numerics
         from pika.propagate import Propagator
 
@@ -240,10 +245,8 @@ class AbstractDynamicsModel(ABC):
         # Compute parameter partials
         if self.stateSize(VarGroups.PARAM_PARTIALS) > 0:
 
-            def prop_params(param):
-                sol = prop.propagate(
-                    state0, tspan, params=params, varGroups=VarGroups.STATE
-                )
+            def prop_params(p):
+                sol = prop.propagate(state0, tspan, params=p, varGroups=VarGroups.STATE)
                 return sol.y[:, -1]
 
             num_paramPartials = numerics.derivative_multivar(
@@ -262,35 +265,28 @@ class AbstractDynamicsModel(ABC):
         )
 
         # Now compare
-        absDiff = num_vec - sol_vec
-        relDiff = np.zeros(absDiff.shape)
+        absDiff = abs(num_vec - sol_vec)
+        relDiff = absDiff.copy()
         equal = True
-        varNames = None
+        varNames = np.concatenate([self.varNames(grp) for grp in allVars[1:]])
         for ix in range(sol_vec.size):
-            # Compute relative difference
-            if abs(sol_vec[ix]) < initStep:
-                # If analytic partial is less than step size, set relative error
-                #   to the absolute error; otherwise relative error is unity,
-                #   which is not accurate
-                # TODO revisit this logic with new numerics method doing the computation
-                relDiff[ix] = absDiff[ix]
-            elif abs(num_vec[ix]) > 1e-12:
-                relDiff[ix] = absDiff[ix] / num_vec[ix]
+            # Compute relative difference for non-zero numeric values
+            if abs(num_vec[ix]) > 1e-12:
+                relDiff[ix] = absDiff[ix] / abs(num_vec[ix])
 
             if abs(relDiff[ix]) > tol:
                 equal = False
-
-                if verbose:
-                    if varNames is None:
-                        varNames = np.concatenate(
-                            [self.varNames(grp) for grp in allVars[1:]]
-                        )
-
-                    console.print(
-                        f"[red]Partial error in element {ix+len(state0)} ({varNames[ix]})[/]: "
-                        f"Expected = {num_vec[ix]}, Actual = {sol_vec[ix]} "
-                        f"(Rel err = {relDiff[ix]:e}"
-                    )
+                logger.error(
+                    f"Partial error in {ix+len(state0):02d} ({varNames[ix]}) is too large: "
+                    f"Expected = {num_vec[ix]:.4e}, Actual = {sol_vec[ix]:.4e} "
+                    f"(Rel err = {relDiff[ix]:.4e} > {tol:.2e})"
+                )
+            else:
+                logger.info(
+                    f"Partial error in {ix+len(state0):02d} ({varNames[ix]}) is ok: "
+                    f"Expected = {num_vec[ix]:.4e}, Actual = {sol_vec[ix]:.4e} "
+                    f"(Rel err = {relDiff[ix]:.4e}  <= {tol:.2e})"
+                )
 
         return equal
 

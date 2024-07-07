@@ -920,17 +920,12 @@ class CorrectionsProblem:
 
         # Compute absolute and relative differences and determine equality
         absDiff = numeric - analytic
-        relDiff = np.zeros(absDiff.shape)
+        relDiff = absDiff.copy()
         equal = True
         for r, row in enumerate(relDiff):
             for c in range(len(row)):
-                if abs(analytic[r, c]) < stepSize:
-                    # If analytic partial is less than step size, set relative
-                    # error to the absolute error; otherwise relative error is
-                    # unity, which is not representative
-                    relDiff[r, c] = absDiff[r, c]
-                elif abs(numeric[r, c]) > 1e-12:
-                    # If numeric partial is nonzero, compute relative dif
+                # If numeric partial is nonzero, compute relative dif
+                if abs(numeric[r, c]) > 1e-12:
                     relDiff[r, c] = absDiff[r, c] / numeric[r, c]
 
                 if abs(relDiff[r, c]) > tol:

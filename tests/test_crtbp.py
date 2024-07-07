@@ -1,6 +1,8 @@
 """
 Test CRTBP dynamics
 """
+import logging
+
 import numpy as np
 import pytest
 from conftest import loadBody
@@ -88,7 +90,8 @@ class TestDynamicsModel:
         paramNames = model.varNames(VarGroups.PARAM_PARTIALS)
         assert paramNames == []
 
-    def test_checkPartials(self, capsys):
+    def test_checkPartials(self, caplog):
+        # caplog.set_level(logging.DEBUG, logger="pika")
         model = DynamicsModel(earth, moon)
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(
@@ -96,13 +99,16 @@ class TestDynamicsModel:
         )
         tspan = [1.0, 2.0]
 
-        assert model.checkPartials(y0, tspan, verbose=True)
-        cap = capsys.readouterr()
-        assert cap.out == ""
-        assert cap.err == ""
+        with caplog.at_level(logging.DEBUG, logger="pika"):
+            assert model.checkPartials(y0, tspan)
 
-    @pytest.mark.parametrize("verbose", [True, False])
-    def test_checkPartials_fails(self, capsys, verbose):
+        for record in caplog.records:
+            if not record.name == "pika.dynamics":
+                continue
+            # All records should be info (no errors)
+            assert record.levelno == logging.INFO
+
+    def test_checkPartials_fails(self, caplog):
         import re
 
         model = DynamicsModel(earth, moon)
@@ -113,13 +119,12 @@ class TestDynamicsModel:
         tspan = [1.0, 2.0]
 
         # An absurdly small tolerance will trigger failure
-        assert not model.checkPartials(y0, tspan, verbose=verbose, tol=1e-24)
-        cap = capsys.readouterr()
+        with caplog.at_level(logging.DEBUG, logger="pika"):
+            assert not model.checkPartials(y0, tspan, tol=1e-24)
 
-        if not verbose:
-            assert cap.out == ""
-            assert cap.err == ""
-        else:
-            assert cap.err == ""
-            errs = [m.start() for m in re.finditer("Partial error", cap.out)]
-            assert len(errs) == 36
+        for record in caplog.records:
+            if not record.name == "pika.dynamics":
+                continue
+
+            # All records should be errors
+            assert record.levelno == logging.ERROR

@@ -29,12 +29,18 @@ class ControlTerm(ABC):
 
     @property
     def stateICs(self):
-        return np.zeros((self.numStates,))
+        if self.numStates == 0:
+            return np.asarray([])
+        else:
+            return np.zeros((self.numStates,))
 
     def stateDiffEqs(self, t, y, varGroups, params):
         # Differential equations governing the control states, i.e., their time
         #   derivatives
-        return np.zeros((self.numStates,))
+        if self.numStates == 0:
+            return np.asarray([])
+        else:
+            return np.zeros((self.numStates,))
 
     @abstractmethod
     def evalTerm(self, t, y, varGroups, params):
@@ -70,13 +76,22 @@ class ControlTerm(ABC):
     def partials_ctrlStateDEQs_wrt_ctrlState(self, t, y, varGroups, params):
         # The partial derivatives of the control state Diff Eqs with respect to
         #   the control state vector
-        return np.zeros((self.numStates, self.numStates))
+        if self.numStates == 0:
+            return np.asarray([])
+        else:
+            return np.zeros((self.numStates, self.numStates))
 
-    def partials_ctrlState_wrt_epoch(self, t, y, varGroups, params):
-        return np.zeros((self.numStates,))
+    def partials_ctrlStateDEQs_wrt_epoch(self, t, y, varGroups, params):
+        if self.numStates == 0:
+            return np.asarray([])
+        else:
+            return np.zeros((self.numStates,))
 
-    def partials_ctrlState_wrt_params(self, t, y, varGroups, params):
-        return np.zeros((self.numStates, len(params)))
+    def partials_ctrlStateDEQs_wrt_params(self, t, y, varGroups, params):
+        if self.numStates == 0 or len(params) == 0:
+            return np.asarray([])
+        else:
+            return np.zeros((self.numStates, len(params)))
 
 
 class ConstThrustTerm(ControlTerm):
@@ -99,14 +114,14 @@ class ConstThrustTerm(ControlTerm):
         return np.zeros((1, self.coreStateSize))
 
     def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
-        return None  # no control states
+        return np.asarray([])  # No control states
 
     def partials_term_wrt_epoch(self, t, y, varGroups, params):
-        return np.asarray([0])
+        return np.array([0], ndmin=2)
 
     def partials_term_wrt_params(self, t, y, varGroups, params):
-        partials = np.zeros(1, len(params))
-        partials[self.paramIx0] = 1
+        partials = np.zeros((1, len(params)))
+        partials[0, self.paramIx0] = 1
         return partials
 
 
@@ -130,14 +145,14 @@ class ConstMassTerm(ControlTerm):
         return np.zeros((1, self.coreStateSize))
 
     def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
-        return None  # no control states
+        return np.asarray([])  # No control states
 
     def partials_term_wrt_epoch(self, t, y, varGroups, params):
-        return np.asarray([0])
+        return np.array([0], ndmin=2)
 
     def partials_term_wrt_params(self, t, y, varGroups, params):
-        partials = np.zeros(1, len(params))
-        partials[self.paramIx0] = 1
+        partials = np.zeros((1, len(params)))
+        partials[0, self.paramIx0] = 1
         return partials
 
 
@@ -157,24 +172,31 @@ class ConstOrientTerm(ControlTerm):
     def params(self):
         return [self.alpha, self.beta]
 
+    def _getAngles(self, params):
+        return params[self.paramIx0], params[self.paramIx0 + 1]
+
     def evalTerm(self, t, y, varGroups, params):
-        alpha = params[self.paramIx0]
-        beta = params[self.paramIx0 + 1]
+        alpha, beta = self._getAngles(params)
         return np.asarray(
-            [np.cos(beta) * np.cos(alpha), np.cos(beta) * np.sin(alpha), np.sin(beta)]
+            [
+                [np.cos(beta) * np.cos(alpha)],
+                [np.cos(beta) * np.sin(alpha)],
+                [np.sin(beta)],
+            ]
         )
 
     def partials_term_wrt_coreState(self, t, y, varGroups, params):
         return np.zeros((3, self.coreStateSize))
 
     def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
-        return None  # no control states
+        return np.asarray([])  # no control states
 
     def partials_term_wrt_epoch(self, t, y, varGroups, params):
-        return np.zeros((3,))
+        return np.zeros((3, 1))
 
     def partials_term_wrt_params(self, t, y, varGroups, params):
-        partials = np.zeros(3, len(params))
+        partials = np.zeros((3, len(params)))
+        alpha, beta = self._getAngles(params)
         partials[:, self.paramIx0] = [
             -np.cos(beta) * np.sin(alpha),
             np.cos(beta) * np.cos(alpha),
@@ -198,18 +220,38 @@ class ControlLaw:
         self.mass = mass
         self.orient = orient
 
+    def _concat(self, *arrays):
+        out = arrays[0]
+        for array in arrays[1:]:
+            if np.asarray(array).size > 0:
+                out = np.concatenate((out, array))
+
+        return out
+
+    @property
+    def epochIndependent(self):
+        return (
+            self.force.epochIndependent
+            and self.mass.epochIndependent
+            and self.orient.epochIndependent
+        )
+
     @property
     def numStates(self):
-        return self.force.numCore + self.mass.numCore + self.orient.numCore
+        return self.force.numStates + self.mass.numStates + self.orient.numStates
 
     def stateICs(self):
-        return np.concatenate(force.stateICs, mass.stateICs, orient.stateICs)
+        return self._concat(
+            self.force.stateICs, self.mass.stateICs, self.orient.stateICs
+        )
 
     def stateDiffEqs(self, t, y, varGroups, params):
         # Differential equations governing the control states, i.e., their time
         #   derivatives
-        return np.concatenate(
-            force.stateDiffEqs, mass.stateDiffEqs, orient.stateDiffEqs
+        return self._concat(
+            self.force.stateDiffEqs(t, y, varGroups, params),
+            self.mass.stateDiffEqs(t, y, varGroups, params),
+            self.orient.stateDiffEqs(t, y, varGroups, params),
         )
 
     @property
@@ -219,7 +261,7 @@ class ControlLaw:
 
     @property
     def params(self):
-        return np.concatenate(self.force.params + self.mass.params + self.orient.params)
+        return self._concat(self.force.params, self.mass.params, self.orient.params)
 
     def registerParams(self, ix0):
         # Tells the control terms where their params live within the vector
@@ -231,27 +273,31 @@ class ControlLaw:
 
         self.orient.paramIx0 = ix0
 
-    def accelVec(t, y, varGroups, params):
+    def accelVec(self, t, y, varGroups, params):
         # Returns Cartesian acceleration vector
-        force = self.force.eval(t, y, varGroups, params)
-        mass = self.massPolicty.eval(t, y, varGroups, params)
-        vec = self.orient.eval(t, y, varGroups, params)
+        force = self.force.evalTerm(t, y, varGroups, params)
+        mass = self.mass.evalTerm(t, y, varGroups, params)
+        vec = self.orient.evalTerm(t, y, varGroups, params)
 
         return (force / mass) * vec
 
     def _accelPartials(self, t, y, varGroups, params, partialFcn):
         # Use chain rule to combine partials of the acceleration w.r.t. some other
         #   parameter
-        f = self.force.eval(t, y, varGroups, params)
-        m = self.massPolicty.eval(t, y, varGroups, params)
-        vec = self.orient.eval(t, y, varGroups, params)
+        f = self.force.evalTerm(t, y, varGroups, params)
+        m = self.mass.evalTerm(t, y, varGroups, params)
+        vec = self.orient.evalTerm(t, y, varGroups, params)
 
         dfdX = getattr(self.force, partialFcn)(t, y, varGroups, params)
         dmdX = getattr(self.mass, partialFcn)(t, y, varGroups, params)
         dodX = getattr(self.orient, partialFcn)(t, y, varGroups, params)
 
-        # TODO adjust for matrix notation
-        return dfdX * vec / m + f * np.log(m) * vec * dmdX + f * dodX / m
+        term1 = (vec @ dfdX / m) if dfdX.size > 0 else 0
+        term2 = (-f * vec / (m * m)) @ dmdX if dmdX.size > 0 else 0
+        term3 = (f / m) * dodX if dodX.size > 0 else 0
+
+        partials = term1 + term2 + term3
+        return np.asarray([]) if isinstance(partials, int) else partials
 
     def partials_accel_wrt_coreState(self, t, y, varGroups, params):
         return self._accelPartials(
@@ -272,7 +318,7 @@ class ControlLaw:
     def partials_ctrlStateDEQs_wrt_coreState(self, t, y, varGroups, params):
         # The partial derivatives of the control state Diff Eqs with respect to
         #   the core state vector
-        return np.concatenate(
+        return self._concat(
             self.force.partials_ctrlStateDEQs_wrt_coreState(t, y, varGroups, params),
             self.mass.partials_ctrlStateDEQs_wrt_coreState(t, y, varGroups, params),
             self.orient.partials_ctrlStateDEQs_wrt_coreState(t, y, varGroups, params),
@@ -281,7 +327,7 @@ class ControlLaw:
     def partials_ctrlStateDEQs_wrt_ctrlState(self, t, y, varGroups, params):
         # The partial derivatives of the control state Diff Eqs with respect to
         #   the control state vector
-        return np.concatenate(
+        return self._concat(
             self.force.partials_ctrlStateDEQs_wrt_ctrlState(t, y, varGroups, params),
             self.mass.partials_ctrlStateDEQs_wrt_ctrlState(t, y, varGroups, params),
             self.orient.partials_ctrlStateDEQs_wrt_ctrlState(t, y, varGroups, params),
@@ -290,7 +336,7 @@ class ControlLaw:
     def partials_ctrlStateDEQs_wrt_epoch(self, t, y, varGroups, params):
         # The partial derivatives of the control state Diff Eqs with respect to
         #   the epoch
-        return np.concatenate(
+        return self._concat(
             self.force.partials_ctrlStateDEQs_wrt_epoch(t, y, varGroups, params),
             self.mass.partials_ctrlStateDEQs_wrt_epoch(t, y, varGroups, params),
             self.orient.partials_ctrlStateDEQs_wrt_epoch(t, y, varGroups, params),
@@ -299,7 +345,7 @@ class ControlLaw:
     def partials_ctrlStateDEQs_wrt_params(self, t, y, varGroups, params):
         # The partial derivatives of the control state Diff Eqs with respect to
         #   the parameters
-        return np.concatenate(
+        return self._concat(
             self.force.partials_ctrlStateDEQs_wrt_params(t, y, varGroups, params),
             self.mass.partials_ctrlStateDEQs_wrt_params(t, y, varGroups, params),
             self.orient.partials_ctrlStateDEQs_wrt_params(t, y, varGroups, params),
