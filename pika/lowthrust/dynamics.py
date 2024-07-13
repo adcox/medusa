@@ -41,7 +41,7 @@ class LowThrustCrtbpDynamics(CrtbpDynamics):
     def varNames(self, varGroups):
         if varGroups == VarGroups.STATE:
             baseNames = super().varNames(varGroups)
-            return baseNames + self.law.stateNames
+            return baseNames + self.ctrlLaw.stateNames
         else:
             return super().varNames(varGroups)
 

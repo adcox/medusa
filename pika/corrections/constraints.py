@@ -66,8 +66,8 @@ class ContinuityConstraint(AbstractConstraint):
         #   in decreasing order of complexity to take advantage of lazy propagation
         if paramVar in freeVarIndexMap:
             dState_dParams = self.segment.partials_state_wrt_params(-1)
-            partials[paramVar] = dState_dParams[:, ~termVar.mask][:, self.unmaskedIx][
-                ~paramVar.mask, :
+            partials[paramVar] = dState_dParams[~termVar.mask, :][self.unmaskedIx, :][
+                :, ~paramVar.mask
             ]
 
         if epochVar in freeVarIndexMap:

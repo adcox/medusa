@@ -91,7 +91,6 @@ class TestDynamicsModel:
         assert paramNames == []
 
     def test_checkPartials(self, caplog):
-        # caplog.set_level(logging.DEBUG, logger="pika")
         model = DynamicsModel(earth, moon)
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(
@@ -109,8 +108,6 @@ class TestDynamicsModel:
             assert record.levelno == logging.INFO
 
     def test_checkPartials_fails(self, caplog):
-        import re
-
         model = DynamicsModel(earth, moon)
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(

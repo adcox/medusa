@@ -76,7 +76,7 @@ def plotPropagation(ax, propSol, coords, **kwargs):
         raise NotImplementedError()
 
 
-def plotTraj(obj, coords=["x", "y"], primaries=False):
+def plotTraj(obj, coords=["x", "y"], primaries=False, fig=None):
     pltKwargs = {}
     if len(coords) == 1:
         coords = ["t", coords[0]]
@@ -84,8 +84,12 @@ def plotTraj(obj, coords=["x", "y"], primaries=False):
         pltKwargs["projection"] = "3d"
     elif len(coords) > 3:
         raise IndexError("Cannot plot more than three coordinates")
-    fig = plt.figure()
-    ax = fig.add_subplot(**pltKwargs)
+
+    if fig is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(**pltKwargs)
+    else:
+        ax = fig.axes[0]
 
     model = None
 
@@ -119,9 +123,13 @@ def plotTraj(obj, coords=["x", "y"], primaries=False):
     return fig
 
 
-def plotIteration(problem, correctorLog, coords=["x", "y"], it=-1, primaries=False):
-    freevars = correctorLog["iterations"][it]["free-vars"]
-    problem = deepcopy(problem)
-    problem.updateFreeVars(freevars)
+def plotIteration(
+    problem, correctorLog, coords=["x", "y"], it=-1, primaries=False, fig=None
+):
+    for ix in it:
+        freevars = correctorLog["iterations"][ix]["free-vars"]
+        prob = deepcopy(problem)
+        prob.updateFreeVars(freevars)
+        fig = plotTraj(prob, coords=coords, primaries=primaries, fig=fig)
 
-    return plotTraj(problem, coords=coords, primaries=primaries)
+    return fig

@@ -65,18 +65,21 @@ class TestAbstractDynamicsModel:
 
     @pytest.mark.parametrize("varIn", [None, [0, 1, 2, 3]])
     @pytest.mark.parametrize(
-        "varGroups, out",
+        "varGroups, shape, out",
         [
-            [VarGroups.STATE, [0, 1]],
-            [VarGroups.STM, [[2, 3], [4, 5]]],
-            [VarGroups.EPOCH_PARTIALS, [6, 7]],
-            [VarGroups.PARAM_PARTIALS, [[8, 9], [10, 11], [12, 13]]],
+            [VarGroups.STATE, (2,), [0, 1]],
+            [VarGroups.STM, (2, 2), [[2, 3], [4, 5]]],
+            [VarGroups.EPOCH_PARTIALS, (2,), [6, 7]],
+            [VarGroups.PARAM_PARTIALS, (2, 3), [[8, 9, 10], [11, 12, 13]]],
         ],
     )
-    def test_extractVars(self, model, varGroups, out, varIn):
+    def test_extractVars(self, model, varGroups, shape, out, varIn):
         # standard use case: y has all the variable groups, we want subset out
         y = np.arange(14)
-        assert model.extractVars(y, varGroups, varGroupsIn=varIn).tolist() == out
+        varOut = model.extractVars(y, varGroups, varGroupsIn=varIn)
+        assert isinstance(varOut, np.ndarray)
+        assert varOut.shape == shape
+        np.testing.assert_array_equal(varOut, out)
 
     @pytest.mark.parametrize(
         "y, varIn, varOut, yOut",
@@ -91,7 +94,7 @@ class TestAbstractDynamicsModel:
                 np.arange(8),
                 [VarGroups.STATE, VarGroups.PARAM_PARTIALS],
                 VarGroups.PARAM_PARTIALS,
-                [[2, 3], [4, 5], [6, 7]],
+                [[2, 3, 4], [5, 6, 7]],
             ],
         ],
     )

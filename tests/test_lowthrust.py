@@ -7,6 +7,8 @@ import pytest
 from conftest import loadBody
 
 from pika import numerics
+from pika.corrections import ControlPoint, Segment, ShootingProblem
+from pika.corrections.constraints import ContinuityConstraint
 from pika.dynamics import VarGroups
 from pika.lowthrust.control import *
 from pika.lowthrust.dynamics import LowThrustCrtbpDynamics
@@ -213,8 +215,9 @@ class TestForceMassOrientLaw_noStates:
         assert eqs.size == 0
 
     def test_stateNames(self, law):
-        # TODO
-        pass
+        names = law.stateNames
+        assert isinstance(names, list)
+        assert names == []  # TODO test with actual named states
 
     def test_registerParams(self, law):
         assert all(term.paramIx0 is None for term in law.terms)
@@ -363,7 +366,7 @@ class TestLowThrustCrtbpDynamics:
 
         tspan = [0, 3.15]
         prop = Propagator(model)
-        sol = prop.propagate(y0, tspan, params=model.ctrlLaw.params, varGroups=grp)
+        prop.propagate(y0, tspan, params=model.ctrlLaw.params, varGroups=grp)
 
     def test_checkPartials(self, model, caplog):
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
@@ -372,8 +375,6 @@ class TestLowThrustCrtbpDynamics:
         )
         tspan = [1.0, 1.1]
 
-        # TODO the integration state is getting set to NaN after the first step...
-        #    Try just propagating the state and STM and see if there are issues
         with caplog.at_level(logging.DEBUG, logger="pika"):
             assert model.checkPartials(y0, tspan, params=model.ctrlLaw.params, tol=1e-4)
 

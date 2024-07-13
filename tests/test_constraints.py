@@ -6,27 +6,29 @@ import pytest
 from conftest import loadBody
 
 import pika.corrections.constraints as pcons
-from pika.corrections import ControlPoint, CorrectionsProblem, Segment, Variable
+from pika.corrections import (
+    ControlPoint,
+    CorrectionsProblem,
+    Segment,
+    ShootingProblem,
+    Variable,
+)
+from pika.crtbp import DynamicsModel as crtbpModel
+
+emModel = crtbpModel(loadBody("Earth"), loadBody("Moon"))
 
 
 class TestContinuityConstraint:
-    @pytest.fixture(scope="class")
-    def model(self):
-        from pika.crtbp import DynamicsModel
-
-        earth, moon = loadBody("Earth"), loadBody("Moon")
-        return DynamicsModel(earth, moon)
-
     @pytest.fixture
-    def origin(self, model, originMask):
+    def origin(self, originMask):
         # IC for EM L3 Vertical
         state = Variable([0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], originMask)
-        return ControlPoint(model, 0.1, state)
+        return ControlPoint(emModel, 0.1, state)
 
     @pytest.fixture
-    def terminus(self, model, terminusMask):
+    def terminus(self, terminusMask):
         state = Variable([0.0] * 6, terminusMask)
-        return ControlPoint(model, 1.1, state)
+        return ControlPoint(emModel, 1.1, state)
 
     @pytest.fixture
     def segment(self, origin, terminus):
@@ -92,6 +94,8 @@ class TestContinuityConstraint:
             [[0, 1, 0, 1, 1, 1], None, None],
             [[0, 0, 0, 1, 1, 1], None, [0, 1, 2]],
             [[0, 0, 0, 1, 1, 1], [0, 0, 0, 1, 1, 1], [0, 1, 2]],
+            [[0, 1, 1, 1, 0, 1], None, [0, 4]],
+            [None, [0, 1, 1, 1, 0, 1], [0, 4]],
         ],
     )
     def test_partials(self, segment, indices, problem):
@@ -118,6 +122,12 @@ class TestContinuityConstraint:
         assert not segment.propParams in partials
         assert not segment.origin.epoch in partials
         assert not segment.terminus.epoch in partials
+
+        prob = ShootingProblem()
+        prob.addSegments(segment)
+        prob.addConstraints(con)
+        prob.build()
+        assert prob.checkJacobian()
 
     @pytest.mark.parametrize(
         "originMask, terminusMask, indices",
@@ -148,6 +158,57 @@ class TestContinuityConstraint:
         assert not segment.propParams in partials
         assert not segment.origin.epoch in partials
         assert not segment.terminus.epoch in partials
+
+        assert prob.checkJacobian()
+
+    @pytest.mark.parametrize(
+        "oMask, tMask, indices",
+        [
+            [None, None, None],
+            [None, None, [0, 1, 2]],
+            [None, [0, 0, 0, 1, 1, 1], [0, 1, 2]],
+            [[0, 0, 0, 1, 1, 1], None, None],
+            [[0, 1, 0, 1, 1, 1], None, None],
+            [[0, 0, 0, 1, 1, 1], None, [0, 1, 2]],
+            [[0, 0, 0, 1, 1, 1], [0, 0, 0, 1, 1, 1], [0, 1, 2]],
+        ],
+    )
+    def test_paramPartials(self, oMask, tMask, indices):
+        from pika.lowthrust.control import (
+            ConstMassTerm,
+            ConstOrientTerm,
+            ConstThrustTerm,
+            ForceMassOrientLaw,
+        )
+
+        thrust = ConstThrustTerm(7e-2)
+        mass = ConstMassTerm(1.0)
+        orient = ConstOrientTerm(-76.5 * np.pi / 180.0, 0.0)
+        control = ForceMassOrientLaw(thrust, mass, orient)
+
+        from pika.lowthrust.dynamics import LowThrustCrtbpDynamics
+
+        model = LowThrustCrtbpDynamics(loadBody("Earth"), loadBody("Moon"), control)
+
+        q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        state0 = Variable(q0, mask=oMask)
+        statef = Variable(q0, mask=tMask)
+        origin = ControlPoint(model, 0.0, state0)
+        terminus = ControlPoint(model, 0.0, statef)
+        segment = Segment(origin, 1.0, terminus, propParams=control.params)
+        con = pcons.ContinuityConstraint(segment, indices=indices)
+
+        prob = ShootingProblem()
+        prob.addSegments(segment)
+        prob.addConstraints(con)
+        prob.build()
+
+        partials = con.partials(prob.freeVarIndexMap())
+        assert segment.propParams in partials
+        dF_dp = partials[segment.propParams]
+        assert isinstance(dF_dp, np.ndarray)
+        assert dF_dp.shape == (con.size, len(control.params))
+        assert not all(x == 0.0 for x in dF_dp.flat)
 
 
 class TestVariableValueConstraint:

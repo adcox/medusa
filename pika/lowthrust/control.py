@@ -19,6 +19,7 @@ class ControlTerm(ABC):
     Attributes:
         epochIndependent (bool): whether or not this term is independent of the epoch
         numStates (int): the number of extra state variables this term defines
+        stateNames ([str]): a list of strings that describe the states
         params (list): the default parameter values
         paramIx0 (int): the index of the first parameter "owned" by this term
             within the full parameter list.
@@ -48,6 +49,11 @@ class ControlTerm(ABC):
             return np.asarray([])
         else:
             return np.zeros((self.numStates,))
+
+    @property
+    def stateNames(self):
+        me = self.__class__.__name__
+        return [f"{me} {ix}" for ix in range(self.numStates)]
 
     def stateDiffEqs(self, t, y, varGroups, params):
         """
@@ -607,8 +613,7 @@ class SeparableControlLaw(ControlLaw):
 
     @property
     def stateNames(self):
-        # TODO
-        pass
+        return self._concat([term.stateNames for term in self.terms])
 
     @property
     def params(self):

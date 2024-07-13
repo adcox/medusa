@@ -2,6 +2,7 @@
 Test corrections
 """
 import copy
+import logging
 
 import numpy as np
 import pytest
@@ -21,6 +22,8 @@ from pika.corrections import (
 from pika.crtbp import DynamicsModel
 from pika.dynamics import VarGroups
 from pika.propagate import Propagator
+
+emModel = DynamicsModel(loadBody("Earth"), loadBody("Moon"))
 
 
 # ------------------------------------------------------------------------------
@@ -110,11 +113,6 @@ class TestVariable:
 
 # ------------------------------------------------------------------------------
 class TestControlPoint:
-    @pytest.fixture(scope="class")
-    def model(self):
-        earth, moon = loadBody("Earth"), loadBody("Moon")
-        return DynamicsModel(earth, moon)
-
     @pytest.mark.parametrize(
         "epoch, state",
         [
@@ -123,14 +121,19 @@ class TestControlPoint:
         ],
     )
     @pytest.mark.parametrize("autoMask", [True, False])
-    def test_constructor(self, model, epoch, state, autoMask):
-        cp = ControlPoint(model, copy.deepcopy(epoch), copy.deepcopy(state), autoMask)
+    def test_constructor(self, epoch, state, autoMask):
+        cp = ControlPoint(emModel, copy.deepcopy(epoch), copy.deepcopy(state), autoMask)
 
         assert isinstance(cp.epoch, Variable)
         # CR3BP is epoch-independent, so autoMask=True will set mask to True;
         # without autoMask, the mask will be false
         assert cp.epoch.mask == [autoMask]
         assert isinstance(cp.state, Variable)
+
+        assert isinstance(cp.importableVars, tuple)
+        assert len(cp.importableVars) == 2
+        assert cp.epoch in cp.importableVars
+        assert cp.state in cp.importableVars
 
     @pytest.mark.parametrize(
         "epoch, state",
@@ -139,28 +142,28 @@ class TestControlPoint:
             [0.0, np.arange(42)],
         ],
     )
-    def test_constructor_errs(self, model, epoch, state):
+    def test_constructor_errs(self, epoch, state):
         with pytest.raises(RuntimeError):
-            ControlPoint(model, epoch, state)
+            ControlPoint(emModel, epoch, state)
 
-    def test_fromProp(self, model):
-        prop = Propagator(model)
+    def test_fromProp(self):
+        prop = Propagator(emModel)
         t0 = 0.1
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         sol = prop.propagate(y0, [t0, t0 + 1.2])
         cp = ControlPoint.fromProp(sol)
 
-        assert cp.model == model
+        assert cp.model == emModel
         assert cp.epoch.allVals[0] == t0
         assert np.array_equal(cp.state.allVals, y0)
 
-    def test_copy(self, model):
+    def test_copy(self):
         state = Variable(np.arange(6))
         epoch = Variable(0.0)
-        cp = ControlPoint(model, epoch, state)
+        cp = ControlPoint(emModel, epoch, state)
         cp2 = copy.copy(cp)
 
-        assert id(cp.model) == id(cp2.model) == id(model)
+        assert id(cp.model) == id(cp2.model) == id(emModel)
         assert id(cp.epoch) == id(cp2.epoch) == id(epoch)
         assert id(cp.state) == id(cp2.state) == id(state)
 
@@ -171,10 +174,10 @@ class TestControlPoint:
         epoch.values[:] = 3
         assert np.array_equal(cp.epoch.values, cp2.epoch.values)
 
-    def test_deepcopy(self, model):
+    def test_deepcopy(self):
         state = Variable(np.arange(6))
         epoch = Variable(0.0)
-        cp = ControlPoint(model, epoch, state)
+        cp = ControlPoint(emModel, epoch, state)
         cp2 = copy.deepcopy(cp)
 
         assert id(cp.model) == id(cp2.model)
@@ -192,18 +195,13 @@ class TestControlPoint:
 # ------------------------------------------------------------------------------
 class TestSegment:
     @pytest.fixture(scope="class")
-    def model(self):
-        earth, moon = loadBody("Earth"), loadBody("Moon")
-        return DynamicsModel(earth, moon)
-
-    @pytest.fixture(scope="class")
-    def prop(self, model):
-        return Propagator(model, dense=False)
+    def prop(self):
+        return Propagator(emModel, dense=False)
 
     @pytest.fixture
-    def origin(self, model):
+    def origin(self):
         # IC for EM L3 Vertical
-        return ControlPoint(model, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
+        return ControlPoint(emModel, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
 
     @pytest.mark.parametrize(
         "tof, term, _prop, params",
@@ -247,6 +245,11 @@ class TestSegment:
         assert seg.propParams.values.size == 0
         if isinstance(params, Variable):
             assert id(seg.propParams) == id(params)
+
+        assert isinstance(seg.importableVars, tuple)
+        assert len(seg.importableVars) == 2
+        assert seg.tof in seg.importableVars
+        assert seg.propParams in seg.importableVars
 
     def test_constructor_altProp(self, origin, request):
         sun, earth = loadBody("Sun"), loadBody("Earth")
@@ -384,6 +387,21 @@ class TestCorrectionsProblem:
         prob.addVariables(var)
         assert not var in prob._freeVars
         # TODO check logging
+
+    @pytest.mark.parametrize(
+        "obj",
+        [
+            ControlPoint(emModel, 0, [0] * 6, autoMask=False),
+            Segment(ControlPoint(emModel, 0, [0] * 6), 1.2, propParams=[1, 2, 3]),
+        ],
+    )
+    def test_importVariables(self, obj):
+        prob = CorrectionsProblem()
+        prob.importVariables(obj)
+
+        assert len(prob._freeVars) == len(obj.importableVars)
+        for var in obj.importableVars:
+            assert var in prob._freeVars
 
     @pytest.mark.parametrize(
         "variables",
@@ -683,30 +701,26 @@ class TestCorrectionsProblem:
         constraintVec = copy.copy(prob.constraintVec())
         jacobian = copy.copy(prob.jacobian())
 
-        assert prob.checkJacobian(tol=1e-6, verbose=True)
+        assert prob.checkJacobian(tol=1e-6)
 
         # Make sure original problem has not been modified
         assert np.array_equal(prob.freeVarVec(), freeVarVec)
         assert np.array_equal(prob.constraintVec(), constraintVec)
         assert np.array_equal(prob.jacobian(), jacobian)
 
-    @pytest.mark.parametrize("verbose", [True, False])
-    def test_checkJacobian_fails(self, capsys, verbose):
-        import re
-
+    def test_checkJacobian_fails(self, caplog):
         prob = self.jacProb([0, 0, 0], [None, 2.0, 3.0])
 
         # An absurdly small tolerance will trigger failure
-        assert not prob.checkJacobian(tol=1e-24, verbose=verbose)
-        cap = capsys.readouterr()
+        with caplog.at_level(logging.DEBUG, logger="pika"):
+            assert not prob.checkJacobian(tol=1e-24)
 
-        if not verbose:
-            assert cap.out == ""
-            assert cap.err == ""
-        else:
-            assert cap.err == ""
-            errs = [m.start() for m in re.finditer("Jacobian error", cap.out)]
-            assert len(errs) == 3  # two pos constraints, one velocity
+        for record in caplog.records:
+            if not record.name == "pika.corrections":
+                continue
+            # All records should be errors
+            assert record.levelno == logging.ERROR
+            assert record.message.startswith("Jacobian error")
 
     # -------------------------------------------
     # Caching
@@ -769,13 +783,8 @@ class TestCorrectionsProblem:
 # ------------------------------------------------------------------------------
 class TestShootingProblem:
     @pytest.fixture(scope="class")
-    def model(self):
-        earth, moon = loadBody("Earth"), loadBody("Moon")
-        return DynamicsModel(earth, moon)
-
-    @pytest.fixture(scope="class")
-    def origin(self, model):
-        return ControlPoint(model, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
+    def origin(self):
+        return ControlPoint(emModel, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
 
     def test_constructor(self):
         prob = ShootingProblem()
@@ -823,8 +832,8 @@ class TestShootingProblem:
         prob.rmSegments([seg, seg2])
         assert prob._segments == []
 
-    def test_adjacencyMatrix_fwrdTime(self, model):
-        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+    def test_adjacencyMatrix_fwrdTime(self):
+        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
         seg1 = Segment(points[0], 0.1, points[1])
         seg2 = Segment(points[1], 0.2, points[2])
 
@@ -836,8 +845,8 @@ class TestShootingProblem:
         assert isinstance(adjMat, np.ndarray)
         assert np.array_equal(adjMat, [[None, 0, None], [None, None, 1], [None] * 3])
 
-    def test_adjacencyMatrix_revTime(self, model):
-        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+    def test_adjacencyMatrix_revTime(self):
+        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
         seg1 = Segment(points[0], -0.1, points[1])
         seg2 = Segment(points[1], -0.2, points[2])
 
@@ -852,8 +861,8 @@ class TestShootingProblem:
     #   need to catch that with a good error message at the ShooterProblem level
 
     @pytest.mark.parametrize("sign", [1, -1])
-    def test_adjacencyMatrix_mixedTime(self, model, sign):
-        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+    def test_adjacencyMatrix_mixedTime(self, sign):
+        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
         seg1 = Segment(points[0], sign * 0.1, points[1])
         seg2 = Segment(points[0], -sign * 0.2, points[2])
 
@@ -865,8 +874,8 @@ class TestShootingProblem:
         assert np.array_equal(adjMat, [[None, 0, 1], [None] * 3, [None] * 3])
 
     @pytest.mark.parametrize("sign", [1, -1])
-    def test_adjacencyMatrix_invalid_doubledOrigin(self, model, sign):
-        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+    def test_adjacencyMatrix_invalid_doubledOrigin(self, sign):
+        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
         seg1 = Segment(points[0], sign * 0.1, points[1])
         seg2 = Segment(points[0], sign * 0.2, points[2])
 
@@ -885,8 +894,8 @@ class TestShootingProblem:
         assert "linked to two segments" in errors[0]
 
     @pytest.mark.parametrize("sign", [1, -1])
-    def test_adjacencyMatrix_invalid_tripleOrigin(self, model, sign):
-        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0, 3.0)]
+    def test_adjacencyMatrix_invalid_tripleOrigin(self, sign):
+        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0, 3.0)]
         seg1 = Segment(points[0], sign * 0.1, points[1])
         seg2 = Segment(points[0], -sign * 0.2, points[2])
         seg3 = Segment(points[0], sign * 0.3, points[3])
@@ -908,8 +917,8 @@ class TestShootingProblem:
 
     @pytest.mark.parametrize("sign1", [1, -1])
     @pytest.mark.parametrize("sign2", [1, -1])
-    def test_adjacencyMatrix_invalid_doubledTerminus(self, model, sign1, sign2):
-        points = [ControlPoint(model, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+    def test_adjacencyMatrix_invalid_doubledTerminus(self, sign1, sign2):
+        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
         seg1 = Segment(points[0], sign1 * 0.1, points[1])
         seg2 = Segment(points[2], sign2 * 0.2, points[1])
 
@@ -926,8 +935,8 @@ class TestShootingProblem:
         assert "Terminal control point" in errors[0]
 
     @pytest.mark.parametrize("sign", [1, -1])
-    def test_adjacencyMatrix_invalid_cycleSegment(self, model, sign):
-        points = [ControlPoint(model, v, [v] * 6) for v in [0.0]]
+    def test_adjacencyMatrix_invalid_cycleSegment(self, sign):
+        points = [ControlPoint(emModel, v, [v] * 6) for v in [0.0]]
         seg = Segment(points[0], sign * 0.1, points[0])
 
         prob = ShootingProblem()
@@ -945,21 +954,16 @@ class TestShootingProblem:
 
 # ------------------------------------------------------------------------------
 class TestDifferentialCorrector:
-    @pytest.fixture(scope="class")
-    def model(self):
-        earth, moon = loadBody("Earth"), loadBody("Moon")
-        return DynamicsModel(earth, moon)
-
-    def test_simpleCorrections(self, model):
+    def test_simpleCorrections(self):
         # Create an initial state with velocity states free
         q0 = Variable(
             [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], [True] * 3 + [False] * 3
         )
 
-        origin = ControlPoint(model, 0, q0)
+        origin = ControlPoint(emModel, 0, q0)
 
         # Target roughly halfway around
-        terminus = ControlPoint(model, 0, [0.82, 0.0, -0.57, 0.0, 0.0, 0.0])
+        terminus = ControlPoint(emModel, 0, [0.82, 0.0, -0.57, 0.0, 0.0, 0.0])
         segment = Segment(origin, 3.1505, terminus)
 
         problem = CorrectionsProblem()
@@ -982,10 +986,10 @@ class TestDifferentialCorrector:
         assert log["status"] == "converged"
         assert len(log["iterations"]) > 2
 
-    def test_multipleShooter(self, model):
+    def test_multipleShooter(self):
         q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         period = 6.311
-        prop = Propagator(model, dense=False)
+        prop = Propagator(emModel, dense=False)
         sol = prop.propagate(
             q0,
             [0, period],

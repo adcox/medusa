@@ -330,7 +330,7 @@ class AbstractDynamicsModel(ABC):
         nState = self.stateSize(VarGroups.STATE)
         nCol = int(sz / nState)
         if nCol > 1:
-            return np.reshape(y[nPre : nPre + sz], (nCol, nState))
+            return np.reshape(y[nPre : nPre + sz], (nState, nCol))
         else:
             return np.array(y[nPre : nPre + sz])
 

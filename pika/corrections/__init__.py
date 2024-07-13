@@ -833,17 +833,37 @@ class CorrectionsProblem:
     # -------------------------------------------
     # Jacobian
 
-    def jacobian(self):
+    def jacobian(self, numeric=False, stepSize=1e-4):
         """
         Get the Jacobian matrix, i.e., the partial derivative of the constraint
         vector with respect to the free variable vector. The rows of the matrix
         correspond to the scalar constraints and the columns of the matrix
         correspond to the scalar free variables.
 
+        Args:
+            numeric (bool, Optional): if False, the Jacobian is computed analytically.
+                Otherwise, the :func:`pika.numerics.derivative_multivar` method is
+                used to compute the Jacobian numerically.
+            stepSize (float, Optional): if ``numeric`` is True, this is the step
+                size for the ``derivative_multivar`` function.
+
         Returns:
             numpy.ndarray: the Jacobian matrix. This result is cached until either
             the free variables or constraints are updated.
         """
+        if numeric:
+            prob = deepcopy(self)
+
+            # A simple function to evaluate the constraint vector
+            def evalCons(freeVars):
+                prob.updateFreeVars(freeVars)
+                return copy(prob.constraintVec())
+
+            return numerics.derivative_multivar(
+                evalCons, copy(prob.freeVarVec()), stepSize
+            )
+            # TODO cache the numerical jacobian separately??
+
         if self._jacobian is None:
             self._jacobian = np.zeros((self.numConstraints, self.numFreeVars))
             # Loop through constraints and compute partials with respect to all
@@ -869,7 +889,7 @@ class CorrectionsProblem:
 
         return self._jacobian
 
-    def checkJacobian(self, stepSize=0.1, tol=1e-6, verbose=False):
+    def checkJacobian(self, stepSize=1e-4, tol=1e-6):
         """
         Compute a numerical Jacobian and compare against the analytically-computed
         one.
@@ -886,7 +906,8 @@ class CorrectionsProblem:
         values larger than the step size, the relative difference is computed as
         ``(numeric - analytical)/numeric``. For other Jacobian entries, the
         absolute difference, ``(numeric - analytical)`` is stored. The two are
-        deemed equal if each difference is less than ``tol``.
+        deemed equal if each difference is less than ``tol``. Messages about
+        inequality are logged to the "pika.corrections" logger at the ERROR level.
 
         This is not a foolproof method (numerics can be tricky) but is often a
         helpful tool in debugging partial derivative derivations.
@@ -897,8 +918,6 @@ class CorrectionsProblem:
             changes *substantially* as a result.
             tol (Optional, float): tolerance for equality between the numeric and
                 analytical Jacobian matrices
-            verbose (Optional, bool): if True, any Jacobian entries that are not
-                equal to the tolerance are described in command-line messages.
 
         Returns:
             bool: True if the numeric and analytical Jacobian matrices are equal
@@ -911,12 +930,13 @@ class CorrectionsProblem:
             prob.updateFreeVars(freeVars)
             return copy(prob.constraintVec())
 
-        numeric = numerics.derivative_multivar(evalCons, copy(prob.freeVarVec()), 0.1)
+        numeric = numerics.derivative_multivar(
+            evalCons, copy(prob.freeVarVec()), stepSize
+        )
 
         # Map indices to variable and constraint objects; used for better printouts
-        if verbose:
-            varMap = self.freeVarIndexMap_reversed()
-            conMap = self.constraintIndexMap_reversed()
+        varMap = self.freeVarIndexMap_reversed()
+        conMap = self.constraintIndexMap_reversed()
 
         # Compute absolute and relative differences and determine equality
         absDiff = numeric - analytic
@@ -931,24 +951,18 @@ class CorrectionsProblem:
                 if abs(relDiff[r, c]) > tol:
                     equal = False
 
-                    if verbose:
-                        # TODO get constraint and free variable vector
-                        console.print(
-                            f"[red]Jacobian error at ({r}, {c})[/]: "
-                            f"Expected = {numeric[r,c]}, Actual = {analytic[r,c]} "
-                            f"(Rel err = {relDiff[r,c]:e}"
-                        )
-                        con, var = conMap[r], varMap[c]
-                        console.print(
-                            "  [gray50]Constraint (sub-index {}) = {}[/]".format(
-                                r - self.constraintIndexMap()[con], con
-                            )
-                        )
-                        console.print(
-                            "  [gray50]Variable (sub-index {}) = {}[/]".format(
-                                c - self.freeVarIndexMap()[var], var
-                            )
-                        )
+                    con, var = conMap[r], varMap[c]
+                    conDetail = "Constraint (sub-index {}) = {}".format(
+                        r - self.constraintIndexMap()[con], con
+                    )
+                    varDetail = "Variable (sub-index {}) = {}".format(
+                        c - self.freeVarIndexMap()[var], var
+                    )
+                    logger.error(
+                        f"Jacobian error at ({r}, {c}): "
+                        f"Expected = {numeric[r,c]}, Actual = {analytic[r,c]} "
+                        f"(Rel err = {relDiff[r,c]:e}\n  {conDetail}\n  {varDetail}"
+                    )
 
         return equal
 
@@ -986,11 +1000,11 @@ class CorrectionsProblem:
             columns.add_renderable(Panel(indices, title=f"[b]{name}[/b]"))
         console.print(columns)
 
-    def printJacobian(self):
+    def printJacobian(self, numeric=False):
         """
         Print the Jacobian matrix to the screen
         """
-        jacobian = self.jacobian()
+        jacobian = self.jacobian(numeric=numeric)
         varMap = self.freeVarIndexMap_reversed()
         conMap = self.constraintIndexMap_reversed()
 
