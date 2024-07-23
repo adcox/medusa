@@ -25,17 +25,14 @@ class ContinuityConstraint(AbstractConstraint):
             # default to constraining all state variables
             indices = np.arange(len(segment.terminus.state.allVals))
 
-        # TODO does this need to be set to None initially and computed later?
-        self.unmaskedIx = segment.terminus.state.unmaskedIndices(indices)
-        if not len(self.unmaskedIx) == len(indices):
-            raise RuntimeError(
-                f"ContinuityConstraint cannot be applied to ix = {indices};"
-                f" only {len(self.unmaskedIx)} of these indices are free variables"
-            )
+        if not len(indices) == len(np.unique(indices)):
+            raise RuntimeError(f"Indices cannot have repeated values")
+
+        self.constrainedIx = sorted(indices)
 
     @property
     def size(self):
-        return len(self.unmaskedIx)
+        return len(self.constrainedIx)
 
     def clearCache(self):
         self.segment.resetProp()
@@ -43,8 +40,8 @@ class ContinuityConstraint(AbstractConstraint):
     def evaluate(self, freeVarIndexMap):
         # F = propFinalState - terminalState
         termVar = self.segment.terminus.state
-        propState = self.segment.state(-1)[~termVar.mask][self.unmaskedIx]
-        termState = termVar.freeVals[self.unmaskedIx]
+        propState = self.segment.state(-1)[self.constrainedIx]
+        termState = termVar.allVals[self.constrainedIx]
         return propState - termState
 
     def partials(self, freeVarIndexMap):
@@ -57,32 +54,31 @@ class ContinuityConstraint(AbstractConstraint):
         partials = {}
         if termVar in freeVarIndexMap:
             # Partials for terminal state are all -1
-            dF_dqf = np.zeros((self.size, termVar.numFree))
-            for count, ix in enumerate(self.unmaskedIx):
+            dF_dqf = np.zeros((self.size, termVar.values.size))
+            for count, ix in enumerate(self.constrainedIx):
                 dF_dqf[count, ix] = -1
+
             partials[termVar] = dF_dqf
 
         # Partials for other variables come from integrated solution; ask for them
         #   in decreasing order of complexity to take advantage of lazy propagation
         if paramVar in freeVarIndexMap:
             dState_dParams = self.segment.partials_state_wrt_params(-1)
-            partials[paramVar] = dState_dParams[~termVar.mask, :][self.unmaskedIx, :][
-                :, ~paramVar.mask
-            ]
+            partials[paramVar] = dState_dParams[self.constrainedIx, :]
 
         if epochVar in freeVarIndexMap:
             dState_dEpoch = self.segment.partials_state_wrt_epoch(-1)
-            partials[epochVar] = dState_dEpoch[~termVar.mask][self.unmaskedIx]
+            partials[epochVar] = dState_dEpoch[self.constrainedIx]
 
         if originVar in freeVarIndexMap:
             # rows of STM correspond to terminal state, cols to origin state
             stm = self.segment.partials_state_wrt_initialState(-1)
-            stm_free = stm[~termVar.mask, :][self.unmaskedIx, :][:, ~originVar.mask]
+            stm_free = stm[self.constrainedIx, :]
             partials[originVar] = stm_free
 
         if tofVar in freeVarIndexMap:
             dState_dtof = self.segment.partials_state_wrt_time(-1)
-            partials[tofVar] = dState_dtof[~termVar.mask][self.unmaskedIx]
+            partials[tofVar] = dState_dtof[self.constrainedIx]
 
         return partials
 
@@ -94,9 +90,9 @@ class VariableValueConstraint(AbstractConstraint):
     Args:
         variable (Variable): the variable to cosntrain
         values (numpy.ndarray of float): values for the variable. The size of
-            ``values`` must match free values in ``variable``, i.e., excluding
-            any masked elements. A ``None`` value in ``values`` indicates that
-            the corresponding free value in ``variable`` is unconstrained.
+            ``values`` must match the size of the variable regardless of its
+            masking. A ``None`` value in ``values`` indicates that the corresponding
+            free value in ``variable`` is unconstrained.
     """
 
     def __init__(self, variable, values):
@@ -104,10 +100,10 @@ class VariableValueConstraint(AbstractConstraint):
             raise ValueError("variable must be a Variable object")
 
         values = np.array(values, ndmin=1)
-        if not values.size == variable.numFree:
+        if not values.size == variable.values.size:
             raise ValueError(
                 f"Values has {values.size} elements, but must have same number "
-                f"as variable free values ({variable.numFree})"
+                f"as variable ({variable.values.size})"
             )
 
         self.variable = variable
@@ -122,16 +118,11 @@ class VariableValueConstraint(AbstractConstraint):
             # TODO handle more gracefully?
             raise RuntimeError(f"{self.variable} is not in free variable index map")
 
-        return (
-            self.variable.freeVals[~self.values.mask] - self.values[~self.values.mask]
-        )
-        # ix0 = freeVarIndexMap[self.variable]
-        # vecValues = freeVarVec[ix0 : ix0 + self.variable.numFree]
-        # return vecValues[~self.values.mask] - self.values[~self.values.mask]
+        return self.variable.allVals[~self.values.mask] - self.values[~self.values.mask]
 
     def partials(self, freeVarIndexMap):
         # Partial is 1 for each constrained variable, zero otherwise
-        deriv = np.zeros((self.size, self.variable.numFree))
+        deriv = np.zeros((self.size, self.variable.values.size))
         count = 0
         for ix, val in enumerate(self.values):
             if not self.values.mask[ix]:

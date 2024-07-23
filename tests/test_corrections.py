@@ -672,8 +672,8 @@ class TestCorrectionsProblem:
         "posMask, posVals",
         [
             [[0, 0, 0], [None, 2.0, 3.0]],
-            [[1, 0, 1], [1.0]],
-            [[0, 0, 1], [1.0, 2.0]],
+            [[1, 0, 1], [None, 1.0, None]],
+            [[0, 0, 1], [1.0, 2.0, None]],
         ],
     )
     def test_jacobian(self, posMask, posVals):
@@ -689,8 +689,8 @@ class TestCorrectionsProblem:
         "posMask, posVals",
         [
             [[0, 0, 0], [None, 2.0, 3.0]],
-            [[1, 0, 1], [1.0]],
-            [[0, 0, 1], [1.0, 2.0]],
+            [[1, 0, 1], [None, 1.0, None]],
+            [[0, 0, 1], [1.0, 2.0, None]],
         ],
     )
     def test_checkJacobian(self, posMask, posVals):

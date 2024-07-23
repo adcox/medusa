@@ -885,7 +885,12 @@ class CorrectionsProblem:
                         for rix, partials in zip(
                             cix + np.arange(constraint.size), partialMat
                         ):
-                            self._jacobian[rix, cols] = partials
+                            if len(partialMat.shape) > 1:
+                                self._jacobian[rix, cols] = partials[
+                                    ~partialVar.values.mask
+                                ]
+                            elif not partialVar.values.mask[0]:
+                                self._jacobian[rix, cols] = partials
 
         return self._jacobian
 

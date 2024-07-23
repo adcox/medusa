@@ -58,11 +58,10 @@ class TestContinuityConstraint:
     @pytest.mark.parametrize(
         "originMask, terminusMask, indices",
         [
-            [None, [0, 1, 0, 0, 0, 0], None],
-            [None, [0, 1, 0, 0, 0, 0], [0, 1, 2]],
+            [None, [0, 1, 0, 0, 0, 0], [0, 1, 1]],
         ],
     )
-    def test_constructor_incompatibleMasks(self, segment, indices):
+    def test_constructor_err(self, segment, indices):
         with pytest.raises(RuntimeError):
             pcons.ContinuityConstraint(segment, indices=indices)
 
@@ -76,6 +75,8 @@ class TestContinuityConstraint:
             [[0, 1, 0, 1, 1, 1], None, None],
             [[0, 0, 0, 1, 1, 1], None, [0, 1, 2]],
             [[0, 0, 0, 1, 1, 1], [0, 0, 0, 1, 1, 1], [0, 1, 2]],
+            [None, [0, 1, 0, 0, 0, 0], None],
+            [None, [0, 1, 0, 0, 0, 0], [0, 1, 2]],
         ],
     )
     def test_evaluate(self, segment, indices, problem):
@@ -96,6 +97,8 @@ class TestContinuityConstraint:
             [[0, 0, 0, 1, 1, 1], [0, 0, 0, 1, 1, 1], [0, 1, 2]],
             [[0, 1, 1, 1, 0, 1], None, [0, 4]],
             [None, [0, 1, 1, 1, 0, 1], [0, 4]],
+            [None, [0, 1, 0, 0, 0, 0], None],
+            [None, [0, 1, 0, 0, 0, 0], [0, 1, 2]],
         ],
     )
     def test_partials(self, segment, indices, problem):
@@ -107,12 +110,12 @@ class TestContinuityConstraint:
         assert segment.origin.state in partials
         dF_dq0 = partials[segment.origin.state]
         assert isinstance(dF_dq0, np.ndarray)
-        assert dF_dq0.shape == (con.size, segment.origin.state.numFree)
+        assert dF_dq0.shape == (con.size, segment.origin.state.values.size)
 
         assert segment.terminus.state in partials
         dF_dqf = partials[segment.terminus.state]
         assert isinstance(dF_dqf, np.ndarray)
-        assert dF_dqf.shape == (con.size, segment.terminus.state.numFree)
+        assert dF_dqf.shape == (con.size, segment.terminus.state.values.size)
 
         assert segment.tof in partials
         dF_dtof = partials[segment.tof]
@@ -216,7 +219,7 @@ class TestVariableValueConstraint:
         "var",
         [
             Variable([1.0, 2.0]),
-            Variable([1.0, 2.0, 3.0], [False, False, True]),
+            Variable([1.0, 2.0], [False, True]),
         ],
     )
     @pytest.mark.parametrize("values", [[0.0, 0.0], [None, 0.0], [None, None]])
@@ -232,7 +235,6 @@ class TestVariableValueConstraint:
         "var",
         [
             Variable([1.0]),  # incorrect number of elements
-            Variable([1.0, 2.0], [True, False]),  # incorrect number of free vars
             np.array([1.0, 2.0]),  # incorrect type
         ],
     )
@@ -244,7 +246,7 @@ class TestVariableValueConstraint:
         "var",
         [
             Variable([1.0, 2.0]),
-            Variable([1.0, 2.0, 3.0], [False, False, True]),
+            Variable([1.0, 2.0], [False, True]),
         ],
     )
     @pytest.mark.parametrize("values", [[0.0, 0.0], [None, 0.0], [None, None]])
@@ -252,9 +254,20 @@ class TestVariableValueConstraint:
         con = pcons.VariableValueConstraint(var, values)
         assert con.size == sum([v is not None for v in values])
 
-    @pytest.mark.parametrize("values", [[0.0, 0.0], [None, 0.0], [None, None]])
-    def test_evaluate(self, values):
-        var = Variable([1.0, 2.0])
+    @pytest.mark.parametrize(
+        "values, varMask",
+        [
+            [[0.0, 0.0], [0, 0]],
+            [[None, 0.0], [0, 0]],
+            [[None, None], [0, 0]],
+            [[0.0, 0.0], [1, 0]],
+            [[None, 0.0], [1, 0]],
+            [[None, 0.0], [0, 1]],
+            [[None, None], [1, 0]],
+        ],
+    )
+    def test_evaluate(self, values, varMask):
+        var = Variable([1.0, 2.0], mask=varMask)
         con = pcons.VariableValueConstraint(var, values)
         indexMap = {var: 3}
         conEval = con.evaluate(indexMap)
@@ -262,32 +275,38 @@ class TestVariableValueConstraint:
         assert isinstance(conEval, np.ndarray)
         assert conEval.size == con.size
 
-        # Constraint eval should use free variable values from the vector, NOT
-        #   from the object used to construct the constraint
         count = 0
         for ix in range(len(con.values)):
             if not con.values.mask[ix]:
-                assert conEval[count] == var.freeVals[ix] - con.values[ix]
+                assert conEval[count] == var.allVals[ix] - con.values[ix]
                 count += 1
 
-    @pytest.mark.parametrize("values", [[0.0, 0.0], [None, 0.0], [None, None]])
-    def test_partials(self, values):
-        var = Variable([1.0, 2.0])
+    @pytest.mark.parametrize(
+        "values, varMask",
+        [
+            [[0.0, 0.0], [0, 0]],
+            [[None, 0.0], [0, 0]],
+            [[None, None], [0, 0]],
+            [[0.0, 0.0], [1, 0]],
+            [[None, 0.0], [1, 0]],
+            [[None, 0.0], [0, 1]],
+            [[None, None], [1, 0]],
+        ],
+    )
+    def test_partials(self, values, varMask):
+        var = Variable([1.0, 2.0], mask=varMask)
         con = pcons.VariableValueConstraint(var, values)
-        indexMap = {var: 3}
-        partials = con.partials(indexMap)
+        problem = CorrectionsProblem()
+        problem.addVariables(var)
+        problem.addConstraints(con)
+
+        partials = con.partials(problem.freeVarIndexMap())
 
         assert isinstance(partials, dict)
         assert var in partials
         assert len(partials) == 1
-
-        assert partials[var].shape == (con.size, var.numFree)
-
-        count = 0
-        for ix in range(len(con.values)):
-            if not con.values.mask[ix]:
-                assert partials[var][count, ix] == 1
-                count += 1
+        assert partials[var].shape == (con.size, var.values.size)
+        assert problem.checkJacobian()
 
     def test_varsAreRefs(self):
         var = Variable([1.0, 2.0])
