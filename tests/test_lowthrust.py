@@ -32,23 +32,26 @@ class TestControlTerm:
     )
     def term(self, request):
         cls, args, kwargs = request.param[0], request.param[1], request.param[2]
-        return eval(cls)(*args, **kwargs)
+        obj = eval(cls)(*args, **kwargs)
+        obj.register(6, 0)
+        return obj
 
     @pytest.fixture
     def integArgs(self, term):
-        nCore = term.coreStateSize
+        nCore = term._coreStateSize
         t = 1.23
         y = np.arange(nCore)
         if term.numStates > 0:
             y = np.concatenate(y, np.arange(nCore, nCore + term.numStates))
 
         varGroups = (VarGroups.STATE,)
-        term.paramIx0 = 1
+        term._paramIx0 = 1
         return (t, y, varGroups, [99] + term.params)
 
     def test_constructor(self, term):
         assert isinstance(term, ControlTerm)
-        assert term.paramIx0 is None
+        assert term._paramIx0 == 0
+        assert term._coreStateSize == 6
 
     def test_epochIndependent(self, term):
         assert isinstance(term.epochIndependent, bool)
@@ -80,7 +83,7 @@ class TestControlTerm:
         sz = 1 if isinstance(val, float) else val.size
 
         assert isinstance(partials, np.ndarray)
-        assert partials.shape == (sz, term.coreStateSize)
+        assert partials.shape == (sz, term._coreStateSize)
 
         # Check partials
         # TODO separate core and ctrl states
@@ -142,7 +145,7 @@ class TestControlTerm:
         if term.numStates == 0:
             assert partials.size == 0
         else:
-            assert partials.shape == (term.coreStateSize, term.numStates)
+            assert partials.shape == (term._coreStateSize, term.numStates)
 
     def test_partials_ctrlStateDEQs_wrt_coreState(self, term, integArgs):
         partials = term.partials_ctrlStateDEQs_wrt_coreState(*integArgs)
@@ -151,7 +154,7 @@ class TestControlTerm:
         if term.numStates == 0:
             assert partials.size == 0
         else:
-            assert partials.shape == (term.numStates, term.coreStateSize)
+            assert partials.shape == (term.numStates, term._coreStateSize)
 
     def test_partials_ctrlStateDEQs_wrt_ctrlState(self, term, integArgs):
         partials = term.partials_ctrlStateDEQs_wrt_ctrlState(*integArgs)
@@ -187,18 +190,19 @@ class TestForceMassOrientLaw_noStates:
         force = ConstThrustTerm(0.011)
         mass = ConstMassTerm(1.0)
         orient = ConstOrientTerm(np.pi / 2, 0.02)
-        return ForceMassOrientLaw(force, mass, orient)
+        law = ForceMassOrientLaw(force, mass, orient)
+        law.register(6, 0)
+        return law
 
     @pytest.fixture
     def integArgs(self, law):
-        nCore = law.terms[0].coreStateSize
+        nCore = law.terms[0]._coreStateSize
         t = 1.23
         y = np.arange(nCore)
         if law.numStates > 0:
             y = np.concatenate(y, np.arange(nCore, nCore + law.numStates))
 
         varGroups = (VarGroups.STATE,)
-        law.registerParams(0)
         return (t, y, varGroups, law.params)
 
     def test_numStates(self, law):
@@ -219,13 +223,18 @@ class TestForceMassOrientLaw_noStates:
         assert isinstance(names, list)
         assert names == []  # TODO test with actual named states
 
-    def test_registerParams(self, law):
-        assert all(term.paramIx0 is None for term in law.terms)
+    def test_register(self, law):
+        law.register(4, 3)
+        for term in law.terms:
+            assert term._coreStateSize == 4
 
-        law.registerParams(3)
-        assert law.terms[0].paramIx0 == 3
-        assert law.terms[1].paramIx0 == law.terms[0].paramIx0 + len(law.terms[0].params)
-        assert law.terms[2].paramIx0 == law.terms[1].paramIx0 + len(law.terms[1].params)
+        assert law.terms[0]._paramIx0 == 3
+        assert law.terms[1]._paramIx0 == law.terms[0]._paramIx0 + len(
+            law.terms[0].params
+        )
+        assert law.terms[2]._paramIx0 == law.terms[1]._paramIx0 + len(
+            law.terms[1].params
+        )
 
     def test_params(self, law):
         params = law.params
@@ -250,7 +259,7 @@ class TestForceMassOrientLaw_noStates:
     def test_partials_accel_wrt_coreState(self, law, integArgs):
         partials = law.partials_accel_wrt_coreState(*integArgs)
         assert isinstance(partials, np.ndarray)
-        assert partials.shape == (3, law.terms[0].coreStateSize)
+        assert partials.shape == (3, law.terms[0]._coreStateSize)
 
         # Check partials
         # TODO separate core and ctrl states
@@ -316,14 +325,13 @@ class TestLowThrustCrtbpDynamics:
 
     @pytest.fixture
     def integArgs(self, law):
-        nCore = law.terms[0].coreStateSize
+        nCore = law.terms[0]._coreStateSize
         t = 1.23
         y = np.arange(nCore)
         if law.numStates > 0:
             y = np.concatenate(y, np.arange(nCore, nCore + law.numStates))
 
         varGroups = (VarGroups.STATE,)
-        law.registerParams(0)
         return (t, y, varGroups, law.params)
 
     @pytest.fixture

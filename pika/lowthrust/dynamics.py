@@ -18,9 +18,7 @@ class LowThrustCrtbpDynamics(CrtbpDynamics):
             raise TypeError("ctrlLaw must be a ControlLaw object")
 
         self.ctrlLaw = ctrlLaw
-
-        # Tell the control params where they exist in the param vector
-        self.ctrlLaw.registerParams(0)
+        self.ctrlLaw.register(6, 0)  # set coreStateSize and paramIx0
 
     @property
     def epochIndependent(self):

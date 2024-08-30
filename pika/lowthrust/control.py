@@ -28,8 +28,21 @@ class ControlTerm(ABC):
     """
 
     def __init__(self):
-        self.coreStateSize = 6  # TODO get from model
-        self.paramIx0 = None
+        self._coreStateSize = None
+        self._paramIx0 = None
+
+    def register(self, nCore, ix0):
+        """
+        Register the control law within the context of the full dynamics model
+
+        Args:
+            nCore (int): the number of core states, i.e., the number of state
+                variables excluding the control states
+            ix0 (int): the index of the first control parameter within the full
+                set of parameters.
+        """
+        self._coreStateSize = nCore
+        self._paramIx0 = ix0
 
     @property
     def epochIndependent(self):
@@ -166,7 +179,7 @@ class ControlTerm(ABC):
         if self.numStates == 0:
             return np.asarray([])
         else:
-            return np.zeros((self.coreStateSize, self.numStates))
+            return np.zeros((self._coreStateSize, self.numStates))
 
     def partials_ctrlStateDEQs_wrt_coreState(self, t, y, varGroups, params):
         """
@@ -186,7 +199,7 @@ class ControlTerm(ABC):
         if self.numStates == 0:
             return np.asarray([])
         else:
-            return np.zeros((self.numStates, self.coreStateSize))
+            return np.zeros((self.numStates, self._coreStateSize))
 
     def partials_ctrlStateDEQs_wrt_ctrlState(self, t, y, varGroups, params):
         """
@@ -265,10 +278,10 @@ class ConstThrustTerm(ControlTerm):
         return [self.thrust]
 
     def evalTerm(self, t, y, varGroups, params):
-        return params[self.paramIx0]
+        return params[self._paramIx0]
 
     def partials_term_wrt_coreState(self, t, y, varGroups, params):
-        return np.zeros((1, self.coreStateSize))
+        return np.zeros((1, self._coreStateSize))
 
     def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
         return np.asarray([])  # No control states
@@ -278,7 +291,7 @@ class ConstThrustTerm(ControlTerm):
 
     def partials_term_wrt_params(self, t, y, varGroups, params):
         partials = np.zeros((1, len(params)))
-        partials[0, self.paramIx0] = 1
+        partials[0, self._paramIx0] = 1
         return partials
 
 
@@ -301,10 +314,10 @@ class ConstMassTerm(ControlTerm):
         return [self.mass]
 
     def evalTerm(self, t, y, varGroups, params):
-        return params[self.paramIx0]
+        return params[self._paramIx0]
 
     def partials_term_wrt_coreState(self, t, y, varGroups, params):
-        return np.zeros((1, self.coreStateSize))
+        return np.zeros((1, self._coreStateSize))
 
     def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
         return np.asarray([])  # No control states
@@ -314,7 +327,7 @@ class ConstMassTerm(ControlTerm):
 
     def partials_term_wrt_params(self, t, y, varGroups, params):
         partials = np.zeros((1, len(params)))
-        partials[0, self.paramIx0] = 1
+        partials[0, self._paramIx0] = 1
         return partials
 
 
@@ -343,7 +356,7 @@ class ConstOrientTerm(ControlTerm):
         return [self.alpha, self.beta]
 
     def _getAngles(self, params):
-        return params[self.paramIx0], params[self.paramIx0 + 1]
+        return params[self._paramIx0], params[self._paramIx0 + 1]
 
     def evalTerm(self, t, y, varGroups, params):
         alpha, beta = self._getAngles(params)
@@ -356,7 +369,7 @@ class ConstOrientTerm(ControlTerm):
         )
 
     def partials_term_wrt_coreState(self, t, y, varGroups, params):
-        return np.zeros((3, self.coreStateSize))
+        return np.zeros((3, self._coreStateSize))
 
     def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
         return np.asarray([])  # no control states
@@ -367,12 +380,12 @@ class ConstOrientTerm(ControlTerm):
     def partials_term_wrt_params(self, t, y, varGroups, params):
         partials = np.zeros((3, len(params)))
         alpha, beta = self._getAngles(params)
-        partials[:, self.paramIx0] = [
+        partials[:, self._paramIx0] = [
             -np.cos(beta) * np.sin(alpha),
             np.cos(beta) * np.cos(alpha),
             0,
         ]
-        partials[:, self.paramIx0 + 1] = [
+        partials[:, self._paramIx0 + 1] = [
             -np.sin(beta) * np.cos(alpha),
             -np.sin(beta) * np.sin(alpha),
             np.cos(beta),
@@ -397,6 +410,23 @@ class ControlLaw(ABC):
             the control law
         params (list of float): the default parameter values for the control law
     """
+
+    def __init__(self):
+        self._coreStateSize = None
+        self._paramIx0 = None
+
+    def register(self, nCore, ix0):
+        """
+        Register the control law within the context of the full dynamics model
+
+        Args:
+            nCore (int): the number of core states, i.e., the number of state
+                variables excluding the control states
+            ix0 (int): the index of the first control parameter within the full
+                set of parameters.
+        """
+        self._coreStateSize = nCore
+        self._paramIx0 = ix0
 
     @abstractmethod
     def accelVec(self, t, y, varGroups, params):
@@ -627,16 +657,20 @@ class SeparableControlLaw(ControlLaw):
             [term.stateDiffEqs(t, y, varGroups, params) for term in self.terms]
         )
 
-    def registerParams(self, ix0):
+    def register(self, nCore, ix0):
         """
-        Set the ``paramIx0`` attribute of the control terms
+        Register the control law within the context of the dynamics model
 
         Args:
+            nCore (int): the number of core states, i.e., the number of state
+                variables excluding the control states
             ix0 (int): the index of the first control parameter within the full
                 set of parameters.
         """
+        super().register(nCore, ix0)
+
         for term in self.terms:
-            term.paramIx0 = ix0
+            term.register(nCore, ix0)
             ix0 += len(term.params)
 
     def partials_ctrlStateDEQs_wrt_coreState(self, t, y, varGroups, params):

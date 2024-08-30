@@ -176,6 +176,8 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
             to variables that are not included in the returned dict are assumed
             to be zero.
         """
+        # TODO document that the partials should not be masked by free variable
+        #    masks; that is accomplished by the jacobian() function
         pass
 
 

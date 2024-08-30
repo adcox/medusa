@@ -88,6 +88,7 @@ structures such as propagated segments and/or control points.
    :nosignatures:
 
    ~corrections.CorrectionsProblem
+   ~corrections.ShootingProblem
    ~corrections.Variable
    ~corrections.ControlPoint
    ~corrections.Segment
