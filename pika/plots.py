@@ -31,24 +31,53 @@ def _getVals(model, times, states, coords):
     return vals
 
 
-def plotSegment(ax, segment, coords, **kwargs):
-    if segment.propSol is None:
-        segment.propagate(VarGroups.STATE)
+def objToArray(obj, coords=["x", "y"]):
+    # Init
+    model, times, states = None, None, None
 
-    return (
-        plotPropagation(ax, segment.propSol, coords, **kwargs),
-        plotControlPoint(ax, segment.origin, coords, **kwargs),
-        plotControlPoint(ax, segment.terminus, coords, **kwargs),
-    )
+    if isinstance(obj, corrections.ShootingProblem):
+        vals = []  # TODO what is the right concatenation strategy?
+        for seg in obj._segments:
+            vals.append(objToArray(seg))
+        return vals
+
+    if isinstance(obj, corrections.Segment):
+        obj = obj.propSol
+
+    if isinstance(obj, scipy.optimize.OptimizeResult):
+        # TODO allow different time sampling if propSol.sol is not None?
+        model = obj.model
+        times = obj.t
+        states = obj.y
+    elif isinstance(obj, corrections.ControlPoint):
+        model = obj.model
+        times = obj.epoch.allVals[0]
+        states = obj.state.allVals
+
+    if any(x is None for x in [model, times, states]):
+        raise NotImplementedError(f"Could not convert {obj} to array data")
+
+    return _getVals(model, times, states, coords)
 
 
-def plotControlPoint(ax, point, coords, **kwargs):
-    marker = kwargs.get("marker", ".")
-    ms = kwargs.get("markersize", 10)
-    col = kwargs.get("color", "gray")
-
-    vals = _getVals(point.model, point.epoch.allVals[0], point.state.allVals, coords)
-    return ax.plot(*vals, c=col, marker=marker, markersize=ms)
+# def plotSegment(ax, segment, coords, **kwargs):
+#    if segment.propSol is None:
+#        segment.propagate(VarGroups.STATE)
+#
+#    return (
+#        plotPropagation(ax, segment.propSol, coords, **kwargs),
+#        plotControlPoint(ax, segment.origin, coords, **kwargs),
+#        plotControlPoint(ax, segment.terminus, coords, **kwargs),
+#    )
+#
+#
+# def plotControlPoint(ax, point, coords, **kwargs):
+#    marker = kwargs.get("marker", ".")
+#    ms = kwargs.get("markersize", 10)
+#    col = kwargs.get("color", "gray")
+#
+#    vals = _getVals(point.model, point.epoch.allVals[0], point.state.allVals, coords)
+#    return ax.plot(*vals, c=col, marker=marker, markersize=ms)
 
 
 def plotPrimaries(ax, model, coords):
@@ -67,13 +96,13 @@ def plotPrimaries(ax, model, coords):
     return handles
 
 
-def plotPropagation(ax, propSol, coords, **kwargs):
-    if getattr(propSol, "sol", None) is None:
-        vals = _getVals(propSol.model, propSol.t, propSol.y, coords)
-        return ax.plot(*vals, **kwargs)
-    else:
-        # TODO choose a sampling frequency and evaluate propSol.sol
-        raise NotImplementedError()
+# def plotPropagation(ax, propSol, coords, **kwargs):
+#    if getattr(propSol, "sol", None) is None:
+#        vals = _getVals(propSol.model, propSol.t, propSol.y, coords)
+#        return ax.plot(*vals, **kwargs)
+#    else:
+#        # TODO choose a sampling frequency and evaluate propSol.sol
+#        raise NotImplementedError()
 
 
 def plotTraj(obj, coords=["x", "y"], primaries=False, fig=None):
