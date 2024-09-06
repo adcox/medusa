@@ -1,4 +1,4 @@
-# Medusa
+# <img src="docs/source/_static/medusa_512.png" width=48> Medusa
 
 ![test status](https://github.com/adcox/medusa/actions/workflows/python-tests.yml/badge.svg)
 
