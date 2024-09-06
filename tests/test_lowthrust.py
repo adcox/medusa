@@ -376,18 +376,11 @@ class TestLowThrustCrtbpDynamics:
         prop = Propagator(model)
         prop.propagate(y0, tspan, params=model.ctrlLaw.params, varGroups=grp)
 
-    def test_checkPartials(self, model, caplog):
+    def test_checkPartials(self, model):
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(
             y0, [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
         )
         tspan = [1.0, 1.1]
 
-        with caplog.at_level(logging.DEBUG, logger="pika"):
-            assert model.checkPartials(y0, tspan, params=model.ctrlLaw.params, tol=1e-4)
-
-        for record in caplog.records:
-            if not record.name == "pika.dynamics":
-                continue
-
-            assert record.levelno == logging.INFO  # no error messages
+        assert model.checkPartials(y0, tspan, params=model.ctrlLaw.params, rtol=1e-4)

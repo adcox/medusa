@@ -184,13 +184,45 @@ class AbstractDynamicsModel(ABC):
         """
         pass
 
-    def checkPartials(self, y0, tspan, params=None, initStep=1e-4, tol=1e-6):
+    def checkPartials(
+        self,
+        y0,
+        tspan,
+        params=None,
+        initStep=1e-4,
+        rtol=1e-6,
+        atol=1e-8,
+        printTable=True,
+    ):
         """
-        This method logs information about the accuracy of the partials via the
-        "pika.dynamics" logger. Erroneous partial values are logged at ERROR
-        while all others are logged at INFO.
+        Check the partial derivatives included in the equations of motion
+
+        Args:
+            y0 (numpy.ndarray): afull state vector (includes all VarGroups) for
+                this model
+            tspan ([float]): a 2-element vector defining the start and end times
+                for numerical propagation
+            params (Optional, [float]): propagation parameters
+            initStep (Optional, float): the initial step size for the multivariate
+                numerical derivative function in :func:`numerics.derivative_multivar`
+            rtol (Optional, float): the numeric and analytical values are
+                equal when the absolute value of (numeric - analytic)/numeric
+                is less than ``rtol``
+            atol (Optional, float): the numeric and analytic values are equal
+                when the absolute value of (numeric - analytic) is less than ``atol``
+            printTable (Optional, bool): whether or not to print a table of the
+                partial derivatives, their expected (numeric) and actual (analytic)
+                values, and the relative and absolute errors between the expected
+                and actual values.
+
+        Returns:
+            bool: True if each partial derivative satisfies the relative *or*
+            absolute tolerance; False is returned if any of the partials fail
+            both tolerances.
         """
-        from pika import numerics
+        from rich.table import Table
+
+        from pika import console, numerics
         from pika.propagate import Propagator
 
         allVars = [
@@ -269,24 +301,41 @@ class AbstractDynamicsModel(ABC):
         relDiff = absDiff.copy()
         equal = True
         varNames = np.concatenate([self.varNames(grp) for grp in allVars[1:]])
+        table = Table(
+            "Status",
+            "Name",
+            "Expected",
+            "Actual",
+            "Rel Err",
+            "Abs Err",
+            title="Partial Derivative Check",
+        )
+
         for ix in range(sol_vec.size):
             # Compute relative difference for non-zero numeric values
             if abs(num_vec[ix]) > 1e-12:
                 relDiff[ix] = absDiff[ix] / abs(num_vec[ix])
 
-            if abs(relDiff[ix]) > tol:
+            relOk = abs(relDiff[ix]) <= rtol
+            rStyle = "i" if relOk else "u"
+            absOk = abs(absDiff[ix]) <= atol
+            aStyle = "i" if absOk else "u"
+
+            table.add_row(
+                "OK" if relOk or absOk else "ERR",
+                varNames[ix],
+                f"{num_vec[ix]:.4e}",
+                f"{sol_vec[ix]:.4e}",
+                f"[{rStyle}]{relDiff[ix]:.4e}[/{rStyle}]",
+                f"[{aStyle}]{absDiff[ix]:.4e}[/{aStyle}]",
+                style="blue" if relOk or absOk else "red",
+            )
+
+            if not (relOk or absOk):
                 equal = False
-                logger.error(
-                    f"Partial error in {ix+len(state0):02d} ({varNames[ix]}) is too large: "
-                    f"Expected = {num_vec[ix]:.4e}, Actual = {sol_vec[ix]:.4e} "
-                    f"(Rel err = {relDiff[ix]:.4e} > {tol:.2e})"
-                )
-            else:
-                logger.info(
-                    f"Partial error in {ix+len(state0):02d} ({varNames[ix]}) is ok: "
-                    f"Expected = {num_vec[ix]:.4e}, Actual = {sol_vec[ix]:.4e} "
-                    f"(Rel err = {relDiff[ix]:.4e}  <= {tol:.2e})"
-                )
+
+        if printTable:
+            console.print(table)
 
         return equal
 
