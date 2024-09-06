@@ -36,7 +36,6 @@ def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
     CON2 = CON * CON
 
     # Generalize to arbitrary dimensions
-    isMultiVar = not isinstance(x, float)
     x = np.asarray(x)
     step = np.asarray(step)
     stepSz = np.linalg.norm(step)
@@ -89,7 +88,7 @@ def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
 
     # Save metadata and return best derivative approximation
     meta.update({"err": err, "count": col, "tableau": tableau})
-    return deriv if isMultiVar else deriv.flat[0]
+    return deriv
 
 
 def derivative_multivar(func, x, step, nIter=10, maxRelChange=2.0):
@@ -118,7 +117,9 @@ def derivative_multivar(func, x, step, nIter=10, maxRelChange=2.0):
     for ix in range(x.size):
         pert = np.zeros(x.shape)
         pert[ix] = step[ix]
-        deriv[:, ix] = derivative(func, x, pert, nIter=nIter, maxRelChange=maxRelChange)
+        deriv[:, ix] = np.squeeze(
+            derivative(func, x, pert, nIter=nIter, maxRelChange=maxRelChange)
+        )
 
     # TODO can we report out the metadata for each variable?
     return deriv

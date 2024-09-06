@@ -121,7 +121,7 @@ class TestControlTerm:
         # TODO zero if epoch idependent
 
         # Check partials
-        func = lambda x: np.asarray(term.evalTerm(x, *integArgs[1:])).flatten()
+        func = lambda x: term.evalTerm(x, *integArgs[1:])
         numPartials = numerics.derivative(func, integArgs[0], 1e-4)
         np.testing.assert_allclose(partials, numPartials, atol=1e-8)
 
@@ -280,7 +280,7 @@ class TestForceMassOrientLaw_noStates:
         assert partials.shape == (3, 1)
 
         # Check partials
-        func = lambda x: np.asarray(law.accelVec(x, *integArgs[1:])).flatten()
+        func = lambda x: law.accelVec(x, *integArgs[1:])
         numPartials = numerics.derivative(func, integArgs[0], 1e-4)
         np.testing.assert_allclose(partials, numPartials, atol=1e-8)
 
