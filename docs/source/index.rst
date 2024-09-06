@@ -1,5 +1,4 @@
 Welcome to Medusa's documentation!
-================================
 
 Medusa is a python library that supports multi-body astrodynamics research.
 Capabilities include:
