@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # -------------------------------------
 # Project metadata
 [project]
-name = "pika"
+name = "medusa"
 version = "0.0.1"
 description = "Tools for multi-body astrodynamics research"
 #license = ?  # TODO define
@@ -46,15 +46,15 @@ test = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/adcox/pika"
-"Bug Reports" = "https://github.com/adcox/pika/issues"
-"Source" = "https://github.com/adcox/pika"
+"Homepage" = "https://github.com/adcox/medusa"
+"Bug Reports" = "https://github.com/adcox/medusa/issues"
+"Source" = "https://github.com/adcox/medusa"
 
 
 # -------------------------------------
 # Tools
 [tool.setuptools]
-packages = ["pika"]
+packages = ["medusa"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -63,7 +63,7 @@ addopts = "-ra"
 line-length = 88
 target-version = ['py39']
 include = '''
-pika/\.py?$
+medusa/\.py?$
 tests/\.py?$
 '''
 

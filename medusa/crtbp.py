@@ -4,9 +4,9 @@ Circular Restricted Three Body Problem Dynamics
 import numpy as np
 from numba import njit
 
-import pika.util as util
-from pika.data import GRAV_PARAM
-from pika.dynamics import AbstractDynamicsModel, VarGroups
+import medusa.util as util
+from medusa.data import GRAV_PARAM
+from medusa.dynamics import AbstractDynamicsModel, VarGroups
 
 
 class DynamicsModel(AbstractDynamicsModel):

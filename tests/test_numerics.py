@@ -4,7 +4,7 @@ Test numerics module
 import numpy as np
 import pytest
 
-from pika import numerics
+from medusa import numerics
 
 
 @pytest.mark.parametrize("val", [0.0, 1.0, np.pi, np.pi / 2, 5.123])

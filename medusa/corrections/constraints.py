@@ -7,7 +7,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-from pika.corrections import AbstractConstraint, Variable
+from medusa.corrections import AbstractConstraint, Variable
 
 
 class ContinuityConstraint(AbstractConstraint):

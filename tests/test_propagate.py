@@ -9,9 +9,9 @@ import scipy.integrate
 import scipy.optimize
 from conftest import loadBody
 
-from pika.crtbp import DynamicsModel
-from pika.dynamics import VarGroups
-from pika.propagate import (
+from medusa.crtbp import DynamicsModel
+from medusa.dynamics import VarGroups
+from medusa.propagate import (
     ApseEvent,
     BodyDistanceEvent,
     DistanceEvent,

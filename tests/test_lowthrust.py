@@ -6,13 +6,13 @@ import logging
 import pytest
 from conftest import loadBody
 
-from pika import numerics
-from pika.corrections import ControlPoint, Segment, ShootingProblem
-from pika.corrections.constraints import ContinuityConstraint
-from pika.dynamics import VarGroups
-from pika.lowthrust.control import *
-from pika.lowthrust.dynamics import LowThrustCrtbpDynamics
-from pika.propagate import Propagator
+from medusa import numerics
+from medusa.corrections import ControlPoint, Segment, ShootingProblem
+from medusa.corrections.constraints import ContinuityConstraint
+from medusa.dynamics import VarGroups
+from medusa.lowthrust.control import *
+from medusa.lowthrust.dynamics import LowThrustCrtbpDynamics
+from medusa.propagate import Propagator
 
 earth = loadBody("Earth")
 moon = loadBody("Moon")

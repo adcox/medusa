@@ -1,8 +1,8 @@
 ===========
-Pika API
+medusa API
 ===========
 
-.. module:: pika
+.. module:: medusa
 
 .. toctree::
    :maxdepth: 2
@@ -119,24 +119,24 @@ Full API
 Core Classes
 -------------
 
-.. automodule:: pika.data
+.. automodule:: medusa.data
    :members:
    :show-inheritance:
 
-.. automodule:: pika.dynamics
+.. automodule:: medusa.dynamics
    :members:
    :show-inheritance:
 
 
-.. automodule:: pika.propagate
+.. automodule:: medusa.propagate
    :members:
    :show-inheritance:
 
-.. automodule:: pika.corrections
+.. automodule:: medusa.corrections
    :members:
    :show-inheritance:
 
-.. automodule:: pika.corrections.constraints
+.. automodule:: medusa.corrections.constraints
    :members:
    :show-inheritance:
 
@@ -145,7 +145,7 @@ Core Classes
 Circular Restricted Three-Body Problem
 --------------------------------------
 
-.. automodule:: pika.crtbp
+.. automodule:: medusa.crtbp
    :members:
    :show-inheritance:
 
@@ -153,25 +153,25 @@ Circular Restricted Three-Body Problem
 Low-Thrust Modeling
 --------------------
 
-.. automodule:: pika.lowthrust.dynamics
+.. automodule:: medusa.lowthrust.dynamics
    :members:
    :show-inheritance:
 
-.. automodule:: pika.lowthrust.control
+.. automodule:: medusa.lowthrust.control
    :members:
    :show-inheritance:
 
 Utilities
 ----------------
 
-.. automodule:: pika.numerics
+.. automodule:: medusa.numerics
    :members:
    :show-inheritance:
 
-.. automodule:: pika.plots
+.. automodule:: medusa.plots
    :members:
    :show-inheritance:
 
-.. automodule:: pika.util
+.. automodule:: medusa.util
    :members:
    :show-inheritance:

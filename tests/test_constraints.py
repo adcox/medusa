@@ -5,15 +5,15 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
-import pika.corrections.constraints as pcons
-from pika.corrections import (
+import medusa.corrections.constraints as pcons
+from medusa.corrections import (
     ControlPoint,
     CorrectionsProblem,
     Segment,
     ShootingProblem,
     Variable,
 )
-from pika.crtbp import DynamicsModel as crtbpModel
+from medusa.crtbp import DynamicsModel as crtbpModel
 
 emModel = crtbpModel(loadBody("Earth"), loadBody("Moon"))
 
@@ -177,7 +177,7 @@ class TestContinuityConstraint:
         ],
     )
     def test_paramPartials(self, oMask, tMask, indices):
-        from pika.lowthrust.control import (
+        from medusa.lowthrust.control import (
             ConstMassTerm,
             ConstOrientTerm,
             ConstThrustTerm,
@@ -189,7 +189,7 @@ class TestContinuityConstraint:
         orient = ConstOrientTerm(-76.5 * np.pi / 180.0, 0.0)
         control = ForceMassOrientLaw(thrust, mass, orient)
 
-        from pika.lowthrust.dynamics import LowThrustCrtbpDynamics
+        from medusa.lowthrust.dynamics import LowThrustCrtbpDynamics
 
         model = LowThrustCrtbpDynamics(loadBody("Earth"), loadBody("Moon"), control)
 

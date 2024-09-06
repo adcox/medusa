@@ -8,8 +8,8 @@ from enum import IntEnum
 
 import numpy as np
 
-from pika import util
-from pika.data import Body
+from medusa import util
+from medusa.data import Body
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class AbstractDynamicsModel(ABC):
         properties: keyword arguments that define model properties
 
     Attributes:
-        bodies (tuple): a tuple of :class:`~pika.data.Body` objects
+        bodies (tuple): a tuple of :class:`~medusa.data.Body` objects
         properties (dict): the model properties; these are constant across all
             integrations; e.g., a mass ratio for the CR3BP, or the initial phasing
             of multiple bodies in a four-body problem.
@@ -222,8 +222,8 @@ class AbstractDynamicsModel(ABC):
         """
         from rich.table import Table
 
-        from pika import console, numerics
-        from pika.propagate import Propagator
+        from medusa import console, numerics
+        from medusa.propagate import Propagator
 
         allVars = [
             VarGroups.STATE,

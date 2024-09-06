@@ -4,7 +4,7 @@ Test Body Data
 import pytest
 from conftest import BODY_XML
 
-from pika.data import Body
+from medusa.data import Body
 
 
 def test_constructor_min():
