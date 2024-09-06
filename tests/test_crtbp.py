@@ -90,24 +90,16 @@ class TestDynamicsModel:
         paramNames = model.varNames(VarGroups.PARAM_PARTIALS)
         assert paramNames == []
 
-    def test_checkPartials(self, caplog):
+    def test_checkPartials(self):
         model = DynamicsModel(earth, moon)
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(
             y0, [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
         )
         tspan = [1.0, 2.0]
+        assert model.checkPartials(y0, tspan)
 
-        with caplog.at_level(logging.DEBUG, logger="pika"):
-            assert model.checkPartials(y0, tspan)
-
-        for record in caplog.records:
-            if not record.name == "pika.dynamics":
-                continue
-            # All records should be info (no errors)
-            assert record.levelno == logging.INFO
-
-    def test_checkPartials_fails(self, caplog):
+    def test_checkPartials_fails(self):
         model = DynamicsModel(earth, moon)
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(
@@ -116,12 +108,4 @@ class TestDynamicsModel:
         tspan = [1.0, 2.0]
 
         # An absurdly small tolerance will trigger failure
-        with caplog.at_level(logging.DEBUG, logger="pika"):
-            assert not model.checkPartials(y0, tspan, tol=1e-24)
-
-        for record in caplog.records:
-            if not record.name == "pika.dynamics":
-                continue
-
-            # All records should be errors
-            assert record.levelno == logging.ERROR
+        assert not model.checkPartials(y0, tspan, rtol=1e-24, atol=1e-24)
