@@ -383,7 +383,7 @@ class Segment:
             self.propSol.t[ix],
             self.propSol.y[:, ix],
             (VarGroups.STATE,),
-            self.propParams.values,
+            self.propParams.allVals,
         )
         return self.origin.model.extractVars(dy_dt, VarGroups.STATE)
 
