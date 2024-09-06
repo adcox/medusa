@@ -1035,6 +1035,8 @@ class CorrectionsProblem:
                 for val in row:
                     if val is None or val == 0.0:
                         rowText.append("[gray50]0[/gray50]")
+                    elif np.isnan(val):
+                        rowText.append("[red]NaN[/red]")
                     elif int(val) == val:
                         rowText.append(f"[green]{int(val):d}[/green]")
                     elif abs(np.log10(abs(val))) < 3:
