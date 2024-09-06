@@ -1,4 +1,17 @@
 Welcome to Medusa's documentation!
+==================================
+
+Medusa is a python library that supports multi-body astrodynamics research.
+Capabilities include:
+
+- Numerical integration
+- Differential corrections
+
+with support for the circular restricted three-body problem (CR3BP) as well as
+a low-thrust-augmented CR3BP.
+
+.. warning:: This library is under active development (i.e., pre-alpha) and is
+   not stable. The API may change at any time as the architecture is refined.
 
 Medusa is a python library that supports multi-body astrodynamics research.
 Capabilities include:
