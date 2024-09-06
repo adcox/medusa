@@ -6,8 +6,8 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 import scipy.optimize
 
-from pika import corrections
-from pika.dynamics import VarGroups
+from medusa import corrections
+from medusa.dynamics import VarGroups
 
 
 def _getVals(model, times, states, coords):

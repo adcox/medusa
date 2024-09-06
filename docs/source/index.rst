@@ -1,4 +1,4 @@
-Welcome to Pika's documentation!
+Welcome to medusa's documentation!
 ================================
 
 .. toctree::

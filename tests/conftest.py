@@ -20,7 +20,7 @@ def loadBody(name):
     Returns:
         Body: the body object
     """
-    from pika.data import Body
+    from medusa.data import Body
 
     return Body.fromXML(BODY_XML, name)
 
@@ -30,7 +30,7 @@ def loadBody(name):
 #    """
 #    Configure the logger for unit test output
 #    """
-#    logger = logging.getLogger("pika")
+#    logger = logging.getLogger("medusa")
 #    logger.handlers.clear()
 #    logger.addHandler(RichHandler(show_time=False, enable_link_path=False))
 #    logger.setLevel(logging.DEBUG)

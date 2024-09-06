@@ -13,9 +13,9 @@ from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
 
-from pika import console, numerics, util
-from pika.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
-from pika.propagate import Propagator
+from medusa import console, numerics, util
+from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
+from medusa.propagate import Propagator
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +201,7 @@ class ControlPoint(ModelBlockCopyMixin):
             input list of floats is converted to a :class:`Variable` with name "State"
         autoMask (Optional, bool): whether or not to auto-mask the ``epoch`` variable.
             If True and ``model``
-            :func:`~pika.dynamics.AbstractDynamicsModel.epochIndependent` is True,
+            :func:`~medusa.dynamics.AbstractDynamicsModel.epochIndependent` is True,
             the ``epoch`` variable has its mask set to True.
 
     Raises:
@@ -253,7 +253,7 @@ class ControlPoint(ModelBlockCopyMixin):
             ix (Optional, int): the index of the point within the ``solution``
             autoMask (Optional, bool): whether or not to auto-mask the ``epoch``
                 variable. If True and ``solution.model``
-                :func:`~pika.dynamics.AbstractDynamicsModel.epochIndependent`
+                :func:`~medusa.dynamics.AbstractDynamicsModel.epochIndependent`
                 is True, the ``epoch`` variable has its mask set to True.
 
         Returns:
@@ -289,7 +289,7 @@ class Segment:
             consistent with the state or epoch values at the end of the arc. The
             ``terminus`` is not used or modified by the Segment.
         prop (Optional, Propagator): the propagator to use. If ``None``, a
-            :class:`~pika.propagate.Propagator` is constructed for the ``origin``
+            :class:`~medusa.propagate.Propagator` is constructed for the ``origin``
             model with the ``dense`` flag set to False.
         propParams (Optional, list, numpy.ndarray, Variable): parameters to be
             passed to the model's equations of motion. If the input is not a
@@ -376,7 +376,7 @@ class Segment:
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
             :attr:`tof`, i.e., the time derivative of the
-            :attr:`~pika.dynamics.VarGroups.STATE` variables
+            :attr:`~medusa.dynamics.VarGroups.STATE` variables
         """
         self.propagate(VarGroups.STATE)
         dy_dt = self.origin.model.diffEqs(
@@ -396,7 +396,7 @@ class Segment:
 
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to the
-            :attr:`origin` ``state``, i.e., the :attr:`~pika.dynamics.VarGroups.STM`.
+            :attr:`origin` ``state``, i.e., the :attr:`~medusa.dynamics.VarGroups.STM`.
             The partials are returned in matrix form.
         """
         self.propagate([VarGroups.STATE, VarGroups.STM])
@@ -412,7 +412,7 @@ class Segment:
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
             the :attr:`origin` ``epoch``, i.e., the
-            :attr:`~pika.dynamics.VarGroups.EPOCH_PARTIALS`.
+            :attr:`~medusa.dynamics.VarGroups.EPOCH_PARTIALS`.
         """
         self.propagate([VarGroups.STATE, VarGroups.STM, VarGroups.EPOCH_PARTIALS])
         partials = self.origin.model.extractVars(
@@ -434,7 +434,7 @@ class Segment:
 
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
-            the :attr:`propParams`, i.e., the :attr:`~pika.dynamics.VarGroups.PARAM_PARTIALS`.
+            the :attr:`propParams`, i.e., the :attr:`~medusa.dynamics.VarGroups.PARAM_PARTIALS`.
         """
         self.propagate(
             [
@@ -844,7 +844,7 @@ class CorrectionsProblem:
 
         Args:
             numeric (bool, Optional): if False, the Jacobian is computed analytically.
-                Otherwise, the :func:`pika.numerics.derivative_multivar` method is
+                Otherwise, the :func:`medusa.numerics.derivative_multivar` method is
                 used to compute the Jacobian numerically.
             stepSize (float, Optional): if ``numeric`` is True, this is the step
                 size for the ``derivative_multivar`` function.
@@ -902,7 +902,7 @@ class CorrectionsProblem:
         one.
 
         The "Richardson's deferred approach to the limit" algorithm, implemented in
-        :func:`~pika.numerics.derivative`, is employed to compute the numerical
+        :func:`~medusa.numerics.derivative`, is employed to compute the numerical
         version of the Jacobian matrix. Each element of the free variable vector
         is perturbed, yielding a similarly perturbed constraint vector. By
         differencing these constraint vectors, a derivative with respect to the
@@ -914,7 +914,7 @@ class CorrectionsProblem:
         ``(numeric - analytical)/numeric``. For other Jacobian entries, the
         absolute difference, ``(numeric - analytical)`` is stored. The two are
         deemed equal if each difference is less than ``tol``. Messages about
-        inequality are logged to the "pika.corrections" logger at the ERROR level.
+        inequality are logged to the "medusa.corrections" logger at the ERROR level.
 
         This is not a foolproof method (numerics can be tricky) but is often a
         helpful tool in debugging partial derivative derivations.

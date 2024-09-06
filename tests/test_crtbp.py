@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
-from pika.crtbp import DynamicsModel
-from pika.data import Body
-from pika.dynamics import VarGroups
+from medusa.crtbp import DynamicsModel
+from medusa.data import Body
+from medusa.dynamics import VarGroups
 
 earth = loadBody("Earth")
 moon = loadBody("Moon")

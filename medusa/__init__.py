@@ -1,5 +1,5 @@
 """
-Pika Package Setup
+medusa Package Setup
 """
 
 from rich.console import Console

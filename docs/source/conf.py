@@ -11,7 +11,7 @@ sys.path.insert(0, rootpath)
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "Pika"
+project = "medusa"
 copyright = "2024, Andrew Cox"
 author = "Andrew Cox"
 release = "0.0.1"

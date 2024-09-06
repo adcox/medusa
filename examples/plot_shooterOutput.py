@@ -8,8 +8,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from rich.logging import RichHandler
 
-import pika.corrections.constraints as constraints
-from pika.corrections import (
+import medusa.corrections.constraints as constraints
+from medusa.corrections import (
     ControlPoint,
     DifferentialCorrector,
     L2NormConvergence,
@@ -17,12 +17,12 @@ from pika.corrections import (
     Segment,
     ShootingProblem,
 )
-from pika.data import Body
-from pika.dynamics.crtbp import DynamicsModel
-from pika.plots import TrajPlotter
-from pika.propagate import Propagator
+from medusa.data import Body
+from medusa.dynamics.crtbp import DynamicsModel
+from medusa.plots import TrajPlotter
+from medusa.propagate import Propagator
 
-logger = logging.getLogger("pika")
+logger = logging.getLogger("medusa")
 logger.addHandler(RichHandler(show_time=False, show_path=False, enable_link_path=False))
 logger.setLevel(logging.INFO)
 

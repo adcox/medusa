@@ -75,7 +75,7 @@ class ControlTerm(ABC):
         integration time.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         .. note:: This method is implemented to return zeros for all state variables
            by default. Override it to define custom behavior.
@@ -95,7 +95,7 @@ class ControlTerm(ABC):
         Evaluate the term.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             float, numpy.ndarray: the evaluated term
@@ -110,7 +110,7 @@ class ControlTerm(ABC):
         control parametrization.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives where the rows represent the
@@ -125,7 +125,7 @@ class ControlTerm(ABC):
         control state variables that are defined by *this term*.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives
@@ -138,7 +138,7 @@ class ControlTerm(ABC):
         Compute the partial derivatives of :func:`evalTerm` with respect to the epoch.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives where the rows represent the
@@ -153,7 +153,7 @@ class ControlTerm(ABC):
         parameters *this term* defines.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives where the rows represent the
@@ -164,11 +164,11 @@ class ControlTerm(ABC):
     def partials_coreStateDEQs_wrt_ctrlState(self, t, y, varGroups, params):
         """
         Compute the partial derivatives of the core state differential equations
-        (defined in :func:`~pika.dynamics.AbstractDynamicsModel.diffEqs`) with
+        (defined in :func:`~medusa.dynamics.AbstractDynamicsModel.diffEqs`) with
         respect to the control state variables that are defined by this term.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives where the rows represent the
@@ -188,7 +188,7 @@ class ControlTerm(ABC):
         control parameterization.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives where the rows represent the
@@ -207,7 +207,7 @@ class ControlTerm(ABC):
         the control state variables defined by this term.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives where the rows represent the
@@ -226,7 +226,7 @@ class ControlTerm(ABC):
         the epoch.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives where the rows represent the
@@ -245,7 +245,7 @@ class ControlTerm(ABC):
         the parameters defined by this term.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives where the rows represent the
@@ -434,7 +434,7 @@ class ControlLaw(ABC):
         Compute the acceleration vector delivered by this control law.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: a 3x1 array that gives the Cartesian acceleration
@@ -470,7 +470,7 @@ class ControlLaw(ABC):
         to integration time.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the time derivatives of the state variables. If this
@@ -486,7 +486,7 @@ class ControlLaw(ABC):
         parameterization.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives; the rows represent the elements
@@ -502,7 +502,7 @@ class ControlLaw(ABC):
         states defined by the control law.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives; the rows represent the elements
@@ -517,7 +517,7 @@ class ControlLaw(ABC):
         The partial derivatives of :func:`accelVec` with respect to the epoch.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives; the rows represent the elements
@@ -532,7 +532,7 @@ class ControlLaw(ABC):
         defined by the control law.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives; the rows represent the elements
@@ -548,7 +548,7 @@ class ControlLaw(ABC):
         control parameterization.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives; the rows represent the
@@ -564,7 +564,7 @@ class ControlLaw(ABC):
         variables defined by the control law.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives; the rows represent the
@@ -579,7 +579,7 @@ class ControlLaw(ABC):
         The partial derivatives of :func:`stateDiffEqs` with respect to the epoch.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives; the rows represent the
@@ -594,7 +594,7 @@ class ControlLaw(ABC):
         parameters defined by the control law.
 
         The input arguments are consistent with those passed to the
-        :func:`pika.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: the partial derivatives; the rows represent the

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
-from pika.dynamics import AbstractDynamicsModel, VarGroups
+from medusa.dynamics import AbstractDynamicsModel, VarGroups
 
 earth, moon, sun = loadBody("Earth"), loadBody("Moon"), loadBody("Sun")
 

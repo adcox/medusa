@@ -9,7 +9,7 @@ import numpy as np
 from numba import njit
 from scipy.integrate import solve_ivp
 
-from pika.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
+from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
 
 logger = logging.getLogger(__name__)
 

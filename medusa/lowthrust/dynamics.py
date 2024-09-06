@@ -3,9 +3,9 @@ Low-thrust-enabled dynamics models
 """
 import numpy as np
 
-from pika import util
-from pika.crtbp import DynamicsModel as CrtbpDynamics
-from pika.dynamics import VarGroups
+from medusa import util
+from medusa.crtbp import DynamicsModel as CrtbpDynamics
+from medusa.dynamics import VarGroups
 
 from .control import ControlLaw
 

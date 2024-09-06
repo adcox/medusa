@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
-import pika.corrections as corrections
-import pika.corrections.constraints as constraints
-from pika.corrections import (
+import medusa.corrections as corrections
+import medusa.corrections.constraints as constraints
+from medusa.corrections import (
     AbstractConstraint,
     ControlPoint,
     CorrectionsProblem,
@@ -19,9 +19,9 @@ from pika.corrections import (
     ShootingProblem,
     Variable,
 )
-from pika.crtbp import DynamicsModel
-from pika.dynamics import VarGroups
-from pika.propagate import Propagator
+from medusa.crtbp import DynamicsModel
+from medusa.dynamics import VarGroups
+from medusa.propagate import Propagator
 
 emModel = DynamicsModel(loadBody("Earth"), loadBody("Moon"))
 
@@ -712,11 +712,11 @@ class TestCorrectionsProblem:
         prob = self.jacProb([0, 0, 0], [None, 2.0, 3.0])
 
         # An absurdly small tolerance will trigger failure
-        with caplog.at_level(logging.DEBUG, logger="pika"):
+        with caplog.at_level(logging.DEBUG, logger="medusa"):
             assert not prob.checkJacobian(tol=1e-24)
 
         for record in caplog.records:
-            if not record.name == "pika.corrections":
+            if not record.name == "medusa.corrections":
                 continue
             # All records should be errors
             assert record.levelno == logging.ERROR
