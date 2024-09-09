@@ -19,7 +19,6 @@ from medusa.corrections import (
 )
 from medusa.data import Body
 from medusa.dynamics.crtbp import DynamicsModel
-from medusa.plots import TrajPlotter
 from medusa.propagate import Propagator
 
 logger = logging.getLogger("medusa")
@@ -65,6 +64,8 @@ solution, log = corrector.solve(problem)
 
 assert isinstance(solution, ShootingProblem)
 assert log["status"] == "converged"
+
+import medusa.plots as plots
 
 plotter = TrajPlotter()
 plotter.plot(solution, coords=["x", "y", "z"], plotPrimaries=True)

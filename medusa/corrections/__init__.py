@@ -526,6 +526,31 @@ class CorrectionsProblem:
         self._constraintVec = None
         self._jacobian = None
 
+    @classmethod
+    def fromIteration(cls, problem, correctorLog, it=-1):
+        """
+        Create a corrections problem from a logged corrector iteration
+
+        Args:
+            problem (CorrectionsProblem): a template corrections problem that
+                matches the free-variable and constraint structure of the
+                logged solutions. This can be either the initial guess or the
+                converged solution.
+            correctorLog (dict): the corrections log output from
+                :func:`DifferentialCorrector.solve`
+            it (Optional, int): the iteration index
+
+        Returns:
+            CorrectionsProblem: a corrections problem that matches the specified
+            iteration.
+        """
+        prob = deepcopy(problem)
+
+        freevars = correctorLog["iterations"][it]["free-vars"]
+        prob.updateFreeVars(freevars)
+
+        return prob
+
     # -------------------------------------------
     # Variables
 
@@ -1071,6 +1096,16 @@ class ShootingProblem(CorrectionsProblem):
 
         self._segments, self._points = [], []
         self._adjMat = None  # adjacency matrix
+
+    @property
+    def controlPoints(self):
+        # TODO unit test
+        return self._points
+
+    @property
+    def segments(self):
+        # TODO unit test
+        return self._segments
 
     def addSegments(self, segment):
         """
