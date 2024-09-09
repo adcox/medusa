@@ -54,7 +54,7 @@ test = [
 # -------------------------------------
 # Tools
 [tool.setuptools]
-packages = ["medusa"]
+packages = ["medusa", "medusa.corrections", "medusa.lowthrust"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
