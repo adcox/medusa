@@ -8,7 +8,7 @@ from conftest import loadBody
 
 from medusa import numerics
 from medusa.corrections import ControlPoint, Segment, ShootingProblem
-from medusa.corrections.constraints import ContinuityConstraint
+from medusa.corrections.constraints import StateContinuity
 from medusa.dynamics import VarGroups
 from medusa.lowthrust.control import *
 from medusa.lowthrust.dynamics import LowThrustCrtbpDynamics

@@ -142,13 +142,9 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
         pass
 
     @abstractmethod
-    def evaluate(self, freeVarIndexMap):
+    def evaluate(self):
         """
         Evaluate the constraint
-
-        Args:
-            freeVarIndexMap (dict): maps the first index (:class:`int`) of each⋅
-                :class:`Variable` within ``freeVars`` to the variable object
 
         Returns:
             numpy.ndarray of float: the value of the constraint funection; evaluates
@@ -780,9 +776,7 @@ class CorrectionsProblem:
         if self._constraintVec is None:
             self._constraintVec = np.zeros((self.numConstraints,))
             for constraint, ix in self.constraintIndexMap().items():
-                self._constraintVec[ix : ix + constraint.size] = constraint.evaluate(
-                    self.freeVarIndexMap()
-                )
+                self._constraintVec[ix : ix + constraint.size] = constraint.evaluate()
         return self._constraintVec
 
     def constraintIndexMap(self):
