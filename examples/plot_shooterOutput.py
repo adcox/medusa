@@ -54,7 +54,7 @@ problem.addSegments(segments)
 
 # Create continuity constraints
 for seg in segments:
-    problem.addConstraints(constraints.ContinuityConstraint(seg))
+    problem.addConstraints(constraints.Continuity(seg))
 
 problem.build()
 corrector = DifferentialCorrector()

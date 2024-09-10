@@ -1,14 +1,11 @@
 """
 Test Low-Thrust control and dynamics
 """
-import logging
-
 import pytest
 from conftest import loadBody
 
 from medusa import numerics
 from medusa.corrections import ControlPoint, Segment, ShootingProblem
-from medusa.corrections.constraints import ContinuityConstraint
 from medusa.dynamics import VarGroups
 from medusa.lowthrust.control import *
 from medusa.lowthrust.dynamics import LowThrustCrtbpDynamics

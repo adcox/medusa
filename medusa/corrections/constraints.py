@@ -2,22 +2,24 @@
 Core Corrections Class
 """
 import logging
+from enum import IntEnum
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
+from medusa import util
 from medusa.corrections import AbstractConstraint, Variable
 
 
-class ContinuityConstraint(AbstractConstraint):
+class StateContinuity(AbstractConstraint):
     """
-    Constrain the end of a segment to match a control point
+    Constrain the terminal end of a segment to match the control point state
     """
 
     def __init__(self, segment, indices=None):
         if segment.terminus is None:
-            raise RuntimeError("Cannot constraint continuity with terminus = None")
+            raise RuntimeError("Cannot constraint StateContinuity with terminus = None")
 
         self.segment = segment
 
@@ -26,7 +28,7 @@ class ContinuityConstraint(AbstractConstraint):
             indices = np.arange(len(segment.terminus.state.allVals))
 
         if not len(indices) == len(np.unique(indices)):
-            raise RuntimeError(f"Indices cannot have repeated values")
+            raise RuntimeError("Indices cannot have repeated values")
 
         self.constrainedIx = sorted(indices)
 
@@ -37,7 +39,7 @@ class ContinuityConstraint(AbstractConstraint):
     def clearCache(self):
         self.segment.resetProp()
 
-    def evaluate(self, freeVarIndexMap):
+    def evaluate(self):
         # F = propFinalState - terminalState
         termVar = self.segment.terminus.state
         propState = self.segment.state(-1)[self.constrainedIx]
@@ -83,7 +85,7 @@ class ContinuityConstraint(AbstractConstraint):
         return partials
 
 
-class VariableValueConstraint(AbstractConstraint):
+class VariableValue(AbstractConstraint):
     """
     Constrain a variable to have specified values
 
@@ -113,11 +115,7 @@ class VariableValueConstraint(AbstractConstraint):
     def size(self):
         return sum(~self.values.mask)
 
-    def evaluate(self, freeVarIndexMap):
-        if not self.variable in freeVarIndexMap:
-            # TODO handle more gracefully?
-            raise RuntimeError(f"{self.variable} is not in free variable index map")
-
+    def evaluate(self):
         return self.variable.allVals[~self.values.mask] - self.values[~self.values.mask]
 
     def partials(self, freeVarIndexMap):
@@ -130,3 +128,89 @@ class VariableValueConstraint(AbstractConstraint):
                 count += 1
 
         return {self.variable: deriv}
+
+
+class Inequality(AbstractConstraint):
+    """
+    Convert an equality constraint into an inequality constraint.
+
+    Args:
+        constraint (AbstractConstraint): the equality constraint
+        mode (Inequality.Mode): the inequality mode
+        defaultSlackVal(Optional, float): the default slack variable value if it
+            cannot be computed during instantiation
+    """
+
+    def __init__(self, constraint, mode, defaultSlackValue=1e-6):
+        if not isinstance(constraint, AbstractConstraint):
+            raise TypeError("constraint must be derived from AbstractConstraint")
+        if not isinstance(mode, Inequality.Mode):
+            raise TypeError("mode must be Inequality.Mode")
+
+        self.equalCon = constraint
+        self.mode = mode
+
+        # Define slack variable(s)
+        slackVals = [defaultSlackValue] * constraint.size
+        # Try to compute slack variable values such that the constraint is
+        #   initially satisfied
+        try:
+            F_equal = self.equalCon.evaluate()
+            sign = -1 * self.mode
+            for ix, F in enumerate(F_equal):
+                # Set the slack variable value if it is real-valued
+                if F * sign <= 0:
+                    slackVals[ix] = np.sqrt(-F * sign)
+        except Exception:
+            logger.debug("Could not update initial slack variable values")
+
+        self.slack = Variable(slackVals, name="Slack")
+
+    @property
+    def size(self):
+        return self.equalCon.size
+
+    @property
+    def importableVars(self):
+        impVars = util.toList(getattr(self.equalCon, "importableVars", []))
+        impVars.append(self.slack)
+        return impVars
+
+    def clearCache(self):
+        self.equalCon.clearCache()
+        self._slackInit = False  # Force re-init slack variable values
+
+    def evaluate(self):
+        vals = self.equalCon.evaluate()
+        return np.asarray(
+            [
+                val - float(self.mode) * slack * slack
+                for val, slack in zip(vals, self.slack.values)
+            ]
+        )
+
+    def partials(self, freeVarIndexMap):
+        # Compute partials of equality constraint
+        partials = self.equalCon.partials(freeVarIndexMap)
+
+        # Append partials specific to inequality: the slack variable(s)
+        deriv = np.zeros((self.size, self.slack.values.size))
+        count = 0
+        for ix, val in enumerate(self.slack.allVals):
+            if not self.slack.mask[ix]:
+                deriv[count, ix] = -2.0 * self.mode * val
+                count += 1
+
+        partials[self.slack] = deriv
+        return partials
+
+    class Mode(IntEnum):
+        LESS = -1
+        """
+        Less-than
+        """
+
+        GREATER = 1
+        """
+        Greater-than
+        """
