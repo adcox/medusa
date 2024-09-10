@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
-"""
-Test script to plot a ShooterProblem outout
-"""
 import logging
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 from rich.logging import RichHandler
 
 import medusa.corrections.constraints as constraints
 from medusa.corrections import (
     ControlPoint,
     DifferentialCorrector,
-    L2NormConvergence,
-    MinimumNormUpdate,
     Segment,
     ShootingProblem,
 )
+from medusa.crtbp import DynamicsModel
 from medusa.data import Body
-from medusa.dynamics.crtbp import DynamicsModel
+from medusa.dynamics import VarGroups
 from medusa.propagate import Propagator
 
 logger = logging.getLogger("medusa")
@@ -32,41 +27,64 @@ assert BODIES.exists(), "Cannot find body-data.xml file"
 earth = Body.fromXML(BODIES, "Earth")
 moon = Body.fromXML(BODIES, "Moon")
 model = DynamicsModel(earth, moon)
-q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
-period = 6.311
+q0 = [
+    6.4260881453410956e-1,
+    -5.9743133135791852e-27,
+    7.5004250912552883e-1,
+    -1.7560161626620319e-12,
+    3.5068017486608094e-1,
+    2.6279755586942682e-12,
+]
+period = 3.00
+
+q0Full = model.appendICs(q0, [VarGroups.STM])
+model.checkPartials(q0Full, [0, period])
+
 prop = Propagator(model, dense=False)
-sol = prop.propagate(
-    q0,
-    [0, period],
-    t_eval=[0.0, period / 4, period / 2, 3 * period / 4, period],
-)
+sol = prop.propagate(q0, [0, period], t_eval=[0.0, period / 2, period])
 points = [ControlPoint.fromProp(sol, ix) for ix in range(len(sol.t))]
 segments = [
-    Segment(points[ix], period / 4, terminus=points[ix + 1], prop=prop)
+    Segment(points[ix], period / 2, terminus=points[ix + 1], prop=prop)
     for ix in range(len(points) - 1)
 ]
 
 # make terminus of final arc the origin of the first
+segments[-1].tof = segments[0].tof
 segments[-1].terminus = points[0]
 
 problem = ShootingProblem()
 problem.addSegments(segments)
 
-# Create continuity constraints
 for seg in segments:
-    problem.addConstraints(constraints.Continuity(seg))
+    problem.addConstraints(constraints.StateContinuity(seg))
 
 problem.build()
+
+problem.printFreeVars()
+problem.printConstraints()
+problem.printJacobian()
+problem.checkJacobian()
+
 corrector = DifferentialCorrector()
-corrector.updateGenerator = MinimumNormUpdate()
-corrector.convergenceCheck = L2NormConvergence(1e-8)
 solution, log = corrector.solve(problem)
 
-assert isinstance(solution, ShootingProblem)
+solution.printJacobian()
+
 assert log["status"] == "converged"
+
+import matplotlib.pyplot as plt
 
 import medusa.plots as plots
 
-plotter = TrajPlotter()
-plotter.plot(solution, coords=["x", "y", "z"], plotPrimaries=True)
+convert = plots.ToCoordVals(["x", "y", "z"])
+segs = convert.segments(solution.segments)
+pts = convert.controlPoints(solution.controlPoints)
+
+fig = plt.figure()
+ax = fig.add_subplot(projection="3d")
+ax.plot(segs[0], segs[1], segs[2], lw=2)
+ax.plot(pts[0], pts[1], pts[2], c="k", ls="none", marker=".", ms=8)
+ax.grid()
+ax.set_aspect("equal")
+
 plt.show()

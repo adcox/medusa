@@ -522,8 +522,8 @@ class CorrectionsProblem:
         self._constraintVec = None
         self._jacobian = None
 
-    @classmethod
-    def fromIteration(cls, problem, correctorLog, it=-1):
+    @staticmethod
+    def fromIteration(problem, correctorLog, it=-1):
         """
         Create a corrections problem from a logged corrector iteration
 
