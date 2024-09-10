@@ -1,8 +1,6 @@
 """
 Test Low-Thrust control and dynamics
 """
-import logging
-
 import pytest
 from conftest import loadBody
 
