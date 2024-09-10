@@ -99,8 +99,8 @@ A variety of constraints can be added to the corrections problem.
    :nosignatures:
 
    ~corrections.AbstractConstraint
-   ~corrections.constraints.ContinuityConstraint
-   ~corrections.constraints.VariableValueConstraint
+   ~corrections.constraints.Continuity
+   ~corrections.constraints.VariableValue
 
 Corrections problems are solved by a differential corrector.
 

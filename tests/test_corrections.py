@@ -548,15 +548,15 @@ class TestCorrectionsProblem:
         assert prob._constraints == []  # empty to start
 
         var = Variable([1.1])
-        con = constraints.VariableValueConstraint(var, [0.0])
+        con = constraints.VariableValue(var, [0.0])
         prob.addConstraints(con)
         assert con in prob._constraints  # was added
 
     def test_addConstraints_multi(self):
         prob = CorrectionsProblem()
         var = Variable([1.0])
-        con1 = constraints.VariableValueConstraint(var, [0.0])
-        con2 = constraints.VariableValueConstraint(var, [2.0])
+        con1 = constraints.VariableValue(var, [0.0])
+        con2 = constraints.VariableValue(var, [2.0])
         prob.addConstraints([con1, con2])
         assert con1 in prob._constraints
         assert con2 in prob._constraints
@@ -564,7 +564,7 @@ class TestCorrectionsProblem:
     def test_addEmptyConstraint(self):
         prob = CorrectionsProblem()
         var = Variable([1.0])
-        con = constraints.VariableValueConstraint(var, [None])
+        con = constraints.VariableValue(var, [None])
         assert con.size == 0
 
         prob.addConstraints(con)
@@ -574,7 +574,7 @@ class TestCorrectionsProblem:
     def test_rmConstraints(self):
         prob = CorrectionsProblem()
         var = Variable([1.1])
-        con = constraints.VariableValueConstraint(var, [0.0])
+        con = constraints.VariableValue(var, [0.0])
         prob.addConstraints(con)
         prob.rmConstraints(con)
 
@@ -583,8 +583,8 @@ class TestCorrectionsProblem:
     def test_rmConstraints_multi(self):
         prob = CorrectionsProblem()
         var = Variable([1.0])
-        con1 = constraints.VariableValueConstraint(var, [0.0])
-        con2 = constraints.VariableValueConstraint(var, [2.0])
+        con1 = constraints.VariableValue(var, [0.0])
+        con2 = constraints.VariableValue(var, [2.0])
         prob.addConstraints([con1, con2])
         prob.rmConstraints([con1, con2])
         assert prob._constraints == []
@@ -592,7 +592,7 @@ class TestCorrectionsProblem:
     def test_rmConstraints_missing(self):
         prob = CorrectionsProblem()
         var = Variable([1.1])
-        con = constraints.VariableValueConstraint(var, [0.0])
+        con = constraints.VariableValue(var, [0.0])
 
         # Should do nothing if asked to remove a constraint that hasn't been added
         # TODO check logging?
@@ -601,7 +601,7 @@ class TestCorrectionsProblem:
     def test_clearConstraints(self):
         prob = CorrectionsProblem()
         var = Variable([1.1])
-        con = constraints.VariableValueConstraint(var, [0.0])
+        con = constraints.VariableValue(var, [0.0])
         prob.addConstraints(con)
         prob.clearConstraints()
 
@@ -610,7 +610,7 @@ class TestCorrectionsProblem:
     def test_constraintIndexMap(self):
         prob = CorrectionsProblem()
         var = Variable([1.1])
-        con = constraints.VariableValueConstraint(var, [0.0])
+        con = constraints.VariableValue(var, [0.0])
         prob.addConstraints(con)
 
         indexMap = prob.constraintIndexMap()
@@ -622,7 +622,7 @@ class TestCorrectionsProblem:
         prob = CorrectionsProblem()
         var = Variable([1.1])
         prob.addVariables(var)
-        con = constraints.VariableValueConstraint(var, [0.0])
+        con = constraints.VariableValue(var, [0.0])
         prob.addConstraints(con)
 
         vec = prob.constraintVec()
@@ -633,10 +633,10 @@ class TestCorrectionsProblem:
     @pytest.mark.parametrize(
         "cons",
         [
-            constraints.VariableValueConstraint(Variable([1.0]), [1.0]),
+            constraints.VariableValue(Variable([1.0]), [1.0]),
             [
-                constraints.VariableValueConstraint(Variable([1.0]), [1.0]),
-                constraints.VariableValueConstraint(Variable([2.0]), [2.1]),
+                constraints.VariableValue(Variable([1.0]), [1.0]),
+                constraints.VariableValue(Variable([2.0]), [2.1]),
             ],
         ],
     )
@@ -657,8 +657,8 @@ class TestCorrectionsProblem:
         pos = Variable([1.0, 2.0, 3.0], mask=posMask)
         vel = Variable([4.0, 5.0, 6.0])
 
-        matchPos = constraints.VariableValueConstraint(pos, posVals)
-        matchDX = constraints.VariableValueConstraint(vel, [4.01, None, None])
+        matchPos = constraints.VariableValue(pos, posVals)
+        matchDX = constraints.VariableValue(vel, [4.01, None, None])
 
         prob.addVariables(pos)
         prob.addVariables(vel)
@@ -751,7 +751,7 @@ class TestCorrectionsProblem:
     def test_caching(self):
         prob = CorrectionsProblem()
         var = Variable([0, 1, 2])
-        con = constraints.VariableValueConstraint(var, [None, 1.1, None])
+        con = constraints.VariableValue(var, [None, 1.1, None])
         prob.addVariables(var)
         prob.addConstraints(con)
         self.assertCached(prob)  # all caches are empty
@@ -769,7 +769,7 @@ class TestCorrectionsProblem:
 
         self.clearCache(prob)
         prob.constraintVec()
-        self.assertCached(prob, fMap=True, cMap=True, cVec=True)
+        self.assertCached(prob, fMap=False, cMap=True, cVec=True)
 
         self.clearCache(prob)
         prob.jacobian()
@@ -971,9 +971,7 @@ class TestDifferentialCorrector:
         problem.addVariables(segment.tof)
 
         # Constrain the position at the end of the arc to match the terminus
-        problem.addConstraints(
-            constraints.ContinuityConstraint(segment, indices=[0, 1, 2])
-        )
+        problem.addConstraints(constraints.StateContinuity(segment, indices=[0, 1, 2]))
 
         corrector = DifferentialCorrector()
         solution, log = corrector.solve(problem)
@@ -1011,9 +1009,9 @@ class TestDifferentialCorrector:
         problem = ShootingProblem()
         problem.addSegments(segments)
 
-        # Create continuity constraints
+        # Create StateContinuity constraints
         for seg in segments:
-            problem.addConstraints(constraints.ContinuityConstraint(seg))
+            problem.addConstraints(constraints.StateContinuity(seg))
 
         problem.build()
 

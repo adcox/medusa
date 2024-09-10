@@ -9,6 +9,7 @@ import medusa.corrections.constraints as pcons
 from medusa.corrections import (
     ControlPoint,
     CorrectionsProblem,
+    DifferentialCorrector,
     Segment,
     ShootingProblem,
     Variable,
@@ -18,32 +19,37 @@ from medusa.crtbp import DynamicsModel as crtbpModel
 emModel = crtbpModel(loadBody("Earth"), loadBody("Moon"))
 
 
-class TestContinuityConstraint:
-    @pytest.fixture
-    def origin(self, originMask):
-        # IC for EM L3 Vertical
-        state = Variable([0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], originMask)
-        return ControlPoint(emModel, 0.1, state)
+# ------------------------------------------------------------------------------
+# Fixtures to create a simple corrections problem
+# ------------------------------------------------------------------------------
+@pytest.fixture
+def origin(originMask):
+    # IC for EM L3 Vertical
+    state = Variable([0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], originMask)
+    return ControlPoint(emModel, 0.1, state)
 
-    @pytest.fixture
-    def terminus(self, terminusMask):
-        state = Variable([0.0] * 6, terminusMask)
-        return ControlPoint(emModel, 1.1, state)
 
-    @pytest.fixture
-    def segment(self, origin, terminus):
-        return Segment(origin, 1.0, terminus=terminus)
+@pytest.fixture
+def terminus(terminusMask):
+    state = Variable([0.0] * 6, terminusMask)
+    return ControlPoint(emModel, 1.1, state)
 
-    @pytest.fixture
-    def problem(self, segment):
-        prob = CorrectionsProblem()
-        prob.addVariables(segment.origin.state)
-        prob.addVariables(segment.terminus.state)
-        prob.addVariables(segment.tof)
-        prob.addVariables(segment.propParams)
 
-        return prob
+@pytest.fixture
+def segment(origin, terminus):
+    return Segment(origin, 1.0, terminus=terminus)
 
+
+@pytest.fixture
+def problem(segment):
+    prob = ShootingProblem()
+    prob.addSegments(segment)
+    prob.build()
+
+    return prob
+
+
+class TestStateContinuity:
     @pytest.mark.parametrize(
         "originMask, terminusMask, indices",
         [
@@ -53,7 +59,7 @@ class TestContinuityConstraint:
         ],
     )
     def test_constructor(self, segment, indices):
-        con = pcons.ContinuityConstraint(segment, indices=indices)
+        con = pcons.StateContinuity(segment, indices=indices)
 
     @pytest.mark.parametrize(
         "originMask, terminusMask, indices",
@@ -63,7 +69,7 @@ class TestContinuityConstraint:
     )
     def test_constructor_err(self, segment, indices):
         with pytest.raises(RuntimeError):
-            pcons.ContinuityConstraint(segment, indices=indices)
+            pcons.StateContinuity(segment, indices=indices)
 
     @pytest.mark.parametrize(
         "originMask, terminusMask, indices",
@@ -80,8 +86,8 @@ class TestContinuityConstraint:
         ],
     )
     def test_evaluate(self, segment, indices, problem):
-        con = pcons.ContinuityConstraint(segment, indices=indices)
-        err = con.evaluate(problem.freeVarIndexMap())
+        con = pcons.StateContinuity(segment, indices=indices)
+        err = con.evaluate()
         assert isinstance(err, np.ndarray)
         assert err.size == con.size
 
@@ -102,7 +108,7 @@ class TestContinuityConstraint:
         ],
     )
     def test_partials(self, segment, indices, problem):
-        con = pcons.ContinuityConstraint(segment, indices=indices)
+        con = pcons.StateContinuity(segment, indices=indices)
         partials = con.partials(problem.freeVarIndexMap())
 
         assert isinstance(partials, dict)
@@ -149,8 +155,8 @@ class TestContinuityConstraint:
         prob = CorrectionsProblem()
         prob.addVariables(segment.origin.state)
         prob.addVariables(segment.tof)
-        con = pcons.ContinuityConstraint(segment, indices=indices)
-        err = con.evaluate(prob.freeVarIndexMap())
+        con = pcons.StateContinuity(segment, indices=indices)
+        err = con.evaluate()
         assert isinstance(err, np.ndarray)
         assert err.size == con.size
 
@@ -199,7 +205,7 @@ class TestContinuityConstraint:
         origin = ControlPoint(model, 0.0, state0)
         terminus = ControlPoint(model, 0.0, statef)
         segment = Segment(origin, 1.0, terminus, propParams=control.params)
-        con = pcons.ContinuityConstraint(segment, indices=indices)
+        con = pcons.StateContinuity(segment, indices=indices)
 
         prob = ShootingProblem()
         prob.addSegments(segment)
@@ -214,7 +220,7 @@ class TestContinuityConstraint:
         assert not all(x == 0.0 for x in dF_dp.flat)
 
 
-class TestVariableValueConstraint:
+class TestVariableValue:
     @pytest.mark.parametrize(
         "var",
         [
@@ -224,7 +230,7 @@ class TestVariableValueConstraint:
     )
     @pytest.mark.parametrize("values", [[0.0, 0.0], [None, 0.0], [None, None]])
     def test_constructor(self, var, values):
-        con = pcons.VariableValueConstraint(var, values)
+        con = pcons.VariableValue(var, values)
         assert con.variable == var
 
         assert isinstance(con.values, np.ma.MaskedArray)
@@ -240,7 +246,7 @@ class TestVariableValueConstraint:
     )
     def test_constructor_errors(self, var):
         with pytest.raises(ValueError):
-            pcons.VariableValueConstraint(var, [0.0, 0.0])
+            pcons.VariableValue(var, [0.0, 0.0])
 
     @pytest.mark.parametrize(
         "var",
@@ -251,7 +257,7 @@ class TestVariableValueConstraint:
     )
     @pytest.mark.parametrize("values", [[0.0, 0.0], [None, 0.0], [None, None]])
     def test_size(self, var, values):
-        con = pcons.VariableValueConstraint(var, values)
+        con = pcons.VariableValue(var, values)
         assert con.size == sum([v is not None for v in values])
 
     @pytest.mark.parametrize(
@@ -268,9 +274,8 @@ class TestVariableValueConstraint:
     )
     def test_evaluate(self, values, varMask):
         var = Variable([1.0, 2.0], mask=varMask)
-        con = pcons.VariableValueConstraint(var, values)
-        indexMap = {var: 3}
-        conEval = con.evaluate(indexMap)
+        con = pcons.VariableValue(var, values)
+        conEval = con.evaluate()
 
         assert isinstance(conEval, np.ndarray)
         assert conEval.size == con.size
@@ -295,7 +300,7 @@ class TestVariableValueConstraint:
     )
     def test_partials(self, values, varMask):
         var = Variable([1.0, 2.0], mask=varMask)
-        con = pcons.VariableValueConstraint(var, values)
+        con = pcons.VariableValue(var, values)
         problem = CorrectionsProblem()
         problem.addVariables(var)
         problem.addConstraints(con)
@@ -310,13 +315,91 @@ class TestVariableValueConstraint:
 
     def test_varsAreRefs(self):
         var = Variable([1.0, 2.0])
-        con = pcons.VariableValueConstraint(var, [0.0, 1.0])
-        indexMap = {var: 0}
+        con = pcons.VariableValue(var, [0.0, 1.0])
 
-        conEval = con.evaluate(indexMap)
+        conEval = con.evaluate()
         assert np.array_equal(conEval, [1.0, 1.0])
 
         # Update variable
         var.values[:] = [0.0, 1.0]
-        conEval2 = con.evaluate(indexMap)
+        conEval2 = con.evaluate()
         assert np.array_equal(conEval2, [0.0, 0.0])
+
+
+class TestInequalityConstraint:
+    @pytest.mark.parametrize(
+        "mode", [pcons.Inequality.Mode.LESS, pcons.Inequality.Mode.GREATER]
+    )
+    def test_constructor(self, mode):
+        var = Variable([1.0, 2.0])
+        values = [1.1, 1.8]
+        eqCon = pcons.VariableValue(var, values)
+        ineqCon = pcons.Inequality(eqCon, mode, defaultSlackValue=1e-3)
+
+        assert id(ineqCon.equalCon) == id(eqCon)
+        assert ineqCon.mode == mode
+        assert isinstance(ineqCon.importableVars, list)
+        assert len(ineqCon.importableVars) == 1
+        assert ineqCon.importableVars[0] == ineqCon.slack
+        assert ineqCon.slack.values.size == len(values)
+
+        # Check that slack values have been intelligently selected
+        if mode < 0:  # less than
+            assert ineqCon.slack.values[0] == pytest.approx(np.sqrt(0.1), 1e-6)
+            assert ineqCon.slack.values[1] == 1e-3  # default value
+        else:
+            assert ineqCon.slack.values[0] == 1e-3  # default value
+            assert ineqCon.slack.values[1] == pytest.approx(np.sqrt(0.2), 1e-6)
+
+    @pytest.mark.parametrize(
+        "mode", [pcons.Inequality.Mode.LESS, pcons.Inequality.Mode.GREATER]
+    )
+    def test_evaluate(self, mode):
+        var = Variable([1.0, 2.0])
+        values = [1.1, 1.8]
+        eqCon = pcons.VariableValue(var, values)
+        ineqCon = pcons.Inequality(eqCon, mode)
+
+        conVals = ineqCon.evaluate()
+        assert isinstance(conVals, np.ndarray)
+        assert conVals.size == len(values)
+
+    @pytest.mark.parametrize(
+        "mode", [pcons.Inequality.Mode.LESS, pcons.Inequality.Mode.GREATER]
+    )
+    def test_partials(self, mode):
+        var = Variable([1.0, 2.0])
+        values = [1.1, 1.8]
+        eqCon = pcons.VariableValue(var, values)
+        ineqCon = pcons.Inequality(eqCon, mode)
+        indexMap = {var: 0}
+
+        partials = ineqCon.partials(indexMap)
+        assert isinstance(partials, dict)
+        assert var in partials
+        assert ineqCon.slack in partials
+        assert len(list(partials.keys())) == 2
+
+    @pytest.mark.parametrize("originMask, terminusMask", [[None, None]])
+    @pytest.mark.parametrize(
+        "mode", [pcons.Inequality.Mode.LESS, pcons.Inequality.Mode.GREATER]
+    )
+    def test_inProblem(self, segment, problem, mode):
+        # baseline TOF is 1.0
+        eqCon = pcons.VariableValue(segment.tof, [2.0])
+        ineqCon = pcons.Inequality(eqCon, mode, defaultSlackValue=1e-3)
+        problem.addConstraints(ineqCon)
+
+        solver = DifferentialCorrector()
+        solution, log = solver.solve(problem)
+
+        assert log["status"] == "converged"
+
+        tof = solution._segments[0].tof.values[0]
+        if mode > 0:  # greater-than
+            assert len(log["iterations"]) > 1
+            assert tof > eqCon.values[0]
+        else:
+            # Is satisfied without any iterations
+            assert len(log["iterations"]) == 1
+            assert tof < eqCon.values[0]
