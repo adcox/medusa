@@ -4,6 +4,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 import os
 import sys
+from importlib import metadata
 
 rootpath = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 sys.path.insert(0, rootpath)
@@ -14,7 +15,7 @@ sys.path.insert(0, rootpath)
 project = "medusa"
 copyright = "2024, Andrew Cox"
 author = "Andrew Cox"
-release = "0.0.1"
+release = metadata.version("medusa")
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
