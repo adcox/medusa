@@ -1,5 +1,5 @@
 """
-medusa Package Setup
+Medusa Package
 """
 
 from rich.console import Console

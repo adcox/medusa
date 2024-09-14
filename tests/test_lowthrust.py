@@ -1,6 +1,7 @@
 """
 Test Low-Thrust control and dynamics
 """
+import numpy as np
 import pytest
 from conftest import loadBody
 
@@ -8,8 +9,8 @@ from medusa import numerics
 from medusa.corrections import ControlPoint, Segment, ShootingProblem
 from medusa.corrections.constraints import StateContinuity
 from medusa.dynamics import VarGroups
-from medusa.lowthrust.control import *
-from medusa.lowthrust.dynamics import LowThrustCrtbpDynamics
+from medusa.dynamics.lowthrust import *
+from medusa.dynamics.lowthrust.crtbp import DynamicsModel as LTCrtbpDynamicsModel
 from medusa.propagate import Propagator
 
 earth = loadBody("Earth")
@@ -313,7 +314,7 @@ class TestForceMassOrientLaw_noStates:
         assert partials.size == 0
 
 
-class TestLowThrustCrtbpDynamics:
+class TestLTCrtbpDynamicsModel:
     @pytest.fixture()
     def law(self):
         force = ConstThrustTerm(0.011)
@@ -334,7 +335,7 @@ class TestLowThrustCrtbpDynamics:
 
     @pytest.fixture
     def model(self, law):
-        return LowThrustCrtbpDynamics(earth, moon, law)
+        return LTCrtbpDynamicsModel(earth, moon, law)
 
     def test_epochIndependent(self, model, law):
         assert model.epochIndependent == law.epochIndependent

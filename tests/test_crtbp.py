@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 from conftest import loadBody
 
-from medusa.crtbp import DynamicsModel
 from medusa.data import Body
 from medusa.dynamics import VarGroups
+from medusa.dynamics.crtbp import DynamicsModel
 
 earth = loadBody("Earth")
 moon = loadBody("Moon")

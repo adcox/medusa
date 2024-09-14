@@ -1,6 +1,98 @@
 """
-Low-thrust control objects
+Low-Thrust Dynamics
+===================
+
+Control
+-------
+
+Low-thrust control can be applied to many different dynamical models, assuming
+they are derived with the following assumptions:
+
+- The first six state variables are the Cartesian position and velocity
+
+At the highest level, the :class:`ControlLaw` class computes an acceleration 
+vector that is added to the velocity derivatives in the dynamics model. This
+control law may define its own state variables and their derivatives for 
+inclusion in the model equations of motion. Additionally, the control law
+defines all of the relevant partial derivatives so that a state transition 
+matrix and other partials can be propagated along with the state for use in
+differential corrections.
+
+.. autosummary:: ControlLaw
+
+Separable Control Parameterizations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In many contexts, the low-thrust control is easily separable into independent terms
+like thrust force and vector orientation. The :class:`SeparableControlLaw` provides
+this type of parameterization via an arbitrary number of :class:`ControlTerm`
+objects.
+
+.. autosummary::
+   SeparableControlLaw
+   ControlTerm
+
+An even more specific parameterization with three terms -- one for thrust force,
+one for spacecraft mass, and another for thrust orientation -- is available via
+the :class:`ForceMassOrientLaw` with some convenient terms pre-defined.
+
+.. autosummary::
+   ForceMassOrientLaw
+   ConstThrustTerm
+   ConstMassTerm
+   ConstOrientTerm
+
+Implementations
+---------------
+
+.. toctree::
+   :maxdepth: 1
+
+   dynamics.lowthrust.crtbp
+
+Module Reference
+----------------
+
+.. autoclass:: ControlTerm
+   :members:
+
+.. autoclass:: ConstThrustTerm
+   :members:
+   :show-inheritance:
+
+.. autoclass:: ConstMassTerm
+   :members:
+   :show-inheritance:   
+
+.. autoclass:: ConstOrientTerm
+   :members:
+   :show-inheritance:
+
+.. autoclass:: ControlLaw
+   :members:
+
+.. autoclass:: SeparableControlLaw
+   :members:
+   :show-inheritance:
+
+.. autoclass:: ForceMassOrientLaw
+   :members:
+   :show-inheritance:
 """
+
+__all__ = [
+    # base module
+    "ControlTerm",
+    "ConstThrustTerm",
+    "ConstMassTerm",
+    "ConstOrientTerm",
+    "ControlLaw",
+    "SeparableControlLaw",
+    "ForceMassOrientLaw",
+    # sub modules
+    "crtbp",
+]
+
 from abc import ABC, abstractmethod
 
 import numpy as np

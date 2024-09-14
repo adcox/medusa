@@ -1,5 +1,112 @@
 """
-Core objects for differential corrections
+Differential Corrections
+========================
+
+This module provides objects to define the differential corrections problem,
+its constraints, and solver objects
+
+Defining a Problem
+------------------
+
+At the simplest level, a differential corrections problem is composed of "variables",
+sometimes termed "free variable" or "design variables." These are values that can
+be adjusted to change the solution. Typical variables include state vectors and
+propagation times.
+
+.. autosummary:: Variable
+
+Control point and segment objects provide a way to group related variables together.
+In this context, a "control point" groups a state vector and an epoch together.
+The control point also defines a dynamical model in which the state and epoch
+are defined (with implications for the central body, frame, and units).
+
+Similarly, a "segment" stores variables about a propagation between to points:
+the time-of-flight and propagation parameters. Each segment is linked to an
+"origin" node that represents the initial epoch-state and defines the dynamical
+model for the propagation.
+
+.. autosummary::
+   ControlPoint
+   Segment
+
+However they are grouped and stored, variables must be added to a "problem." A
+basic version that defines most of the algorithms and properties in defined in
+the ``CorrectionsProblem`` class.
+
+When working with control points and segments, a more specific problem type --
+the ``ShootingProblem`` -- offers convenience methods to add segments without
+explicitly adding all of the stored variables (states, epochs, times-of-flight, 
+etc.). This problem type also performs checks to ensure the segments combine 
+into a valid graph.
+
+.. autosummary::
+   CorrectionsProblem
+   ShootingProblem
+
+Constraints
+-----------
+
+Constraints are added to the differential corrections problem. An abstract
+class is defined within this module to provide the framework for other constraints.
+See the :doc:`constraints` documentation for a list of the provided constraints.
+
+.. autosummary:: AbstractConstraint
+
+.. toctree::
+   :maxdepth: 1
+
+   corrections.constraints
+
+Solving Problems
+----------------
+
+An iterative differential corrections process is used to update the variables
+until the constraints are satisfied. A :class:`DifferentialCorrector` performs
+this iterative process with configurable options for the state update and the
+convergence check.
+
+.. autosummary::
+   :nosignatures:
+
+   DifferentialCorrector
+   MinimumNormUpdate
+   LeastSquaresUpdate
+   L2NormConvergence
+
+Module Reference
+----------------
+
+.. autoclass:: AbstractConstraint
+   :members:
+
+.. autoclass:: CorrectionsProblem
+   :members:
+
+.. autoclass:: ControlPoint
+   :members:
+
+.. autoclass:: DifferentialCorrector
+   :members:
+
+.. autoclass:: Segment
+   :members:
+
+.. autoclass:: Variable
+   :members:
+
+.. autoclass:: MinimumNormUpdate
+   :members:
+
+.. autoclass:: LeastSquaresUpdate
+   :members:
+
+.. autoclass:: L2NormConvergence
+   :members:
+
+.. autoclass:: ShootingProblem
+   :members:
+   :show-inheritance:
+
 """
 import logging
 import warnings
@@ -29,7 +136,7 @@ __all__ = [
     "Variable",
     "MinimumNormUpdate",
     "LeastSquaresUpdate",
-    "L2NormConverged",
+    "L2NormConvergence",
     "ShootingProblem",
     # submodules
     "constraints",
@@ -147,7 +254,7 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
         Evaluate the constraint
 
         Returns:
-            numpy.ndarray of float: the value of the constraint funection; evaluates
+            numpy.ndarray or float: the value of the constraint funection; evaluates
             to zero when the constraint is satisfied
 
         Raises:

@@ -1,5 +1,35 @@
 """
-Core Corrections Class
+Constraints
+============
+
+A variety of constraints are defined and can be applied to problems in different
+ways.
+
+.. autosummary::
+   Angle
+   Inequality
+   StateContinuity
+   VariableValue
+
+Module Reference
+----------------
+
+.. autoclass:: Angle
+   :members:
+   :show-inheritance:
+
+.. autoclass:: Inequality
+   :members:
+   :show-inheritance:
+
+.. autoclass:: StateContinuity
+   :members:
+   :show-inheritance:
+
+.. autoclass:: VariableValue
+   :members:
+   :show-inheritance:
+
 """
 import logging
 from enum import IntEnum
@@ -9,7 +39,52 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 from medusa import util
-from medusa.corrections import AbstractConstraint, Variable
+from medusa.corrections import AbstractConstraint, ControlPoint, Variable
+
+
+class Angle(AbstractConstraint):
+    """
+    Constrain the angle between part of the state vector and a prescribed vector
+
+    TODO document
+    """
+
+    def __init__(self, refDir, state, angle, stateIx=(0, 1, 2), center=(0, 0, 0)):
+        self.refDir = np.array(refDir)
+        self.state = state  # TODO check type
+        self.angleVal = np.cos(angle * np.pi / 180.0)
+        self.stateIx = np.array(stateIx)
+        self.center = np.array(center)
+
+        if self.refDir.size < 2:
+            raise ValueError("refDir must be at least 2D")
+
+        if np.linalg.norm(self.refDir) == 0.0:
+            raise ValueError("refDir cannot be zero")
+
+        if not self.refDir.size == self.stateIx.size:
+            raise ValueError("refDir must have same number of elements as stateIx")
+
+        if not self.center.size == self.stateIx.size:
+            raise ValueError("center must have same number of elements as stateIx")
+
+        # Try evaluating state and indices to raise index error
+        self.state.allVals[self.stateIx]
+
+    @property
+    def size(self):
+        return 1
+
+    def evaluate(self):
+        # TODO note about no sign distinction due to cosine?
+        # Use dot product to compute angle between vectors
+        stateVec = self.state.allVals[self.stateIx] - self.center
+        evalAngle = self.refDir.T @ stateVec
+        return evalAngle - self.angleVal
+
+    def partials(self, freeVarIndexMap):
+        if self.state in freeVarIndexMap:
+            return {self.state: self.refDir}
 
 
 class StateContinuity(AbstractConstraint):

@@ -1,5 +1,8 @@
 """
 Plotting
+========
+
+Plotting tools are defined here.
 """
 import numpy as np
 import scipy.optimize

@@ -1,5 +1,54 @@
 """
-Propagation, i.e., Numerical Integration
+Propagation
+===========
+
+Propagation, or numerical integration, is one of the core components of the 
+library. The :func:`scipy.integrate.solve_ivp` function does the bulk of the
+heavy lifting, with the :class:`Propagator` class providing more convenient 
+data storage and functions.
+
+.. autosummary:: Propagator
+
+Events
+------
+
+It is often useful to be able to stop a propagation at a pre-specified event.
+The :class:`AbstractEvent` class provides a generic interface for event
+definitions with a variety of common event types defined.
+
+.. autosummary::
+   AbstractEvent
+   ApseEvent
+   BodyDistanceEvent
+   DistanceEvent
+   VariableValueEvent
+
+
+Module Reference
+----------------
+
+.. autoclass:: Propagator
+   :members:
+
+.. autoclass:: AbstractEvent
+   :members:
+
+.. autoclass:: ApseEvent
+   :members:
+   :show-inheritance:
+
+.. autoclass:: BodyDistanceEvent
+   :members:
+   :show-inheritance:
+
+.. autoclass:: DistanceEvent
+   :members:
+   :show-inheritance:
+
+.. autoclass:: VariableValueEvent
+   :members:
+   :show-inheritance:
+
 """
 import logging
 from abc import ABC, abstractmethod
@@ -325,8 +374,9 @@ class VariableValueEvent(AbstractEvent):
             the event is only triggered when ``eval`` moves from positive to
             negative values. A positive value triggers in the opposite direction,
             and ``0`` will trigger the event in either direction.
-
     """
+
+    # TODO - rename StateValueEvent for consistency with VarGroups?
 
     def __init__(self, varIx, varValue, terminal=False, direction=0.0):
         super().__init__(terminal, direction)

@@ -1,16 +1,23 @@
 """
-Low-thrust-enabled dynamics models
+CR3BP with Low-Thrust
+=====================
+
+.. autoclass:: DynamicsModel
+   :members:
+   :show-inheritance:
+
 """
+
 import numpy as np
 
 from medusa import util
-from medusa.crtbp import DynamicsModel as CrtbpDynamics
 from medusa.dynamics import VarGroups
+from medusa.dynamics.crtbp import DynamicsModel as CrtbpDynamics
 
-from .control import ControlLaw
+from . import ControlLaw
 
 
-class LowThrustCrtbpDynamics(CrtbpDynamics):
+class DynamicsModel(CrtbpDynamics):
     def __init__(self, body1, body2, ctrlLaw):
         super().__init__(body1, body2)
 

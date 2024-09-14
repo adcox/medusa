@@ -25,9 +25,11 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
-    "sphinxcontrib.fulltoc",
+    "sphinx.ext.todo",
     # plot_directive - Run a script that displays a plot
     "matplotlib.sphinxext.plot_directive",
+    # math syntax
+    "sphinx.ext.mathjax",
 ]
 
 intersphinx_mapping = {
@@ -52,7 +54,7 @@ exclude_patterns = []
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = "bizstyle"
+html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
 
 # Pygments (syntax highlighting) style

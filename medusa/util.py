@@ -1,5 +1,11 @@
 """
 Utilities
+=========
+
+Miscellaneous utility functions.
+
+.. autofunction:: toList
+.. autofunction:: toArray
 """
 import numpy as np
 

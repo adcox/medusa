@@ -18,7 +18,7 @@ assert BODIES.exists()
 import medusa.corrections as cor
 import medusa.corrections.constraints as cons
 import medusa.crtbp as cr
-import medusa.lowthrust as lt
+import medusa.dynamics.lowthrust as lt
 import medusa.plots as plots
 from medusa.data import Body
 from medusa.propagate import Propagator

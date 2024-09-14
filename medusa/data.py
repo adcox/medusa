@@ -1,5 +1,24 @@
 """
-Data objects
+Data
+====
+
+This module defines a few constants and the :class:`Body` class which stores data
+about a celestial body (planet, moon, star, etc.)
+
+.. autosummary::
+   GRAV_PARAM
+   G_MEAN_EARTH
+   Body
+
+Module Reference
+-----------------
+
+.. autodata:: GRAV_PARAM
+.. autodata:: G_MEAN_EARTH
+
+.. autoclass:: Body
+   :members:
+
 """
 import xml.etree.ElementTree as ET
 

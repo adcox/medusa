@@ -9,8 +9,8 @@ import scipy.integrate
 import scipy.optimize
 from conftest import loadBody
 
-from medusa.crtbp import DynamicsModel
 from medusa.dynamics import VarGroups
+from medusa.dynamics.crtbp import DynamicsModel
 from medusa.propagate import (
     ApseEvent,
     BodyDistanceEvent,

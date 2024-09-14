@@ -1,5 +1,35 @@
 """
-Dynamics Classes and Interfaces
+Dynamical Models
+================
+
+Core dynamics objects are defined here:
+
+.. autosummary::
+   VarGroups
+   AbstractDynamicsModel
+
+
+Implementations
+---------------
+
+Several dynamical models are implemented in submodules.
+
+.. toctree::
+   :maxdepth: 1
+
+   dynamics.crtbp
+   dynamics.lowthrust
+
+Module Reference
+-----------------
+
+.. autoclass:: VarGroups
+   :members:
+   :show-inheritance:
+
+.. autoclass:: AbstractDynamicsModel
+   :members:
+
 """
 import logging
 from abc import ABC, abstractmethod
@@ -12,6 +42,16 @@ from medusa import util
 from medusa.data import Body
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    # base module
+    "VarGroups",
+    "AbstractDynamicsModel",
+    "ModelBlockCopyMixin",
+    # sub modules
+    "crtbp",
+    "lowthrust",
+]
 
 
 # numba JIT compilation only supports Enum and IntEnum
@@ -147,7 +187,7 @@ class AbstractDynamicsModel(ABC):
         Evaluate the differential equations that govern the variable array
 
         Args:
-            t (float): time value
+            t (float): independent variable (e.g., time)
             y (numpy.ndarray<float>): One-dimensional variable array
             varGroups (tuple of VarGroups): describes the variable groups included
                 in the ``y`` vector
@@ -157,7 +197,7 @@ class AbstractDynamicsModel(ABC):
                 of the model itself (e.g., mass ratio).
 
         Returns:
-            numpy.ndarray: the time derivative of the ``y`` vector
+            numpy.ndarray: the derivative of the ``y`` vector with respect to ``t``
         """
         pass
 

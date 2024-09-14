@@ -14,7 +14,7 @@ from medusa.corrections import (
     ShootingProblem,
     Variable,
 )
-from medusa.crtbp import DynamicsModel as crtbpModel
+from medusa.dynamics.crtbp import DynamicsModel as crtbpModel
 
 emModel = crtbpModel(loadBody("Earth"), loadBody("Moon"))
 
@@ -47,6 +47,85 @@ def problem(segment):
     prob.build()
 
     return prob
+
+
+class TestAngle:
+    @pytest.mark.parametrize("originMask", [None])
+    @pytest.mark.parametrize(
+        "refDir, stateIx, center",
+        [
+            [(0, 0, 1), (0, 1, 2), (0, 0, 0)],  # position angle
+            [(0, 0, 1), (3, 4, 5), (0, 0, 0)],  # velocity angle
+            [(1, 0), (0, 1), (0, 0)],  # 2D
+            [(1, 0, 0, 0), (1, 2, 3, 4), (0, -1, 1, 0)],  # 4D
+        ],
+    )
+    def test_constructor(self, origin, refDir, stateIx, center):
+        angle = 60
+        con = pcons.Angle(refDir, origin.state, angle, stateIx, center)
+
+        assert isinstance(con.refDir, np.ndarray)
+        np.testing.assert_array_equal(con.refDir, refDir)
+
+        assert isinstance(con.stateIx, np.ndarray)
+        np.testing.assert_array_equal(con.stateIx, stateIx)
+
+        assert isinstance(con.center, np.ndarray)
+        np.testing.assert_array_equal(con.center, center)
+
+        assert id(origin.state) == id(con.state)
+
+    @pytest.mark.parametrize("originMask", [None])
+    @pytest.mark.parametrize(
+        "refDir, stateIx, center, err",
+        [
+            [(1, 0, 0), (0, 1, 2), (0, 0), ValueError],  # invalid center size
+            [
+                (1, 0, 0),
+                (0, 1, 2, 3, 4, 5),
+                (0, 0, 0),
+                ValueError,
+            ],  # invalid stateIx size
+            [(0, 1), (0, 1, 2), (0, 0, 0), ValueError],  # invalid refDir size
+            [(0, 0), (0, 1), (0, 0), ValueError],  # refDir is zero
+            [(0, 1, 2), (0, 1, 6), (0, 0, 0), IndexError],  # index out of bounds
+        ],
+    )
+    def test_constructor_err(self, origin, refDir, stateIx, center, err):
+        with pytest.raises(err):
+            pcons.Angle(refDir, origin.state, 30, stateIx, center)
+
+    @pytest.mark.parametrize("originMask", [None])
+    @pytest.mark.parametrize(
+        "refDir, stateIx, center",
+        [
+            [(1, 0, 0), (0, 1, 2), (1, 0, 0)],  # position angle
+            [(0, 0, 1), (3, 4, 5), (0, 0, 0)],  # velocity angle
+            [(1, 0), (0, 1), (0, 0)],  # 2D
+            [(1, 0, 0, 0), (1, 2, 3, 4), (0, 0, 0, 0)],  # 4D
+        ],
+    )
+    def test_evaluate(self, origin, refDir, stateIx, center):
+        angle = 27.0
+        con = pcons.Angle(refDir, origin.state, angle, stateIx, center)
+        out = con.evaluate()
+        assert isinstance(out, float)
+
+    @pytest.mark.parametrize("originMask, terminusMask", [[None, None]])
+    @pytest.mark.parametrize(
+        "refDir, stateIx, center",
+        [
+            [(1, 0.1, 0.2), (0, 1, 2), (1, 0, 0)],  # position angle
+            [(0, 0, 1), (3, 4, 5), (0, 0, 0)],  # velocity angle
+            [(1, 0), (0, 1), (0, 0)],  # 2D
+            [(1, 0, 0, 0), (1, 2, 3, 4), (0, 0, 0, 0)],  # 4D
+        ],
+    )
+    def test_partials(self, origin, refDir, stateIx, center, problem):
+        angle = 27.0
+        con = pcons.Angle(refDir, origin.state, angle, stateIx, center)
+        problem.addConstraints(con)
+        assert problem.checkJacobian()
 
 
 class TestStateContinuity:
@@ -183,7 +262,7 @@ class TestStateContinuity:
         ],
     )
     def test_paramPartials(self, oMask, tMask, indices):
-        from medusa.lowthrust.control import (
+        from medusa.dynamics.lowthrust import (
             ConstMassTerm,
             ConstOrientTerm,
             ConstThrustTerm,
@@ -195,9 +274,9 @@ class TestStateContinuity:
         orient = ConstOrientTerm(-76.5 * np.pi / 180.0, 0.0)
         control = ForceMassOrientLaw(thrust, mass, orient)
 
-        from medusa.lowthrust.dynamics import LowThrustCrtbpDynamics
+        from medusa.dynamics.lowthrust.crtbp import DynamicsModel as LTDynamics
 
-        model = LowThrustCrtbpDynamics(loadBody("Earth"), loadBody("Moon"), control)
+        model = LTDynamics(loadBody("Earth"), loadBody("Moon"), control)
 
         q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         state0 = Variable(q0, mask=oMask)
@@ -218,6 +297,8 @@ class TestStateContinuity:
         assert isinstance(dF_dp, np.ndarray)
         assert dF_dp.shape == (con.size, len(control.params))
         assert not all(x == 0.0 for x in dF_dp.flat)
+
+        assert prob.checkJacobian()
 
 
 class TestVariableValue:
@@ -403,3 +484,5 @@ class TestInequalityConstraint:
             # Is satisfied without any iterations
             assert len(log["iterations"]) == 1
             assert tof < eqCon.values[0]
+
+        assert problem.checkJacobian()

@@ -1,5 +1,15 @@
 """
-Routines for numerical approximations of calculus evaluations
+Numerics
+========
+
+Routines for numerical approximations of calculus evaluations are included here.
+
+.. autosummary::
+   derivative
+   derivative_multivar
+
+.. autofunction:: derivative
+.. autofunction:: derivative_multivar
 """
 import numpy as np
 

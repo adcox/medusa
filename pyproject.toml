@@ -8,9 +8,9 @@ build-backend = "setuptools.build_meta"
 # Project metadata
 [project]
 name = "medusa"
-version = "0.0.1"
+version = "0.0.2"
 description = "Tools for multi-body astrodynamics research"
-#license = ?  # TODO define
+license = {file = "license.txt"}
 keywords = ["astrodynamics", "dynamics"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -38,7 +38,7 @@ dev = [
     "pre-commit==2.13.0",
     "isort>=5.12.0",
     "sphinx",
-    "sphinxcontrib-fulltoc>=1.2.0",
+    "pydata-sphinx-theme",
 ]
 test = [
     "pytest>=6.2.4",
@@ -54,7 +54,12 @@ test = [
 # -------------------------------------
 # Tools
 [tool.setuptools]
-packages = ["medusa", "medusa.corrections", "medusa.lowthrust"]
+packages = [
+    "medusa", 
+    "medusa.corrections", 
+    "medusa.dynamics",
+    "medusa.dynamics.lowthrust",
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

@@ -19,8 +19,8 @@ from medusa.corrections import (
     ShootingProblem,
     Variable,
 )
-from medusa.crtbp import DynamicsModel
 from medusa.dynamics import VarGroups
+from medusa.dynamics.crtbp import DynamicsModel
 from medusa.propagate import Propagator
 
 emModel = DynamicsModel(loadBody("Earth"), loadBody("Moon"))
