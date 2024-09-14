@@ -8,7 +8,7 @@ import pytest
 from conftest import loadBody
 
 from medusa.data import Body
-from medusa.dynamics import VarGroups
+from medusa.dynamics import VarGroup
 from medusa.dynamics.crtbp import DynamicsModel
 
 earth = loadBody("Earth")
@@ -42,11 +42,11 @@ class TestDynamicsModel:
 
     def test_stateSize(self):
         model = DynamicsModel(earth, moon)
-        assert model.stateSize(VarGroups.STATE) == 6
-        assert model.stateSize(VarGroups.STM) == 36
-        assert model.stateSize([VarGroups.STATE, VarGroups.STM]) == 42
-        assert model.stateSize(VarGroups.EPOCH_PARTIALS) == 0
-        assert model.stateSize(VarGroups.PARAM_PARTIALS) == 0
+        assert model.stateSize(VarGroup.STATE) == 6
+        assert model.stateSize(VarGroup.STM) == 36
+        assert model.stateSize([VarGroup.STATE, VarGroup.STM]) == 42
+        assert model.stateSize(VarGroup.EPOCH_PARTIALS) == 0
+        assert model.stateSize(VarGroup.PARAM_PARTIALS) == 0
 
     # TODO test that modifying a property from properties fcn doesn't affect
     #   stored values
@@ -54,10 +54,10 @@ class TestDynamicsModel:
     @pytest.mark.parametrize(
         "append",
         [
-            VarGroups.STATE,
-            VarGroups.STM,
-            VarGroups.EPOCH_PARTIALS,
-            VarGroups.PARAM_PARTIALS,
+            VarGroup.STATE,
+            VarGroup.STM,
+            VarGroup.EPOCH_PARTIALS,
+            VarGroup.PARAM_PARTIALS,
         ],
     )
     def test_appendICs(self, append):
@@ -76,25 +76,25 @@ class TestDynamicsModel:
 
     def test_varNames(self):
         model = DynamicsModel(earth, moon)
-        stateNames = model.varNames(VarGroups.STATE)
+        stateNames = model.varNames(VarGroup.STATE)
         assert stateNames == ["x", "y", "z", "dx", "dy", "dz"]
 
-        stmNames = model.varNames(VarGroups.STM)
+        stmNames = model.varNames(VarGroup.STM)
         assert stmNames[1] == "STM(0,1)"
         assert stmNames[35] == "STM(5,5)"
         assert stmNames[6] == "STM(1,0)"
 
-        epochNames = model.varNames(VarGroups.EPOCH_PARTIALS)
+        epochNames = model.varNames(VarGroup.EPOCH_PARTIALS)
         assert epochNames == []
 
-        paramNames = model.varNames(VarGroups.PARAM_PARTIALS)
+        paramNames = model.varNames(VarGroup.PARAM_PARTIALS)
         assert paramNames == []
 
     def test_checkPartials(self):
         model = DynamicsModel(earth, moon)
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(
-            y0, [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
+            y0, [VarGroup.STM, VarGroup.EPOCH_PARTIALS, VarGroup.PARAM_PARTIALS]
         )
         tspan = [1.0, 2.0]
         assert model.checkPartials(y0, tspan)
@@ -103,7 +103,7 @@ class TestDynamicsModel:
         model = DynamicsModel(earth, moon)
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(
-            y0, [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
+            y0, [VarGroup.STM, VarGroup.EPOCH_PARTIALS, VarGroup.PARAM_PARTIALS]
         )
         tspan = [1.0, 2.0]
 

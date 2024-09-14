@@ -11,7 +11,7 @@ CR3BP with Low-Thrust
 import numpy as np
 
 from medusa import util
-from medusa.dynamics import VarGroups
+from medusa.dynamics import VarGroup
 from medusa.dynamics.crtbp import DynamicsModel as CrtbpDynamics
 
 from . import ControlLaw
@@ -37,14 +37,14 @@ class DynamicsModel(CrtbpDynamics):
         nCtrlParam = len(self.ctrlLaw.params)
 
         return (
-            N * (VarGroups.STATE in varGroups)
-            + N**2 * (VarGroups.STM in varGroups)
-            + N * (not self.epochIndependent and VarGroups.EPOCH_PARTIALS in varGroups)
-            + N * nCtrlParam * (VarGroups.PARAM_PARTIALS in varGroups)
+            N * (VarGroup.STATE in varGroups)
+            + N**2 * (VarGroup.STM in varGroups)
+            + N * (not self.epochIndependent and VarGroup.EPOCH_PARTIALS in varGroups)
+            + N * nCtrlParam * (VarGroup.PARAM_PARTIALS in varGroups)
         )
 
     def varNames(self, varGroups):
-        if varGroups == VarGroups.STATE:
+        if varGroups == VarGroup.STATE:
             baseNames = super().varNames(varGroups)
             return baseNames + self.ctrlLaw.stateNames
         else:
@@ -91,7 +91,7 @@ class DynamicsModel(CrtbpDynamics):
             count += nCtrl
 
         # Compute STM elements
-        if VarGroups.STM in varGroups:
+        if VarGroup.STM in varGroups:
             r13_5 = r13_3 * r13 * r13
             r23_5 = r23_3 * r23 * r23
 
@@ -187,7 +187,7 @@ class DynamicsModel(CrtbpDynamics):
             count += N * N
 
         # Propagated epoch partials
-        if not self.epochIndependent and VarGroups.EPOCH_PARTIALS in varGroups:
+        if not self.epochIndependent and VarGroup.EPOCH_PARTIALS in varGroups:
             # The differential equation for the epoch partials, dq/dT is
             #
             #    d/dt (dq/dT) = A @ (dq/dT) + (dqdot/dT)
@@ -213,7 +213,7 @@ class DynamicsModel(CrtbpDynamics):
             count += N
 
         # Propagated param partials
-        if VarGroups.PARAM_PARTIALS in varGroups and P > 0:
+        if VarGroup.PARAM_PARTIALS in varGroups and P > 0:
             # The differential equation for the parameter partials, dq/dp, is
             #
             #    d/dt (dq/dp) = A @ (dq/dp) + (dqdot/dp)

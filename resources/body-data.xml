@@ -469,7 +469,7 @@
       <notes>Single body, no orbit</notes>
    </body>
    <body>
-      <name>Solar_System Barycenter</name>
+      <name>Solar System Barycenter</name>
       <id>0</id>
       <parent>N/A</parent>
       <parentId>NaN</parentId>

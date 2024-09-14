@@ -121,7 +121,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from medusa import console, numerics, util
-from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
+from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
 from medusa.propagate import Propagator
 
 logger = logging.getLogger(__name__)
@@ -311,7 +311,7 @@ class ControlPoint(ModelBlockCopyMixin):
         TypeError: if the model is not derived from AbstractDynamicsModel
         RuntimeError: if the epoch specifies more than one value
         RuntimeError: if the state specifies more values than the dynamics model
-            allows for :attr:`VarGroups.STATE`
+            allows for :attr:`VarGroup.STATE`
     """
 
     def __init__(self, model, epoch, state, autoMask=True):
@@ -328,7 +328,7 @@ class ControlPoint(ModelBlockCopyMixin):
         if not epoch.values.size == 1:
             raise RuntimeError("Epoch can only have one value")
 
-        sz = model.stateSize(VarGroups.STATE)
+        sz = model.stateSize(VarGroup.STATE)
         if not state.values.size == sz:
             raise RuntimeError("State must have {sz} values")
 
@@ -463,11 +463,11 @@ class Segment:
             ix (int): the index within the :attr:`propSol` ``y`` array.
 
         Returns:
-            numpy.ndarray: the propagated state (:class:`VarGroups` ``STATE``) on the
+            numpy.ndarray: the propagated state (:class:`VarGroup` ``STATE``) on the
             propagated trajectory
         """
-        self.propagate(VarGroups.STATE)
-        return self.origin.model.extractVars(self.propSol.y[:, ix], VarGroups.STATE)
+        self.propagate(VarGroup.STATE)
+        return self.origin.model.extractVars(self.propSol.y[:, ix], VarGroup.STATE)
 
     def partials_state_wrt_time(self, ix=-1):
         """
@@ -479,16 +479,16 @@ class Segment:
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
             :attr:`tof`, i.e., the time derivative of the
-            :attr:`~medusa.dynamics.VarGroups.STATE` variables
+            :attr:`~medusa.dynamics.VarGroup.STATE` variables
         """
-        self.propagate(VarGroups.STATE)
+        self.propagate(VarGroup.STATE)
         dy_dt = self.origin.model.diffEqs(
             self.propSol.t[ix],
             self.propSol.y[:, ix],
-            (VarGroups.STATE,),
+            (VarGroup.STATE,),
             self.propParams.allVals,
         )
-        return self.origin.model.extractVars(dy_dt, VarGroups.STATE)
+        return self.origin.model.extractVars(dy_dt, VarGroup.STATE)
 
     def partials_state_wrt_initialState(self, ix=-1):
         """
@@ -499,11 +499,11 @@ class Segment:
 
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to the
-            :attr:`origin` ``state``, i.e., the :attr:`~medusa.dynamics.VarGroups.STM`.
+            :attr:`origin` ``state``, i.e., the :attr:`~medusa.dynamics.VarGroup.STM`.
             The partials are returned in matrix form.
         """
-        self.propagate([VarGroups.STATE, VarGroups.STM])
-        return self.origin.model.extractVars(self.propSol.y[:, ix], VarGroups.STM)
+        self.propagate([VarGroup.STATE, VarGroup.STM])
+        return self.origin.model.extractVars(self.propSol.y[:, ix], VarGroup.STM)
 
     def partials_state_wrt_epoch(self, ix=-1):
         """
@@ -515,16 +515,16 @@ class Segment:
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
             the :attr:`origin` ``epoch``, i.e., the
-            :attr:`~medusa.dynamics.VarGroups.EPOCH_PARTIALS`.
+            :attr:`~medusa.dynamics.VarGroup.EPOCH_PARTIALS`.
         """
-        self.propagate([VarGroups.STATE, VarGroups.STM, VarGroups.EPOCH_PARTIALS])
+        self.propagate([VarGroup.STATE, VarGroup.STM, VarGroup.EPOCH_PARTIALS])
         partials = self.origin.model.extractVars(
-            self.propSol.y[:, ix], VarGroups.EPOCH_PARTIALS
+            self.propSol.y[:, ix], VarGroup.EPOCH_PARTIALS
         )
 
         # Handle models that don't depend on epoch by setting partials to zero
         if partials.size == 0:
-            partials = np.zeros((self.origin.model.stateSize(VarGroups.STATE),))
+            partials = np.zeros((self.origin.model.stateSize(VarGroup.STATE),))
 
         return partials
 
@@ -537,24 +537,24 @@ class Segment:
 
         Returns:
             numpy.ndarray: the partials of the propagated state with respect to
-            the :attr:`propParams`, i.e., the :attr:`~medusa.dynamics.VarGroups.PARAM_PARTIALS`.
+            the :attr:`propParams`, i.e., the :attr:`~medusa.dynamics.VarGroup.PARAM_PARTIALS`.
         """
         self.propagate(
             [
-                VarGroups.STATE,
-                VarGroups.STM,
-                VarGroups.EPOCH_PARTIALS,
-                VarGroups.PARAM_PARTIALS,
+                VarGroup.STATE,
+                VarGroup.STM,
+                VarGroup.EPOCH_PARTIALS,
+                VarGroup.PARAM_PARTIALS,
             ]
         )
         partials = self.origin.model.extractVars(
-            self.propSol.y[:, ix], VarGroups.PARAM_PARTIALS
+            self.propSol.y[:, ix], VarGroup.PARAM_PARTIALS
         )
 
         # Handle models that don't depend on propagator params by setting partials
         # to zero
         if partials.size == 0:
-            partials = np.zeros((self.origin.model.stateSize(VarGroups.STATE),))
+            partials = np.zeros((self.origin.model.stateSize(VarGroup.STATE),))
 
         return partials
 
@@ -564,7 +564,7 @@ class Segment:
         are stored in :attr:`propSol`.
 
         Args:
-            varGroups ([VarGroups]): defines which equations of motion should be included
+            varGroups ([VarGroup]): defines which equations of motion should be included
                 in the propagation.
             lazy (Optional, bool): whether or not to lazily propagate the
                 trajectory. If True, the :attr:`prop` ``propagate()`` function is

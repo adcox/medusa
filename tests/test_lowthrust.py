@@ -8,7 +8,7 @@ from conftest import loadBody
 from medusa import numerics
 from medusa.corrections import ControlPoint, Segment, ShootingProblem
 from medusa.corrections.constraints import StateContinuity
-from medusa.dynamics import VarGroups
+from medusa.dynamics import VarGroup
 from medusa.dynamics.lowthrust import *
 from medusa.dynamics.lowthrust.crtbp import DynamicsModel as LTCrtbpDynamicsModel
 from medusa.propagate import Propagator
@@ -43,7 +43,7 @@ class TestControlTerm:
         if term.numStates > 0:
             y = np.concatenate(y, np.arange(nCore, nCore + term.numStates))
 
-        varGroups = (VarGroups.STATE,)
+        varGroups = (VarGroup.STATE,)
         term._paramIx0 = 1
         return (t, y, varGroups, [99] + term.params)
 
@@ -201,7 +201,7 @@ class TestForceMassOrientLaw_noStates:
         if law.numStates > 0:
             y = np.concatenate(y, np.arange(nCore, nCore + law.numStates))
 
-        varGroups = (VarGroups.STATE,)
+        varGroups = (VarGroup.STATE,)
         return (t, y, varGroups, law.params)
 
     def test_numStates(self, law):
@@ -330,7 +330,7 @@ class TestLTCrtbpDynamicsModel:
         if law.numStates > 0:
             y = np.concatenate(y, np.arange(nCore, nCore + law.numStates))
 
-        varGroups = (VarGroups.STATE,)
+        varGroups = (VarGroup.STATE,)
         return (t, y, varGroups, law.params)
 
     @pytest.fixture
@@ -343,10 +343,10 @@ class TestLTCrtbpDynamicsModel:
     @pytest.mark.parametrize(
         "grp, expect",
         [
-            [VarGroups.STATE, 6],
-            [VarGroups.STM, 36],
-            [VarGroups.EPOCH_PARTIALS, 0],
-            [VarGroups.PARAM_PARTIALS, 24],
+            [VarGroup.STATE, 6],
+            [VarGroup.STM, 36],
+            [VarGroup.EPOCH_PARTIALS, 0],
+            [VarGroup.PARAM_PARTIALS, 24],
         ],
     )
     def test_stateSize(self, model, grp, expect):
@@ -355,14 +355,14 @@ class TestLTCrtbpDynamicsModel:
     @pytest.mark.parametrize(
         "grp",
         [
-            [VarGroups.STATE],
-            [VarGroups.STATE, VarGroups.STM],
-            [VarGroups.STATE, VarGroups.STM, VarGroups.EPOCH_PARTIALS],
+            [VarGroup.STATE],
+            [VarGroup.STATE, VarGroup.STM],
+            [VarGroup.STATE, VarGroup.STM, VarGroup.EPOCH_PARTIALS],
             [
-                VarGroups.STATE,
-                VarGroups.STM,
-                VarGroups.EPOCH_PARTIALS,
-                VarGroups.PARAM_PARTIALS,
+                VarGroup.STATE,
+                VarGroup.STM,
+                VarGroup.EPOCH_PARTIALS,
+                VarGroup.PARAM_PARTIALS,
             ],
         ],
     )
@@ -378,7 +378,7 @@ class TestLTCrtbpDynamicsModel:
     def test_checkPartials(self, model):
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(
-            y0, [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
+            y0, [VarGroup.STM, VarGroup.EPOCH_PARTIALS, VarGroup.PARAM_PARTIALS]
         )
         tspan = [1.0, 1.1]
 

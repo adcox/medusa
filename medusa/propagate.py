@@ -58,7 +58,7 @@ import numpy as np
 from numba import njit
 from scipy.integrate import solve_ivp
 
-from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroups
+from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class Propagator(ModelBlockCopyMixin):
         self.dense = dense
         self.events = []
 
-    def propagate(self, y0, tspan, *, params=None, varGroups=VarGroups.STATE, **kwargs):
+    def propagate(self, y0, tspan, *, params=None, varGroups=VarGroup.STATE, **kwargs):
         """
         Perform a propagation
 
@@ -113,7 +113,7 @@ class Propagator(ModelBlockCopyMixin):
                 for the propagation
             params (Optional, [float]): parameters that are passed to the dynamics
                 model
-            varGroups (Optional, [VarGroups]): the variable groups that are included
+            varGroups (Optional, [VarGroup]): the variable groups that are included
                  in ``y0``.
             kwargs: additional arguments passed to :func:`scipy.integrate.solve_ivp`.
                 Note that the ``method`` and ``dense_output`` arguments, defined
@@ -134,7 +134,7 @@ class Propagator(ModelBlockCopyMixin):
         """
         # Checks
         if not self.model.validForPropagation(varGroups):
-            raise RuntimeError(f"VarGroups = {varGroups} is not valid for propagation")
+            raise RuntimeError(f"VarGroup = {varGroups} is not valid for propagation")
 
         kwargs_in = {
             "method": self.method,
@@ -153,16 +153,16 @@ class Propagator(ModelBlockCopyMixin):
         y0 = np.array(y0, ndmin=1)
         if not y0.size == self.model.stateSize(varGroups):
             # Likely scenario: user wants default ICs for other variable groups
-            if y0.size == self.model.stateSize(VarGroups.STATE):
+            if y0.size == self.model.stateSize(VarGroup.STATE):
                 y0 = self.model.appendICs(
-                    y0, [v for v in varGroups if not v == VarGroups.STATE]
+                    y0, [v for v in varGroups if not v == VarGroup.STATE]
                 )
             else:
                 raise RuntimeError(
                     f"y0 size is {y0.size}, which is not the STATE size "
-                    f"({self.model.stateSize(VarGroups.STATE)}); don't know how to respond."
+                    f"({self.model.stateSize(VarGroup.STATE)}); don't know how to respond."
                     " Please pass in a STATE-sized vector or a vector with all "
-                    "initial conditions defined for the specified VarGroups"
+                    "initial conditions defined for the specified VarGroup"
                 )
 
         # make varGroups an array and then cast to tuple; need simple type for
@@ -242,7 +242,7 @@ class AbstractEvent(ABC):
         Args:
             t (float): time value
             y (numpy.ndarray<float>): variable vector
-            varGroups (tuple<VarGroups>): describes the variable groups in ``y``
+            varGroups (tuple<VarGroup>): describes the variable groups in ``y``
             params ([float]): extra parameters passed from the integrator
 
         Returns:
@@ -376,7 +376,7 @@ class VariableValueEvent(AbstractEvent):
             and ``0`` will trigger the event in either direction.
     """
 
-    # TODO - rename StateValueEvent for consistency with VarGroups?
+    # TODO - rename StateValueEvent for consistency with VarGroup?
 
     def __init__(self, varIx, varValue, terminal=False, direction=0.0):
         super().__init__(terminal, direction)

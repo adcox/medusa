@@ -9,7 +9,7 @@ import scipy.integrate
 import scipy.optimize
 from conftest import loadBody
 
-from medusa.dynamics import VarGroups
+from medusa.dynamics import VarGroup
 from medusa.dynamics.crtbp import DynamicsModel
 from medusa.propagate import (
     ApseEvent,
@@ -44,17 +44,17 @@ class TestPropagator:
     @pytest.mark.parametrize(
         "groups",
         [
-            [VarGroups.STATE],
-            [VarGroups.STATE, VarGroups.STM],
+            [VarGroup.STATE],
+            [VarGroup.STATE, VarGroup.STM],
             [
-                VarGroups.STATE,
-                VarGroups.STM,
-                VarGroups.EPOCH_PARTIALS,
-                VarGroups.PARAM_PARTIALS,
+                VarGroup.STATE,
+                VarGroup.STM,
+                VarGroup.EPOCH_PARTIALS,
+                VarGroup.PARAM_PARTIALS,
             ],
-            [VarGroups.STATE, VarGroups.STM, VarGroups.PARAM_PARTIALS],
-            [VarGroups.STATE, VarGroups.PARAM_PARTIALS],
-            [VarGroups.EPOCH_PARTIALS, VarGroups.STATE],
+            [VarGroup.STATE, VarGroup.STM, VarGroup.PARAM_PARTIALS],
+            [VarGroup.STATE, VarGroup.PARAM_PARTIALS],
+            [VarGroup.EPOCH_PARTIALS, VarGroup.STATE],
         ],
     )
     def test_propagate(self, emModel, dense, groups):
@@ -80,8 +80,8 @@ class TestPropagator:
         assert pytest.approx(sol.y[4, -1], 1e-4) == -1.82139906
         assert pytest.approx(sol.y[5, -1], 1e-4) == 0.00061782
 
-        if VarGroups.STM in groups:
-            stm = emModel.extractVars(sol.y[:, -1], VarGroups.STM)
+        if VarGroup.STM in groups:
+            stm = emModel.extractVars(sol.y[:, -1], VarGroup.STM)
 
             # Check determinant of STM is unity
             assert pytest.approx(np.linalg.det(stm)) == 1.0
@@ -107,7 +107,7 @@ class TestPropagator:
         assert np.array_equal(sorted(np.array(groups, ndmin=1)), sol.varGroups)
 
     @pytest.mark.parametrize(
-        "groups", [VarGroups.STM, VarGroups.EPOCH_PARTIALS, VarGroups.PARAM_PARTIALS]
+        "groups", [VarGroup.STM, VarGroup.EPOCH_PARTIALS, VarGroup.PARAM_PARTIALS]
     )
     def test_propagate_invalidgroups(self, emModel, groups):
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
@@ -120,8 +120,8 @@ class TestPropagator:
     @pytest.mark.parametrize(
         "y0, groups",
         [
-            [[0.2] * 5, VarGroups.STATE],
-            [[0.3] * 43, (VarGroups.STATE, VarGroups.STM)],
+            [[0.2] * 5, VarGroup.STATE],
+            [[0.3] * 43, (VarGroup.STATE, VarGroup.STM)],
         ],
     )
     def test_propagate_invalidY0(self, emModel, y0, groups):

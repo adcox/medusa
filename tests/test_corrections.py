@@ -19,7 +19,7 @@ from medusa.corrections import (
     ShootingProblem,
     Variable,
 )
-from medusa.dynamics import VarGroups
+from medusa.dynamics import VarGroup
 from medusa.dynamics.crtbp import DynamicsModel
 from medusa.propagate import Propagator
 
@@ -290,14 +290,14 @@ class TestSegment:
     @pytest.mark.parametrize(
         "varGroups",
         [
-            [VarGroups.STATE],
-            [VarGroups.STATE, VarGroups.STM],
-            [VarGroups.STATE, VarGroups.STM, VarGroups.EPOCH_PARTIALS],
+            [VarGroup.STATE],
+            [VarGroup.STATE, VarGroup.STM],
+            [VarGroup.STATE, VarGroup.STM, VarGroup.EPOCH_PARTIALS],
             [
-                VarGroups.STATE,
-                VarGroups.STM,
-                VarGroups.EPOCH_PARTIALS,
-                VarGroups.PARAM_PARTIALS,
+                VarGroup.STATE,
+                VarGroup.STM,
+                VarGroup.EPOCH_PARTIALS,
+                VarGroup.PARAM_PARTIALS,
             ],
         ],
     )
@@ -314,8 +314,8 @@ class TestSegment:
     @pytest.mark.parametrize(
         "varGroups1, varGroups2",
         [
-            [VarGroups.STATE, VarGroups.STATE],
-            [[VarGroups.STATE, VarGroups.STM], VarGroups.STATE],
+            [VarGroup.STATE, VarGroup.STATE],
+            [[VarGroup.STATE, VarGroup.STM], VarGroup.STATE],
         ],
     )
     def test_propagate_lazy(self, origin, mocker, varGroups1, varGroups2, lazy):

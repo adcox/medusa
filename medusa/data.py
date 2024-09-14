@@ -22,6 +22,8 @@ Module Reference
 """
 import xml.etree.ElementTree as ET
 
+from .util import float_eq
+
 # ------------------------------------------------------------------------------
 # Constants
 
@@ -65,12 +67,12 @@ class Body:
         self, name, gm, sma=0.0, ecc=0.0, inc=0.0, raan=0.0, spiceId=0, parentId=None
     ):
         self.name = name
-        self.gm = gm
-        self.sma = sma
-        self.ecc = ecc
-        self.inc = inc
-        self.raan = raan
-        self.id = spiceId
+        self.gm = float(gm)
+        self.sma = float(sma)
+        self.ecc = float(ecc)
+        self.inc = float(inc)
+        self.raan = float(raan)
+        self.id = int(spiceId)
         self.parentId = parentId
 
     @staticmethod
@@ -101,7 +103,7 @@ class Body:
                     name,
                     float(data.find("gm").text),
                     sma=float(data.find("circ_r").text),
-                    ecc=0.0,
+                    ecc=0.0,  # TODO why is this not read from data??
                     inc=float(data.find("inc").text),
                     raan=float(data.find("raan").text),
                     spiceId=int(data.find("id").text),
@@ -116,11 +118,20 @@ class Body:
 
         return (
             self.name == other.name
-            and self.gm == other.gm
-            and self.sma == other.sma
-            and self.ecc == other.ecc
-            and self.inc == other.inc
-            and self.raan == other.raan
+            and float_eq(self.gm, other.gm)
+            and float_eq(self.sma, other.sma)
+            and float_eq(self.ecc, other.ecc)
+            and float_eq(self.inc, other.inc)
+            and float_eq(self.raan, other.raan)
             and self.id == other.id
             and self.parentId == other.parentId
         )
+
+    def __repr__(self):
+        vals = ", ".join(
+            [
+                "{!s}={!r}".format(lbl, getattr(self, lbl))
+                for lbl in ("gm", "sma", "ecc", "inc", "raan", "id", "parentId")
+            ]
+        )
+        return "<Body {!s}: {!s}>".format(self.name, vals)

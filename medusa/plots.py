@@ -8,7 +8,7 @@ import numpy as np
 import scipy.optimize
 
 from medusa import util
-from medusa.dynamics import VarGroups
+from medusa.dynamics import VarGroup
 
 
 class ToCoordVals:
@@ -38,7 +38,7 @@ class ToCoordVals:
         """
         # TODO check input types
         # Build a dict mapping coordinate name to state index
-        stateNames = model.varNames(VarGroups.STATE)
+        stateNames = model.varNames(VarGroup.STATE)
         coordMap = {"t": None}
         for ix, name in enumerate(stateNames):
             coordMap[name] = ix
@@ -62,7 +62,7 @@ class ToCoordVals:
         # TODO accept varGroups as input to class? or to method?
         vals = None
         for seg in segments:
-            _vals = self.propagation(seg.propagate(VarGroups.STATE))
+            _vals = self.propagation(seg.propagate(VarGroup.STATE))
             if vals is None:
                 vals = _vals
             else:

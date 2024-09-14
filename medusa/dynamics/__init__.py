@@ -238,7 +238,7 @@ class AbstractDynamicsModel(ABC):
         Check the partial derivatives included in the equations of motion
 
         Args:
-            y0 (numpy.ndarray): afull state vector (includes all VarGroups) for
+            y0 (numpy.ndarray): afull state vector (includes all VarGroup) for
                 this model
             tspan ([float]): a 2-element vector defining the start and end times
                 for numerical propagation
@@ -279,19 +279,19 @@ class AbstractDynamicsModel(ABC):
 
         # TODO ensure tolerances are tight enough?
         prop = Propagator(self, dense=False)
-        state0 = self.extractVars(y0, VarGroup.STATE, VarGroupIn=allVars)
+        state0 = self.extractVars(y0, VarGroup.STATE, varGroupsIn=allVars)
 
-        solution = prop.propagate(y0, tspan, params=params, VarGroup=allVars)
+        solution = prop.propagate(y0, tspan, params=params, varGroups=allVars)
         sol_vec = np.concatenate(
             [
-                self.extractVars(solution.y[:, -1], grp, VarGroupIn=allVars).flatten()
+                self.extractVars(solution.y[:, -1], grp, varGroupsIn=allVars).flatten()
                 for grp in allVars[1:]
             ]
         )
 
         # Compute state partials (STM)
         def prop_state(y):
-            sol = prop.propagate(y, tspan, params=params, VarGroup=VarGroup.STATE)
+            sol = prop.propagate(y, tspan, params=params, varGroups=VarGroup.STATE)
             return sol.y[:, -1]
 
         num_stm = numerics.derivative_multivar(prop_state, state0, initStep)
@@ -304,7 +304,7 @@ class AbstractDynamicsModel(ABC):
                     state0,
                     [epoch + t for t in tspan],
                     params=params,
-                    VarGroup=VarGroup.STATE,
+                    varGroups=VarGroup.STATE,
                 )
                 return sol.y[:, -1]
 
@@ -318,7 +318,7 @@ class AbstractDynamicsModel(ABC):
         if self.stateSize(VarGroup.PARAM_PARTIALS) > 0:
 
             def prop_params(p):
-                sol = prop.propagate(state0, tspan, params=p, VarGroup=VarGroup.STATE)
+                sol = prop.propagate(state0, tspan, params=p, varGroups=VarGroup.STATE)
                 return sol.y[:, -1]
 
             num_paramPartials = numerics.derivative_multivar(

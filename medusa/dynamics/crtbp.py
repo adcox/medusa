@@ -45,7 +45,7 @@ in nondimensional coordinates within the rotating frame,
 These vectors are available from the model via :func:`~DynamicsModel.bodyState`.
 
 The position and velocity of the third primary are represented by the 
-:data:`~medusa.dynamics.VarGroups.STATE` variables,
+:data:`~medusa.dynamics.VarGroup.STATE` variables,
 
 .. math::
     \\vec{q} = \\begin{Bmatrix} x & y & z & \dot{x} & \dot{y} & \dot{z} \\end{Bmatrix}^T.
@@ -71,7 +71,7 @@ locates :math:`P_3` relative to :math:`P_2`. The vector magnitudes are represent
 via :math:`r_{13}` and :math:`r_{23}`, respectively.
 
 Partial derivatives of the state derivative with respect to the initial state can
-also be propagated via the :data:`~medusa.dynamics.VarGroups.STM` group.
+also be propagated via the :data:`~medusa.dynamics.VarGroup.STM` group.
 
 .. math::
    \dot{\Phi} = \mathbf{A} \dot{\Phi}
@@ -114,7 +114,7 @@ from numba import njit
 
 import medusa.util as util
 from medusa.data import GRAV_PARAM
-from medusa.dynamics import AbstractDynamicsModel, VarGroups
+from medusa.dynamics import AbstractDynamicsModel, VarGroup
 
 
 class DynamicsModel(AbstractDynamicsModel):
@@ -156,10 +156,10 @@ class DynamicsModel(AbstractDynamicsModel):
 
     def stateSize(self, varGroups):
         varGroups = util.toList(varGroups)
-        return 6 * (VarGroups.STATE in varGroups) + 36 * (VarGroups.STM in varGroups)
+        return 6 * (VarGroup.STATE in varGroups) + 36 * (VarGroup.STM in varGroups)
 
     def varNames(self, varGroups):
-        if varGroups == VarGroups.STATE:
+        if varGroups == VarGroup.STATE:
             return ["x", "y", "z", "dx", "dy", "dz"]
         else:
             return super().varNames(varGroups)  # defaults are fine for the rest
@@ -185,7 +185,7 @@ class DynamicsModel(AbstractDynamicsModel):
         qdot[5] = -omm * q[2] / r13_3 - mu * q[2] / r23_3
 
         # Compute STM elements
-        if VarGroups.STM in varGroups:
+        if VarGroup.STM in varGroups:
             r13_5 = r13_3 * r13 * r13
             r23_5 = r23_3 * r23 * r23
 

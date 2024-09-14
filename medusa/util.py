@@ -4,6 +4,12 @@ Utilities
 
 Miscellaneous utility functions.
 
+.. autosummary::
+   float_eq
+   toList
+   toArray
+
+.. autofunction:: float_eq
 .. autofunction:: toList
 .. autofunction:: toArray
 """
@@ -61,3 +67,21 @@ def toArray(val):
     """
     # Convert to array
     return np.asarray(_iterate(val))
+
+
+def float_eq(f1, f2):
+    """
+    Compare two floats for equality, accepting NaN == NaN
+
+    Args:
+        f1 (float)
+        f2 (float)
+
+    Returns:
+        bool: whether or not the two floats are equal. If both are NaN, True is
+        returned
+    """
+    if np.isnan(f1) and np.isnan(f2):
+        return True
+    else:
+        return f1 == f2
