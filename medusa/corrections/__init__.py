@@ -1022,7 +1022,7 @@ class CorrectionsProblem:
 
         return self._jacobian
 
-    def checkJacobian(self, stepSize=1e-4, tol=1e-6):
+    def checkJacobian(self, stepSize=1e-4, rtol=1e-6, atol=1e-8, printTable=True):
         """
         Compute a numerical Jacobian and compare against the analytically-computed
         one.
@@ -1037,10 +1037,9 @@ class CorrectionsProblem:
         The numerical Jacobian matrix is then differenced from the analytical
         Jacobian (from :func:`jacobian`). For non-zero Jacobian entries with absolute
         values larger than the step size, the relative difference is computed as
-        ``(numeric - analytical)/numeric``. For other Jacobian entries, the
-        absolute difference, ``(numeric - analytical)`` is stored. The two are
-        deemed equal if each difference is less than ``tol``. Messages about
-        inequality are logged to the "medusa.corrections" logger at the ERROR level.
+        ``(numeric - analytical)/numeric``. The two are deemed equal if the
+        absolute difference is less than ``atol`` OR the relative difference is
+        less than ``rtol``.
 
         This is not a foolproof method (numerics can be tricky) but is often a
         helpful tool in debugging partial derivative derivations.
@@ -1049,12 +1048,18 @@ class CorrectionsProblem:
             stepSize (Optional, float): the initial free variable step size; this
             value should be sufficiently large such that the constraint vector
             changes *substantially* as a result.
-            tol (Optional, float): tolerance for equality between the numeric and
-                analytical Jacobian matrices
+            rtol (Optional, float): relative tolerance for equality between the
+                numeric and analytical Jacobian matrices
+            atol (Optional, float): absolute tolerance for equality between the
+                numeric and analystical Jacobian matrics
+            printTable (Optional, bool): whether or not to plot a table with the
+                comparison data to screen.
 
         Returns:
             bool: True if the numeric and analytical Jacobian matrices are equal
         """
+        from rich.table import Table
+
         analytic = self.jacobian()
         prob = deepcopy(self)
 
@@ -1075,27 +1080,46 @@ class CorrectionsProblem:
         absDiff = numeric - analytic
         relDiff = absDiff.copy()
         equal = True
+        table = Table(
+            "Status",
+            "Row",
+            "Constraint",
+            "Col",
+            "Variable",
+            "Numeric",
+            "Analytical",
+            "Rel Err",
+            "Abs Err",
+        )
         for r, row in enumerate(relDiff):
             for c in range(len(row)):
                 # If numeric partial is nonzero, compute relative dif
                 if abs(numeric[r, c]) > 1e-12:
                     relDiff[r, c] = absDiff[r, c] / numeric[r, c]
 
-                if abs(relDiff[r, c]) > tol:
+                relOk = abs(relDiff[r, c]) <= rtol
+                rStyle = "i" if relOk else "u"
+                absOk = abs(absDiff[r, c]) <= atol
+                aStyle = "i" if absOk else "u"
+
+                table.add_row(
+                    "OK" if relOk or absOk else "ERR",
+                    f"{r}",
+                    conMap[r].__class__.__name__,
+                    f"{c}",
+                    varMap[c].name,
+                    f"{numeric[r,c]:.4e}",
+                    f"{analytic[r,c]:.4e}",
+                    f"[{rStyle}]{relDiff[r,c]:.4e}[/{rStyle}]",
+                    f"[{aStyle}]{absDiff[r,c]:.4e}[/{aStyle}]",
+                    style="blue" if relOk or absOk else "red",
+                )
+
+                if not (relOk or absOk):
                     equal = False
 
-                    con, var = conMap[r], varMap[c]
-                    conDetail = "Constraint (sub-index {}) = {}".format(
-                        r - self.constraintIndexMap()[con], con
-                    )
-                    varDetail = "Variable (sub-index {}) = {}".format(
-                        c - self.freeVarIndexMap()[var], var
-                    )
-                    logger.error(
-                        f"Jacobian error at ({r}, {c}): "
-                        f"Expected = {numeric[r,c]}, Actual = {analytic[r,c]} "
-                        f"(Rel err = {relDiff[r,c]:e}\n  {conDetail}\n  {varDetail}"
-                    )
+        if printTable:
+            console.print(table)
 
         return equal
 

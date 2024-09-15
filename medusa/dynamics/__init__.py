@@ -344,8 +344,8 @@ class AbstractDynamicsModel(ABC):
         table = Table(
             "Status",
             "Name",
-            "Expected",
-            "Actual",
+            "Numeric",
+            "Analytic",
             "Rel Err",
             "Abs Err",
             title="Partial Derivative Check",

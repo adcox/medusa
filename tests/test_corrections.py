@@ -701,26 +701,18 @@ class TestCorrectionsProblem:
         constraintVec = copy.copy(prob.constraintVec())
         jacobian = copy.copy(prob.jacobian())
 
-        assert prob.checkJacobian(tol=1e-6)
+        assert prob.checkJacobian(rtol=1e-6)
 
         # Make sure original problem has not been modified
         assert np.array_equal(prob.freeVarVec(), freeVarVec)
         assert np.array_equal(prob.constraintVec(), constraintVec)
         assert np.array_equal(prob.jacobian(), jacobian)
 
-    def test_checkJacobian_fails(self, caplog):
+    def test_checkJacobian_fails(self):
         prob = self.jacProb([0, 0, 0], [None, 2.0, 3.0])
 
         # An absurdly small tolerance will trigger failure
-        with caplog.at_level(logging.DEBUG, logger="medusa"):
-            assert not prob.checkJacobian(tol=1e-24)
-
-        for record in caplog.records:
-            if not record.name == "medusa.corrections":
-                continue
-            # All records should be errors
-            assert record.levelno == logging.ERROR
-            assert record.message.startswith("Jacobian error")
+        assert not prob.checkJacobian(rtol=1e-24, atol=1e-24)
 
     # -------------------------------------------
     # Caching

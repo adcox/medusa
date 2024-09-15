@@ -84,7 +84,9 @@ class Angle(AbstractConstraint):
 
     def partials(self, freeVarIndexMap):
         if self.state in freeVarIndexMap:
-            return {self.state: self.refDir}
+            dFdq = np.zeros((1, self.state.values.size))
+            dFdq[0, self.stateIx] = self.refDir
+            return {self.state: dFdq}
 
 
 class StateContinuity(AbstractConstraint):
