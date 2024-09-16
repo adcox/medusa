@@ -12,5 +12,5 @@ pre-commit install
 ## Testing
 ```
 source test-env/bin/activate
-pytest --cov=medusa --cov-report html
+pytest --cov medusa --cov-report html
 ```

@@ -66,7 +66,7 @@ def toArray(val):
             ndarray([1.23])
     """
     # Convert to array
-    return np.asarray(_iterate(val))
+    return np.asarray(list(_iterate(val)))
 
 
 def float_eq(f1, f2):
