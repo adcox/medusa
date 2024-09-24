@@ -94,12 +94,12 @@ subscripts denote second-order partial derivatives,
 
 .. math::
    \Omega &= \\frac{1-\mu}{r_{13}} + \\frac{\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2)\\\\
-   \Omega_{xx} &= 1 - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)(x + \mu)^2}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)^2}{r_{23}^5}\\\\
-   \Omega_{yy} &= 1 - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)y^2}{r_{13}^5} + \\frac{3\mu y^2}{r_{23}^5}\\\\
-   \Omega_{zz} &=  - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)z^2}{r_{13}^5} + \\frac{3\mu z^2}{r_{23}^5}\\\\
-   \Omega_{xy} &= \Omega_{yx} = \\frac{3(1 - \mu)(x + \mu)y}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)y}{r_{23}^5}\\\\
-   \Omega_{xz} &= \Omega_{zx} = \\frac{3(1 - \mu)(x + \mu)z}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)z}{r_{23}^5}\\\\
-   \Omega_{yz} &= \Omega_{zy} = \\frac{3(1 - \mu)yz}{r_{13}^5} + \\frac{3\mu yz}{r_{23}^5}
+   \Omega_{xx} = \\frac{\partial^2 \Omega}{\partial x^2} &= 1 - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)(x + \mu)^2}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)^2}{r_{23}^5}\\\\
+   \Omega_{yy} = \\frac{\partial^2 \Omega}{\partial y^2} &= 1 - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)y^2}{r_{13}^5} + \\frac{3\mu y^2}{r_{23}^5}\\\\
+   \Omega_{zz} = \\frac{\partial^2 \Omega}{\partial z^2} &=  - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)z^2}{r_{13}^5} + \\frac{3\mu z^2}{r_{23}^5}\\\\
+   \Omega_{xy} = \Omega_{yx} = \\frac{\partial^2 \Omega}{\partial x \partial y} &= \\frac{3(1 - \mu)(x + \mu)y}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)y}{r_{23}^5}\\\\
+   \Omega_{xz} = \Omega_{zx} = \\frac{\partial^2 \Omega}{\partial x \partial z} &= \\frac{3(1 - \mu)(x + \mu)z}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)z}{r_{23}^5}\\\\
+   \Omega_{yz} = \Omega_{zy} = \\frac{\partial^2 \Omega}{\partial y \partial z} &= \\frac{3(1 - \mu)yz}{r_{13}^5} + \\frac{3\mu yz}{r_{23}^5}
 
 Reference
 ---------
@@ -152,7 +152,7 @@ class DynamicsModel(AbstractDynamicsModel):
         elif ix == 1:
             return np.asarray([1 - self._properties["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
         else:
-            raise ValueError(f"Index {ix} must be zero or one")
+            raise IndexError(f"Index {ix} must be zero or one")
 
     def stateSize(self, varGroups):
         varGroups = util.toList(varGroups)

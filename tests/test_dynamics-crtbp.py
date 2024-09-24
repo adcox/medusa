@@ -74,6 +74,12 @@ class TestDynamicsModel:
         assert isinstance(state, np.ndarray)
         assert state.shape == (6,)
 
+    @pytest.mark.parametrize("ix", [-1, 2])
+    def test_bodyState_invalidIx(self, ix):
+        model = DynamicsModel(earth, moon)
+        with pytest.raises(IndexError):
+            model.bodyState(ix, 0.0)
+
     def test_varNames(self):
         model = DynamicsModel(earth, moon)
         stateNames = model.varNames(VarGroup.STATE)
@@ -90,7 +96,12 @@ class TestDynamicsModel:
         paramNames = model.varNames(VarGroup.PARAM_PARTIALS)
         assert paramNames == []
 
-    def test_checkPartials(self):
+    @pytest.mark.parametrize("jit", [True, False])
+    def test_checkPartials(self, jit, mocker):
+        # Test EOM evaluation both with and without numba JIT
+        if not jit:
+            mocker.patch.object(DynamicsModel, "_eoms", DynamicsModel._eoms.py_func)
+
         model = DynamicsModel(earth, moon)
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         y0 = model.appendICs(

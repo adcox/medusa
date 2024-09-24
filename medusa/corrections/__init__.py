@@ -1473,7 +1473,7 @@ class DifferentialCorrector:
         if not callable(self.updateGenerator.update):
             raise TypeError("updateGenerator.update must be callable")
 
-    def solve(self, problem):
+    def solve(self, problem, lineSearch=True):
         """
         Solve a corrections problem by iterating the :attr:`updateGenerator`
         until the :attr:`convergenceCheck` returns True or the :attr:`maxIterations`
@@ -1496,6 +1496,7 @@ class DifferentialCorrector:
               an iteration of the solver and includes a copy of the free variable
               vector and the constraint vector.
         """
+        tolA = 1e-12  # tolerance for spurious convergence; TODO user set
         self._validateArgs()
 
         solution = deepcopy(problem)
@@ -1507,6 +1508,12 @@ class DifferentialCorrector:
             log["status"] = "empty"
             return solution
 
+        def costFunc(freeVarVec):
+            # Function to minimize in line search
+            solution.updateFreeVars(freeVarVec)
+            F = solution.constraintVec()
+            return 0.5 * F.T @ F
+
         with warnings.catch_warnings(record=True) as caught:
             warnings.filterwarnings("error", module="scipy.linalg")
             itCount = 0
@@ -1514,6 +1521,44 @@ class DifferentialCorrector:
             while True:
                 if itCount > 0:
                     freeVarStep = self.updateGenerator.update(solution)
+
+                    if lineSearch:
+                        # Get the current constraint vector
+                        F = solution.constraintVec()
+
+                        # Calculate the gradient of costFunc w.r.t. freeVars
+                        grad = F.T @ solution.jacobian()
+
+                        newVec, _, checkMin = numerics.linesearch(
+                            costFunc,
+                            solution.freeVarVec(),
+                            0.5 * F.T @ F,
+                            grad,
+                            freeVarStep,
+                        )
+
+                        if checkMin:
+                            # Check for gradient of costFunc = 0, i.e., spurious convergence.
+                            # Algorithm from the `newt` function defined in Sec 9.7 of
+                            #   Numerical Recipes in C, 2nd Edition; Press, Teukolsky,
+                            #   Vetterling, and Flannery. 1996.
+                            funcVal = costFunc(newVec)
+                            F = solution.constraintVec()
+                            denom = max(funcVal, 0.5 * newVec.size)
+                            grad = F.T @ solution.jacobian()
+                            test = max(
+                                [
+                                    abs(grad[ix]) * max(newVec[ix], 1.0) / denom
+                                    for ix in range(newVec.size)
+                                ]
+                            )
+                            if test < tolA:
+                                raise RuntimeError(
+                                    "The line search has converged to a local minimum"
+                                    " of f = (1/2) FX * FX. Try another initial guess"
+                                    " for the free variable vector"
+                                )
+
                     newVec = solution.freeVarVec() + freeVarStep
                     solution.updateFreeVars(newVec)
 
