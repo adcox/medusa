@@ -9,7 +9,8 @@ from rich.logging import RichHandler
 
 logger = logging.getLogger("medusa")
 logger.addHandler(RichHandler(show_time=False, show_path=False, enable_link_path=False))
-logger.setLevel(logging.INFO)
+# logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 BODIES = Path(__file__).parent.parent / "resources/body-data.xml"
 assert BODIES.exists()
@@ -17,7 +18,7 @@ assert BODIES.exists()
 
 import medusa.corrections as cor
 import medusa.corrections.constraints as cons
-import medusa.crtbp as cr
+import medusa.dynamics.crtbp as cr
 import medusa.dynamics.lowthrust as lt
 import medusa.plots as plots
 from medusa.data import Body
@@ -80,11 +81,13 @@ ax.plot(solf[0], solf[1], lw=2, label="CR3BP")
 
 # ------------------------------------------------------------------------------
 # Get periodic CR3BP+LT orbit
-thrust = lt.control.ConstThrustTerm(7e-3)
-mass = lt.control.ConstMassTerm(1.0)
-orient = lt.control.ConstOrientTerm(-76.5 * np.pi / 180.0, 0.0)
-control = lt.control.ForceMassOrientLaw(thrust, mass, orient)
-ltModel = lt.dynamics.LowThrustCrtbpDynamics(earth, moon, control)
+import medusa.dynamics.lowthrust.crtbp as ltcrtbp
+
+thrust = lt.ConstThrustTerm(7e-3)
+mass = lt.ConstMassTerm(1.0)
+orient = lt.ConstOrientTerm(-76.5 * np.pi / 180.0, 0.0)
+control = lt.ForceMassOrientLaw(thrust, mass, orient)
+ltModel = ltcrtbp.DynamicsModel(earth, moon, control)
 
 # Start from converged CR3BP solution
 fv = solution.freeVarVec()

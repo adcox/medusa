@@ -43,9 +43,10 @@ def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
         float, numpy.ndarray: the derivative of ``func`` with respect to ``x``,
         evaluated at the given value of ``x``.
 
-    The algorithm implemented in this function is "Richardson's deferred approach
+    *The algorithm implemented in this function is "Richardson's deferred approach
     to the limit," detailed in Numerical Recipes in C, 2nd Edition by Press,
-    Teukolsky, Vetterling, and Flannery (1996)
+    Teukolsky, Vetterling, and Flannery (1996), adapted from Ridders, C.J.F. 1982,
+    Advances in Engineering Software, vol. 4, no. 2 pp. 75-76*
     """
     CON = 1.4  # step size is decreased by CON at each iteration
     CON2 = CON * CON
@@ -273,12 +274,17 @@ def linesearch(func, x, funcVal, grad, xStep):
     for it in range(maxIt):
         xNew = x + lam * xStep  # take a step
         funcValNew = func(xNew)
+        logger.debug(
+            f"Line search iteration {it:02d}: lambda = {lam:.2e}, funcVal = {funcValNew:.2e}"
+        )
 
         if lam < minLam:
             xNew = np.array(xStep)
             checkLocalMin = True
+            logger.debug(f"Reached local minimum; lambda < minimum = {minLam:.2e}")
             return xNew, funcValNew, checkLocalMin
         elif funcValNew <= funcVal + ALF * lam * initROD:
+            logger.debug("Line search converged")
             return xNew, funcValNew, checkLocalMin
         else:
             if lam == 1.0:
@@ -317,4 +323,4 @@ def linesearch(func, x, funcVal, grad, xStep):
         lam = max(lam_next, 0.1 * lam)  # keep lambda >= 0.1 lambda_prev
 
     if funcValNew <= funcVal + ALF * lam * initROD:
-        raise RuntimeError("linesearch() has diverged")
+        raise RuntimeError("Line search has diverged")

@@ -14,13 +14,13 @@ from medusa.corrections import (
     Segment,
     ShootingProblem,
 )
-from medusa.crtbp import DynamicsModel
 from medusa.data import Body
+from medusa.dynamics.crtbp import DynamicsModel
 from medusa.propagate import Propagator
 
 logger = logging.getLogger("medusa")
 logger.addHandler(RichHandler(show_time=False, show_path=False, enable_link_path=False))
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 BODIES = Path(__file__).parent.parent / "resources/body-data.xml"

@@ -1559,7 +1559,9 @@ class DifferentialCorrector:
                                     " for the free variable vector"
                                 )
 
-                    newVec = solution.freeVarVec() + freeVarStep
+                    else:
+                        newVec = solution.freeVarVec() + freeVarStep
+
                     solution.updateFreeVars(newVec)
 
                 log["iterations"].append(
