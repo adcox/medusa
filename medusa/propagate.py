@@ -50,13 +50,16 @@ Module Reference
    :show-inheritance:
 
 """
+
 import logging
 from abc import ABC, abstractmethod
 from copy import copy
+from typing import Iterable, Union
 
 import numpy as np
 from numba import njit
 from scipy.integrate import solve_ivp
+from scipy.optimize import OptimizeResult
 
 from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
 
@@ -73,48 +76,56 @@ class Propagator(ModelBlockCopyMixin):
     This class primarily wraps the :func:`scipy.integrate.solve_ivp` method
 
     Args:
-        model (AbstractDynamicsModel): defines the dynamics model in which the
-            propagation occurs
-        method (Optional, str): the integration method to use; passed as the
+        model: defines the dynamics model in which the propagation occurs
+        method: the integration method to use; passed as the
             ``method`` argument to :func:`~scipy.integrate.solve_ivp`
-        dense (Optional, bool): whether or not to output dense propagation data;
+        dense: whether or not to output dense propagation data;
             passed as the ``dense_output`` argument to
             :func:`~scipy.integrate.solve_ivp`
-        atol (Optional, float): absolute tolerance for the integrator; see
+        atol: absolute tolerance for the integrator; see
             :func:`~scipy.integrate.solve_ivp` for more details
-        rtol (Optional, float): relative tolerance for the integrator; see
+        rtol: relative tolerance for the integrator; see
             :func:`~scipy.integrate.solve_ivp` for more details
-
-    Attributes:
-        method (AbstractDynamicsModel): defines the dynamics model
-        model (str): the integration method
-        dense (bool): whether or not to output dense propagation data
-        events ([AbstractEvent]): a list of integration events
     """
 
-    def __init__(self, model, method="DOP853", dense=True, atol=1e-12, rtol=1e-10):
+    def __init__(
+        self,
+        model: AbstractDynamicsModel,
+        method: str = "DOP853",
+        dense: bool = True,
+        atol: float = 1e-12,
+        rtol: float = 1e-10,
+    ):
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
-        self.method = method
-        self.atol = atol
-        self.rtol = rtol
-        self.model = model
-        self.dense = dense
-        self.events = []
+        self.method = method  #: str: the numerical integration method
+        self.atol = atol  #: float: absolute tolerance
+        self.rtol = rtol  #: float: relative tolerance
+        self.model = model  #: AbstractDynamicsModel: dynamics model
+        self.dense = dense  #: bool: whether or not to output dense propagation data
+        self.events = []  #: list[AbstractEvent]: integration events
 
-    def propagate(self, y0, tspan, *, params=None, varGroups=VarGroup.STATE, **kwargs):
+    def propagate(
+        self,
+        w0: np.ndarray[float],
+        tspan: list[float, float],
+        *,
+        params: Union[Iterable[float], None] = None,
+        varGroups: Iterable[VarGroup] = VarGroup.STATE,
+        **kwargs,
+    ) -> OptimizeResult:
         """
         Perform a propagation
 
         Args:
-            y0 (numpy.ndarray<float>): initial state vector
-            tspan ([float]): a 2-element vector defining the start and end times
+            w0: initial state vector
+            tspan: a 2-element vector defining the start and end times
                 for the propagation
-            params (Optional, [float]): parameters that are passed to the dynamics
+            params: parameters that are passed to the dynamics
                 model
-            varGroups (Optional, [VarGroup]): the variable groups that are included
-                 in ``y0``.
+            varGroups: the variable groups that are included
+                 in ``w0``.
             kwargs: additional arguments passed to :func:`scipy.integrate.solve_ivp`.
                 Note that the ``method`` and ``dense_output`` arguments, defined
                 in the :class:`Propagator` constructor, cannot be overridden.
@@ -127,7 +138,7 @@ class Propagator(ModelBlockCopyMixin):
         Raises:
             RuntimeError: if ``varGroups`` is not valid for the propagation as
                 checked via :func:`AbstractDynamicsModel.validForPropagation`
-            RuntimeError: if the size of ``y0`` is inconsistent with ``varGroups``
+            RuntimeError: if the size of ``w0`` is inconsistent with ``varGroups``
                 as checked via :func:`AbstractDynamicsModel.groupSize`
             RuntimeError: if any of the objects in :attr:`events` are not derived
                 from the :class:`AbstractEvent` base class
@@ -150,16 +161,16 @@ class Propagator(ModelBlockCopyMixin):
             logger.warning("Overwriting 'args' passed to propagate()")
 
         # Ensure state is an array with the right number of elements
-        y0 = np.array(y0, ndmin=1)
-        if not y0.size == self.model.groupSize(varGroups):
+        w0 = np.array(w0, ndmin=1)
+        if not w0.size == self.model.groupSize(varGroups):
             # Likely scenario: user wants default ICs for other variable groups
-            if y0.size == self.model.groupSize(VarGroup.STATE):
-                y0 = self.model.appendICs(
-                    y0, [v for v in varGroups if not v == VarGroup.STATE]
+            if w0.size == self.model.groupSize(VarGroup.STATE):
+                w0 = self.model.appendICs(
+                    w0, [v for v in varGroups if not v == VarGroup.STATE]
                 )
             else:
                 raise RuntimeError(
-                    f"y0 size is {y0.size}, which is not the STATE size "
+                    f"w0 size is {w0.size}, which is not the STATE size "
                     f"({self.model.groupSize(VarGroup.STATE)}); don't know how to respond."
                     " Please pass in a STATE-sized vector or a vector with all "
                     "initial conditions defined for the specified VarGroup"
@@ -183,7 +194,7 @@ class Propagator(ModelBlockCopyMixin):
         kwargs_in["events"] = eventFcns
 
         # Run propagation
-        sol = solve_ivp(self.model.diffEqs, tspan, y0, **kwargs_in)
+        sol = solve_ivp(self.model.diffEqs, tspan, w0, **kwargs_in)
 
         # Append our own metadata
         sol.model = self.model
@@ -198,17 +209,17 @@ class AbstractEvent(ABC):
     Defines an abstract event object
 
     Args:
-        terminal (Optional, bool, int): defines how the event interacts with the
+        terminal: defines how the event interacts with the
             proapgation. If ``True``, the propagation will stop at the first occurrence
             of this event. If an :class:`int` is passed, the propagation will
             end after the specified number of occurrences.
-        direction (Optional, float): defines event direction. If less than zero,
+        direction: defines event direction. If less than zero,
             the event is only triggered when ``eval`` moves from positive to
             negative values. A positive value triggers in the opposite direction,
             and ``0`` will trigger the event in either direction.
     """
 
-    def __init__(self, terminal=False, direction=0.0):
+    def __init__(self, terminal: bool = False, direction: float = 0.0):
         if not isinstance(terminal, bool):
             try:
                 terminal = int(terminal)
@@ -235,18 +246,24 @@ class AbstractEvent(ABC):
         self.eval.__func__.direction = self.direction
 
     @abstractmethod
-    def eval(self, t, y, varGroups, params):
+    def eval(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: Iterable[float],
+    ) -> float:
         """
         Event evaluation method
 
         Args:
-            t (float): time value
-            y (numpy.ndarray<float>): variable vector
-            varGroups (tuple<VarGroup>): describes the variable groups in ``y``
-            params ([float]): extra parameters passed from the integrator
+            t: independent variable value
+            w: variable vector
+            varGroups: describes the variable groups in ``w``
+            params: extra parameters passed from the integrator
 
         Returns:
-            float: the event value. The event occurs when this value is zero
+            the event value. The event occurs when this value is zero
         """
         pass
 
@@ -256,18 +273,24 @@ class ApseEvent(AbstractEvent):
     Occurs at an apsis relative to a body in the model
 
     Args:
-        model (AbstractDynamicsModel): a dynamics model
-        bodyIx (int): index of the body
-        terminal (Optional, bool, int): defines how the event interacts with the
+        model: a dynamics model
+        bodyIx: index of the body
+        terminal: defines how the event interacts with the
             proapgation. If ``True``, the propagation will stop at the first occurrence
             of this event. If an :class:`int` is passed, the propagation will
             end after the specified number of occurrences.
-        direction (Optional, float): defines event direction. A positive value
+        direction: defines event direction. A positive value
             corresponds to periapsis, a negative value corresponds to an
             apoapsis, and a zero value finds all apses.
     """
 
-    def __init__(self, model, bodyIx, terminal=False, direction=0.0):
+    def __init__(
+        self,
+        model: AbstractDynamicsModel,
+        bodyIx: int,
+        terminal: bool = False,
+        direction: float = 0.0,
+    ):
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
@@ -275,17 +298,23 @@ class ApseEvent(AbstractEvent):
         self._model = model
         self._ix = bodyIx
 
-    def eval(self, t, y, varGroups, params):
-        return self._eval(t, y, params, self._model, self._ix)
+    def eval(self, t, w, varGroups, params):
+        return self._eval(t, w, params, self._model, self._ix)
 
     @staticmethod
     # @njit  # would need to pass bodyState in as arg (TODO?)
-    def _eval(t, y, params, model, ix):
+    def _eval(
+        t: float,
+        w: np.ndarray[float],
+        params: Iterable[float],
+        model: AbstractDynamicsModel,
+        ix: int,
+    ) -> float:
         # apse occurs where dot product between primary-relative position and
         # velocity is zero
         # TODO this assumes the state vector is the Cartesian position and velocity
         #   vectors
-        relState = y[:6] - model.bodyState(ix, t, params)
+        relState = w[:6] - model.bodyState(ix, t, params)
         return (
             relState[0] * relState[3]
             + relState[1] * relState[4]
@@ -298,20 +327,27 @@ class BodyDistanceEvent(AbstractEvent):
     Occurs when the position distance relative to a body equals a specified value
 
     Args:
-        model (AbstractDynamicsModel): the model that includes the body
-        ix (int): index of the body in the model
-        dist (float): distance value
-        terminal (Optional, bool, int): defines how the event interacts with the
+        model: the model that includes the body
+        ix: index of the body in the model
+        dist: distance value
+        terminal: defines how the event interacts with the
             proapgation. If ``True``, the propagation will stop at the first occurrence
             of this event. If an :class:`int` is passed, the propagation will
             end after the specified number of occurrences.
-        direction (Optional, float): defines event direction. If less than zero,
+        direction: defines event direction. If less than zero,
             the event is only triggered when ``eval`` moves from positive to
             negative values. A positive value triggers in the opposite direction,
             and ``0`` will trigger the event in either direction.
     """
 
-    def __init__(self, model, ix, dist, terminal=False, direction=0.0):
+    def __init__(
+        self,
+        model: AbstractDynamicsModel,
+        ix: int,
+        dist: float,
+        terminal: bool = False,
+        direction: float = 0.0,
+    ):
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
@@ -320,9 +356,9 @@ class BodyDistanceEvent(AbstractEvent):
         self._ix = ix
         self._dist = dist * dist  # evaluation uses squared value
 
-    def eval(self, t, y, varGroups, params):
+    def eval(self, t, w, varGroups, params):
         # TODO assumes Cartesian position vector is the first piece of state vector
-        relPos = y[:3] - self._model.bodyState(self._ix, t, params)[:3]
+        relPos = w[:3] - self._model.bodyState(self._ix, t, params)[:3]
         return sum([x * x for x in relPos]) - self._dist
 
 
@@ -331,20 +367,27 @@ class DistanceEvent(AbstractEvent):
     Occurs when the L2 norm difference between two vectors equals the specified distance
 
     Args:
-        dist (float): the distance
-        vec (numpy.ndarray<float>): the goal vector
-        ixs (numpy.ndarray<int>): the indices of the variables to compare to ``vec``
-        terminal (Optional, bool, int): defines how the event interacts with the
+        dist: the distance
+        vec: the goal vector
+        ixs: the indices of the variables to compare to ``vec``
+        terminal: defines how the event interacts with the
             proapgation. If ``True``, the propagation will stop at the first occurrence
             of this event. If an :class:`int` is passed, the propagation will
             end after the specified number of occurrences.
-        direction (Optional, float): defines event direction. If less than zero,
+        direction: defines event direction. If less than zero,
             the event is only triggered when ``eval`` moves from positive to
             negative values. A positive value triggers in the opposite direction,
             and ``0`` will trigger the event in either direction.
     """
 
-    def __init__(self, dist, vec, ixs=[0, 1, 2], terminal=False, direction=0.0):
+    def __init__(
+        self,
+        dist: float,
+        vec: Iterable[float],
+        ixs: Iterable[int] = [0, 1, 2],
+        terminal: bool = False,
+        direction: float = 0.0,
+    ):
         vec, ixs = np.array(vec, ndmin=1), np.array(ixs, ndmin=1)
         if not vec.shape == ixs.shape:
             raise ValueError("vec and ixs must have the same shape")
@@ -354,8 +397,8 @@ class DistanceEvent(AbstractEvent):
         self._ixs = ixs
         self._dist = dist * dist  # evaluation uses squared value
 
-    def eval(self, t, y, varGroups, params):
-        dist = self._vec - y[self._ixs]
+    def eval(self, t, w, varGroups, params):
+        dist = self._vec - w[self._ixs]
         return sum([x * x for x in dist]) - self._dist
 
 
@@ -364,13 +407,13 @@ class VariableValueEvent(AbstractEvent):
     Occurs where a variable equals a specified value
 
     Args:
-        varIx (int): index of the variable within the array
-        varValue (float): the value of the variable
-        terminal (Optional, bool, int): defines how the event interacts with the
+        varIx: index of the variable within the array
+        varValue: the value of the variable
+        terminal: defines how the event interacts with the
             proapgation. If ``True``, the propagation will stop at the first occurrence
             of this event. If an :class:`int` is passed, the propagation will
             end after the specified number of occurrences.
-        direction (Optional, float): defines event direction. If less than zero,
+        direction: defines event direction. If less than zero,
             the event is only triggered when ``eval`` moves from positive to
             negative values. A positive value triggers in the opposite direction,
             and ``0`` will trigger the event in either direction.
@@ -378,15 +421,21 @@ class VariableValueEvent(AbstractEvent):
 
     # TODO - rename StateValueEvent for consistency with VarGroup?
 
-    def __init__(self, varIx, varValue, terminal=False, direction=0.0):
+    def __init__(
+        self,
+        varIx: int,
+        varValue: float,
+        terminal: bool = False,
+        direction: float = 0.0,
+    ):
         super().__init__(terminal, direction)
         self._ix = varIx
         self._val = varValue
 
-    def eval(self, t, y, varGroups, params):
-        return self._eval(y, self._ix, self._val)
+    def eval(self, t, w, varGroups, params):
+        return self._eval(w, self._ix, self._val)
 
     @staticmethod
     @njit
-    def _eval(y, ix, val):
-        return val - y[ix]
+    def _eval(w: np.ndarray[float], ix: int, val: float):
+        return val - w[ix]

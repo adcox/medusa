@@ -13,10 +13,12 @@ Miscellaneous utility functions.
 .. autofunction:: toList
 .. autofunction:: toArray
 """
+from typing import Iterable, Union
+
 import numpy as np
 
 
-def _iterate(val):
+def _iterate(val: object) -> Union[str, Iterable]:
     """
     A generator that iterates on the input, ``val``. If the input is a string,
     it is yielded without iterating.
@@ -31,15 +33,15 @@ def _iterate(val):
             yield val
 
 
-def toList(val):
+def toList(val: object) -> list:
     """
     Convert an object to a list
 
     Args:
-        val (object): the input
+        val: the input
 
     Returns:
-        list: a list containing the input
+        a list containing the input
 
     Examples:
         >>> toList(1.23)
@@ -51,15 +53,15 @@ def toList(val):
     return list(_iterate(val))
 
 
-def toArray(val):
+def toArray(val: object) -> np.ndarray:
     """
     Convert an object to a numpy array
 
     Args:
-        val (object): the input
+        val: the input
 
     Returns:
-        numpy.ndarray: an array containing the input
+        an array containing the input
 
     Examples:
         >>> toArray(1.23)
@@ -69,17 +71,16 @@ def toArray(val):
     return np.asarray(list(_iterate(val)))
 
 
-def float_eq(f1, f2):
+def float_eq(f1: float, f2: float) -> bool:
     """
     Compare two floats for equality, accepting NaN == NaN
 
     Args:
-        f1 (float)
-        f2 (float)
+        f1: a float
+        f2: another float
 
     Returns:
-        bool: whether or not the two floats are equal. If both are NaN, True is
-        returned
+        whether or not the two floats are equal. If both are NaN, True is returned
     """
     if np.isnan(f1) and np.isnan(f2):
         return True

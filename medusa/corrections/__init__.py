@@ -112,6 +112,7 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from copy import copy, deepcopy
+from typing import Iterable, Union
 
 import numpy as np
 import numpy.ma as ma
@@ -155,52 +156,63 @@ class Variable:
     Contains a variable vector with an optional mask to flag non-variable values
 
     Args:
-        values (float, [float], numpy.ndarray of float): scalar or array of variable
-            values
-        mask (bool, [bool], numpy.ndarray of bool): ``True`` flags values as excluded
-            from the free variable vector; ``False`` flags values as included
+        values: scalar or array of variable values
+        mask: ``True`` flags values as excluded from the free variable vector;
+            ``False`` flags values as included. If a single value is provided,
+            all ``values`` will have that mask applied.
     """
 
-    def __init__(self, values, mask=False, name=""):
+    def __init__(
+        self,
+        values: Iterable[float],
+        mask: Union[bool, Iterable[bool]] = False,
+        name: str = "",
+    ):
+        #: ma.array: the masked values
         self.values = ma.array(values, mask=mask, ndmin=1)
-        self.name = name
+        self.name = name  #: str: the variable name
 
     def __repr__(self):
         return "<Variable {!r}, values={!r}>".format(self.name, self.values)
 
     @property
-    def allVals(self):
+    def allVals(self) -> np.ndarray[float]:
+        """All values regardless of mass"""
         return self.values.data
 
     @property
-    def freeVals(self):
+    def freeVals(self) -> np.ndarray[float]:
+        """Only unmasked values"""
         return self.values[~self.values.mask]
 
     @property
-    def mask(self):
+    def mask(self) -> np.ndarray[bool]:
+        """
+        The variable mask; ``True`` masks the value from the free variable
+        vector while ``False`` includes the value in the vector
+        """
         return self.values.mask
 
     @property
-    def numFree(self):
+    def numFree(self) -> int:
         """
         Get the number of un-masked values, i.e., the number of free variables
         within the vector
 
         Returns:
-            int: the number of un-masked values
+            the number of un-masked values
         """
         return int(sum(~self.values.mask))
 
-    def unmaskedIndices(self, indices):
+    def unmaskedIndices(self, indices: Iterable[int]) -> list[int]:
         """
         Get the indices of the
 
         Args:
-            indices ([int]): the indices of the Variable value regardless of masking
+            indices: the indices of the Variable value regardless of masking
 
         Returns:
-            [int]: the indices of the requested Variable values within the unmasked
-            array.
+            the indices of the requested Variable values within the unmasked array.
 
         Examples:
             >>> Variable([0, 1], [True, False]).unmaskedIndices([1])
