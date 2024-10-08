@@ -328,7 +328,7 @@ class ControlPoint(ModelBlockCopyMixin):
         if not epoch.values.size == 1:
             raise RuntimeError("Epoch can only have one value")
 
-        sz = model.stateSize(VarGroup.STATE)
+        sz = model.groupSize(VarGroup.STATE)
         if not state.values.size == sz:
             raise RuntimeError("State must have {sz} values")
 
@@ -467,7 +467,7 @@ class Segment:
             propagated trajectory
         """
         self.propagate(VarGroup.STATE)
-        return self.origin.model.extractVars(self.propSol.y[:, ix], VarGroup.STATE)
+        return self.origin.model.extractGroups(self.propSol.y[:, ix], VarGroup.STATE)
 
     def partials_state_wrt_time(self, ix=-1):
         """
@@ -488,7 +488,7 @@ class Segment:
             (VarGroup.STATE,),
             self.propParams.allVals,
         )
-        return self.origin.model.extractVars(dy_dt, VarGroup.STATE)
+        return self.origin.model.extractGroups(dy_dt, VarGroup.STATE)
 
     def partials_state_wrt_initialState(self, ix=-1):
         """
@@ -503,7 +503,7 @@ class Segment:
             The partials are returned in matrix form.
         """
         self.propagate([VarGroup.STATE, VarGroup.STM])
-        return self.origin.model.extractVars(self.propSol.y[:, ix], VarGroup.STM)
+        return self.origin.model.extractGroups(self.propSol.y[:, ix], VarGroup.STM)
 
     def partials_state_wrt_epoch(self, ix=-1):
         """
@@ -518,13 +518,13 @@ class Segment:
             :attr:`~medusa.dynamics.VarGroup.EPOCH_PARTIALS`.
         """
         self.propagate([VarGroup.STATE, VarGroup.STM, VarGroup.EPOCH_PARTIALS])
-        partials = self.origin.model.extractVars(
+        partials = self.origin.model.extractGroups(
             self.propSol.y[:, ix], VarGroup.EPOCH_PARTIALS
         )
 
         # Handle models that don't depend on epoch by setting partials to zero
         if partials.size == 0:
-            partials = np.zeros((self.origin.model.stateSize(VarGroup.STATE),))
+            partials = np.zeros((self.origin.model.groupSize(VarGroup.STATE),))
 
         return partials
 
@@ -547,14 +547,14 @@ class Segment:
                 VarGroup.PARAM_PARTIALS,
             ]
         )
-        partials = self.origin.model.extractVars(
+        partials = self.origin.model.extractGroups(
             self.propSol.y[:, ix], VarGroup.PARAM_PARTIALS
         )
 
         # Handle models that don't depend on propagator params by setting partials
         # to zero
         if partials.size == 0:
-            partials = np.zeros((self.origin.model.stateSize(VarGroup.STATE),))
+            partials = np.zeros((self.origin.model.groupSize(VarGroup.STATE),))
 
         return partials
 

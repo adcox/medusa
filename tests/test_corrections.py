@@ -306,7 +306,7 @@ class TestSegment:
         assert seg.propSol is None
         seg.propagate(varGroups)
         assert seg.propSol is not None
-        assert seg.propSol.y[:, 0].size == origin.model.stateSize(varGroups)
+        assert seg.propSol.y[:, 0].size == origin.model.groupSize(varGroups)
         assert seg.propSol.t[0] == origin.epoch.allVals[0]
         assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
 
@@ -328,7 +328,7 @@ class TestSegment:
         seg.propagate(varGroups2, lazy)
         assert spy.call_count == 1 if lazy else 2
         assert seg.propSol is not None
-        assert seg.propSol.y[:, 0].size >= origin.model.stateSize(varGroups2)
+        assert seg.propSol.y[:, 0].size >= origin.model.groupSize(varGroups2)
         assert seg.propSol.t[0] == origin.epoch.allVals[0]
         assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
 

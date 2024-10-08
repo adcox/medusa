@@ -40,13 +40,13 @@ class TestDynamicsModel:
         assert model1 == model2
         assert not model1 == model3
 
-    def test_stateSize(self):
+    def test_groupSize(self):
         model = DynamicsModel(earth, moon)
-        assert model.stateSize(VarGroup.STATE) == 6
-        assert model.stateSize(VarGroup.STM) == 36
-        assert model.stateSize([VarGroup.STATE, VarGroup.STM]) == 42
-        assert model.stateSize(VarGroup.EPOCH_PARTIALS) == 0
-        assert model.stateSize(VarGroup.PARAM_PARTIALS) == 0
+        assert model.groupSize(VarGroup.STATE) == 6
+        assert model.groupSize(VarGroup.STM) == 36
+        assert model.groupSize([VarGroup.STATE, VarGroup.STM]) == 42
+        assert model.groupSize(VarGroup.EPOCH_PARTIALS) == 0
+        assert model.groupSize(VarGroup.PARAM_PARTIALS) == 0
 
     # TODO test that modifying a property from properties fcn doesn't affect
     #   stored values
@@ -65,7 +65,7 @@ class TestDynamicsModel:
         q0 = np.array([0, 1, 2, 3, 4, 5])
         q0_mod = model.appendICs(q0, append)
 
-        assert q0_mod.shape == (q0.size + model.stateSize(append),)
+        assert q0_mod.shape == (q0.size + model.groupSize(append),)
 
     @pytest.mark.parametrize("ix", [0, 1])
     def test_bodyState(self, ix):

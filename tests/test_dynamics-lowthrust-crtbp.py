@@ -54,8 +54,8 @@ class TestDynamicsModel:
             [VarGroup.PARAM_PARTIALS, 24],
         ],
     )
-    def test_stateSize(self, model, grp, expect):
-        assert model.stateSize(grp) == expect
+    def test_groupSize(self, model, grp, expect):
+        assert model.groupSize(grp) == expect
 
     @pytest.mark.parametrize(
         "grp",

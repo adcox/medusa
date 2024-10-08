@@ -42,6 +42,7 @@ intersphinx_mapping = {
 
 autoclass_content = "both"
 autodoc_member_order = "alphabetical"
+autodoc_typehints = "description"
 autosummary_generate = True
 
 # matplotlib.sphinxext.plot_directive settings

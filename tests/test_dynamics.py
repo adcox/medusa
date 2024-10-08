@@ -24,7 +24,7 @@ class DummyModel(AbstractDynamicsModel):
     def epochIndependent(self):
         return False
 
-    def stateSize(self, varGroups):
+    def groupSize(self, varGroups):
         # A model with 2 state variables, epoch dependencies, and three parameters
         varGroups = np.array(varGroups, ndmin=1)
         return (
@@ -40,18 +40,24 @@ class TestAbstractDynamicsModel:
     def model(self):
         return DummyModel(sun, earth, moon)
 
-    @pytest.mark.parametrize("bodies, properties", [
-        [ [earth], {} ],
-        [ [earth, moon], {"b": 21} ],
-        [ [earth, moon, sun], {} ],
-    ])
+    @pytest.mark.parametrize(
+        "bodies, properties",
+        [
+            [[earth], {}],
+            [[earth, moon], {"b": 21}],
+            [[earth, moon, sun], {}],
+        ],
+    )
     def test_constructor(self, bodies, properties):
         DummyModel(*bodies, **properties)
 
-    @pytest.mark.parametrize("bodies", [
-        [earth, "Moon"],
-        [301, 302],
-    ])
+    @pytest.mark.parametrize(
+        "bodies",
+        [
+            [earth, "Moon"],
+            [301, 302],
+        ],
+    )
     def test_constructorErr(self, bodies):
         with pytest.raises(TypeError):
             DummyModel(*bodies)
@@ -76,8 +82,8 @@ class TestAbstractDynamicsModel:
             ],
         ],
     )
-    def test_stateSize(self, model, varGroups, sz):
-        assert model.stateSize(varGroups) == sz
+    def test_groupSize(self, model, varGroups, sz):
+        assert model.groupSize(varGroups) == sz
 
     @pytest.mark.parametrize("varIn", [None, [0, 1, 2, 3]])
     @pytest.mark.parametrize(
@@ -89,10 +95,10 @@ class TestAbstractDynamicsModel:
             [VarGroup.PARAM_PARTIALS, (2, 3), [[8, 9, 10], [11, 12, 13]]],
         ],
     )
-    def test_extractVars(self, model, varGroup, shape, out, varIn):
+    def test_extractGroups(self, model, varGroup, shape, out, varIn):
         # standard use case: y has all the variable groups, we want subset out
         y = np.arange(14)
-        varOut = model.extractVars(y, varGroup, varGroupsIn=varIn)
+        varOut = model.extractGroups(y, varGroup, varGroupsIn=varIn)
         assert isinstance(varOut, np.ndarray)
         assert varOut.shape == shape
         np.testing.assert_array_equal(varOut, out)
@@ -114,9 +120,9 @@ class TestAbstractDynamicsModel:
             ],
         ],
     )
-    def test_extractVars_notFull(self, model, y, varIn, varOut, yOut):
+    def test_extractGroups_notFull(self, model, y, varIn, varOut, yOut):
         # Test extracting from a vector that doesn't include all the VarGroup
-        assert np.array_equal(model.extractVars(y, varOut, varIn), yOut)
+        assert np.array_equal(model.extractGroups(y, varOut, varIn), yOut)
 
     @pytest.mark.parametrize(
         "y, varIn, varOut",
@@ -138,20 +144,18 @@ class TestAbstractDynamicsModel:
             ],
         ],
     )
-    def test_extractVars_missingVarIn(self, model, y, varIn, varOut):
+    def test_extractGroups_missingVarIn(self, model, y, varIn, varOut):
         # varIn doesn't include the desired varOut
         with pytest.raises(RuntimeError):
-            model.extractVars(y, varOut, varIn)
+            model.extractGroups(y, varOut, varIn)
 
     @pytest.mark.parametrize(
         "y, varIn, varOut",
-        [
-            [np.arange(3), [VarGroup.STATE, VarGroup.STM], VarGroup.STM]
-        ]
+        [[np.arange(3), [VarGroup.STATE, VarGroup.STM], VarGroup.STM]],
     )
-    def test_extractVars_missingData(self, model, y, varIn, varOut):
+    def test_extractGroups_missingData(self, model, y, varIn, varOut):
         with pytest.raises(ValueError):
-            model.extractVars(y, varOut, varIn)
+            model.extractGroups(y, varOut, varIn)
 
     @pytest.mark.parametrize(
         "VarGroup, out",

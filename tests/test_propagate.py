@@ -69,7 +69,7 @@ class TestPropagator:
         assert sol.status == 0
 
         assert all([tspan[0] <= t <= tspan[1] for t in sol.t])
-        vecSize = emModel.stateSize(groups)
+        vecSize = emModel.groupSize(groups)
         assert all([y.size == vecSize for y in sol.y.T])
 
         # Check final state value; values from old MATLAB codes
@@ -81,7 +81,7 @@ class TestPropagator:
         assert pytest.approx(sol.y[5, -1], 1e-4) == 0.00061782
 
         if VarGroup.STM in groups:
-            stm = emModel.extractVars(sol.y[:, -1], VarGroup.STM)
+            stm = emModel.extractGroups(sol.y[:, -1], VarGroup.STM)
 
             # Check determinant of STM is unity
             assert pytest.approx(np.linalg.det(stm)) == 1.0

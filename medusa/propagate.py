@@ -128,7 +128,7 @@ class Propagator(ModelBlockCopyMixin):
             RuntimeError: if ``varGroups`` is not valid for the propagation as
                 checked via :func:`AbstractDynamicsModel.validForPropagation`
             RuntimeError: if the size of ``y0`` is inconsistent with ``varGroups``
-                as checked via :func:`AbstractDynamicsModel.stateSize`
+                as checked via :func:`AbstractDynamicsModel.groupSize`
             RuntimeError: if any of the objects in :attr:`events` are not derived
                 from the :class:`AbstractEvent` base class
         """
@@ -151,16 +151,16 @@ class Propagator(ModelBlockCopyMixin):
 
         # Ensure state is an array with the right number of elements
         y0 = np.array(y0, ndmin=1)
-        if not y0.size == self.model.stateSize(varGroups):
+        if not y0.size == self.model.groupSize(varGroups):
             # Likely scenario: user wants default ICs for other variable groups
-            if y0.size == self.model.stateSize(VarGroup.STATE):
+            if y0.size == self.model.groupSize(VarGroup.STATE):
                 y0 = self.model.appendICs(
                     y0, [v for v in varGroups if not v == VarGroup.STATE]
                 )
             else:
                 raise RuntimeError(
                     f"y0 size is {y0.size}, which is not the STATE size "
-                    f"({self.model.stateSize(VarGroup.STATE)}); don't know how to respond."
+                    f"({self.model.groupSize(VarGroup.STATE)}); don't know how to respond."
                     " Please pass in a STATE-sized vector or a vector with all "
                     "initial conditions defined for the specified VarGroup"
                 )

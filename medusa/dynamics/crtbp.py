@@ -39,8 +39,8 @@ The locations of the two massive primaries are fixed in the rotating frame on th
 in nondimensional coordinates within the rotating frame,
 
 .. math::
-   \\vec{q}_1 &= \\begin{Bmatrix} -\mu & 0 & 0 & 0 & 0 & 0\\end{Bmatrix}, \\\\
-   \\vec{q}_2 &= \\begin{Bmatrix} 1-\mu & 0 & 0 & 0 & 0 & 0\\end{Bmatrix}.
+   \\vec{q}_1 &= \\begin{Bmatrix} -\mu & 0 & 0 & 0 & 0 & 0\\end{Bmatrix}^T, \\\\
+   \\vec{q}_2 &= \\begin{Bmatrix} 1-\mu & 0 & 0 & 0 & 0 & 0\\end{Bmatrix}^T.
 
 These vectors are available from the model via :func:`~DynamicsModel.bodyState`.
 
@@ -113,7 +113,7 @@ import numpy as np
 from numba import njit
 
 import medusa.util as util
-from medusa.data import GRAV_PARAM
+from medusa.data import GRAV_PARAM, Body
 from medusa.dynamics import AbstractDynamicsModel, VarGroup
 
 
@@ -122,13 +122,17 @@ class DynamicsModel(AbstractDynamicsModel):
     CRTBP Dynamics Model
 
     Args:
-        body1 (Body): one of the two primary bodies
-        body2 (Body): the othe primary body
+        body1: one of the two primary bodies
+        body2: the othe primary body
 
-    The two bodies are stored in :attr:`bodies` in order of decreassing mass
+    The two bodies are stored in :attr:`bodies` in order of decreassing mass.
     """
 
-    def __init__(self, body1, body2):
+    def __init__(
+        self,
+        body1: Body,
+        body2: Body,
+    ):
         primary = body1 if body1.gm > body2.gm else body2
         secondary = body2 if body1.gm > body2.gm else body1
         totalGM = primary.gm + secondary.gm
@@ -140,13 +144,13 @@ class DynamicsModel(AbstractDynamicsModel):
         self._charT = np.sqrt(self._charL**3 / totalGM)
 
     @property
-    def epochIndependent(self):
+    def epochIndependent(self) -> bool:
         return True
 
-    def diffEqs(self, t, q, varGroups, params=None):
-        return DynamicsModel._eoms(t, q, self._properties["mu"], varGroups)
+    def diffEqs(self, t, w, varGroups, params=None):
+        return DynamicsModel._eoms(t, w, self._properties["mu"], varGroups)
 
-    def bodyState(self, ix, t, params=None):
+    def bodyState(self, ix, t, w=None, varGroups=None, params=None):
         if ix == 0:
             return np.asarray([-self._properties["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
         elif ix == 1:
@@ -154,7 +158,7 @@ class DynamicsModel(AbstractDynamicsModel):
         else:
             raise IndexError(f"Index {ix} must be zero or one")
 
-    def stateSize(self, varGroups):
+    def groupSize(self, varGroups):
         varGroups = util.toList(varGroups)
         return 6 * (VarGroup.STATE in varGroups) + 36 * (VarGroup.STM in varGroups)
 
@@ -166,7 +170,9 @@ class DynamicsModel(AbstractDynamicsModel):
 
     @staticmethod
     @njit
-    def _eoms(t, q, mu, varGroups):
+    def _eoms(
+        t: float, q: np.ndarray[float], mu: float, varGroups: tuple[VarGroup, ...]
+    ) -> np.ndarray[float]:
         qdot = np.zeros(q.shape)
 
         # Pre-compute some values; multiplication is faster than exponents

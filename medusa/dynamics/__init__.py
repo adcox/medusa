@@ -2,12 +2,73 @@
 Dynamical Models
 ================
 
-Core dynamics objects are defined here:
+Within the context of the ``medusa`` library, a dynamical model defines a set of
+differential equations that describe the motion of a celestial object such as a
+planet, moon, asteroid, star, or spacecraft. This library generally assumes that
+the object's **state** is described by its Cartesian position and velocity coordinates,
+
+.. math::
+    \\vec{q}(\\tau, T, \\vec{p}) = 
+    \\begin{Bmatrix} x & y & z & \dot{x} & \dot{y} & \dot{z} \end{Bmatrix}^T,
+
+where :math:`\\vec{q}` is the state vector, :math:`\\tau` is the independent variable
+(usually time), :math:`T` is an absolute epoch corresponding to :math:`\\tau = 0`, 
+and :math:`\\vec{p}` is a set of parameters (e.g., engine thrust).
+In this notation, the dot over the coordinates represents the derivative with 
+respect to :math:`\\tau`. Some models may append more 
+variables, such as a thrust vector parameterization, to this state vector.
+
+In addition to the state vector, models can include equations that describe three
+other "variable groups" that provide extra dynamical information and are frequently
+used in differential corrections and optimization processes:
+
+- State transition matrix (:data:`~VarGroup.STM`): this matrix relates changes 
+  in :math:`\\vec{q}` at one value of :math:`\\tau` to changes in :math:`\\vec{q}`
+  at a different value, i.e.,
+
+  .. math::
+     \delta \\vec{q}(\\tau_2) = \mathbf{\Phi}(\\tau_1, \\tau_2) \delta \\vec{q}(\\tau_1)
+
+  When :math:`\\tau_2 = \\tau_1`, the state transition matrix is identity.
+
+- Epoch partials (:data:`~VarGroup.EPOCH_PARTIALS`): a vector of partial derivatives
+  of the state vector with respect to the epoch, :math:`\partial \\vec{q} / \partial T`
+
+- Parameter partials (:data:`~VarGroup.PARAM_PARTIALS`): a matrix of partial 
+  derivatives of the state vector with respect to the parameter vector,
+  :math:`\partial \\vec{q} / \partial \\vec{p}`.
+
+
+Grouped together with  matrix expanded in row-major order, the variable groups
+are collected into a **variable vector**, denoted by
+
+.. math::
+   \\vec{w} = \\begin{Bmatrix} 
+     \\vec{q} & \\mathbf{\Phi} & 
+     \\frac{\partial \\vec{q}}{\partial T} & 
+     \\frac{\partial \\vec{q}}{\partial \\vec{p}}
+   \\end{Bmatrix}.
+
+The :class:`AbstractDynamicsModel` provides the framework for these definitions
+via the :func:`~AbstractDynamicsModel.diffEqs` function, which returns the
+deriative of the variable vector with respect to the independent variable,
+
+.. math::
+   \dot{\\vec{w}} = \\frac{\mathrm{d} \\vec{w}}{\mathrm{d} \\tau}(\\tau, T, \\vec{p})
+
+Several other methods are supplied to initialize, extract, and append variable
+groups:
 
 .. autosummary::
-   VarGroup
-   AbstractDynamicsModel
+   ~AbstractDynamicsModel.groupSize
+   ~AbstractDynamicsModel.defaultICs
+   ~AbstractDynamicsModel.appendICs
+   ~AbstractDynamicsModel.extractGroups
+   ~AbstractDynamicsModel.validForPropagation
+   ~AbstractDynamicsModel.varNames
 
+.. autosummary::
+   ~AbstractDynamicsModel.checkPartials
 
 Implementations
 ---------------
@@ -33,8 +94,10 @@ Module Reference
 """
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from copy import copy, deepcopy
 from enum import IntEnum
+from typing import Union
 
 import numpy as np
 
@@ -100,24 +163,20 @@ class AbstractDynamicsModel(ABC):
     Contains the mathematics that define a dynamical model
 
     Args:
-        bodies ([Body]): one or more primary bodies
+        bodies: one or more primary bodies
         properties: keyword arguments that define model properties
-
-    Attributes:
-        bodies (tuple): a tuple of :class:`~medusa.data.Body` objects
-        properties (dict): the model properties; these are constant across all
-            integrations; e.g., a mass ratio for the CR3BP, or the initial phasing
-            of multiple bodies in a four-body problem.
-        charL (float): a characteristic length (km) used to nondimensionalize lengths
-        charT (float): a characteristic time (sec) used to nondimensionalize times
-        charM (float): a characteristic mass (kg) used to nondimensionalize masses
     """
 
-    def __init__(self, *bodies, **properties):
+    def __init__(
+        self,
+        *bodies: Iterable[Body],
+        **properties: dict,
+    ):
         if any([not isinstance(body, Body) for body in bodies]):
             raise TypeError("Expecting Body objects")
 
         # Copy body objects into tuple
+        #: tuple[Body]: the bodies
         self.bodies = tuple(copy(body) for body in bodies)
 
         # Unpack parameters into internal dict
@@ -129,22 +188,28 @@ class AbstractDynamicsModel(ABC):
         self._charM = 1.0  # kg
 
     @property
-    def properties(self):
+    def properties(self) -> dict:
+        """
+        The model properties. These are constant across all integrations
+        """
         return copy(self._properties)
 
     @property
-    def charL(self):
+    def charL(self) -> float:
+        """A characteristic length (km) used to nondimensionalize lengths"""
         return self._charL
 
     @property
-    def charT(self):
+    def charT(self) -> float:
+        """A characteristic time (sec) used to nondimensionalize times"""
         return self._charT
 
     @property
-    def charM(self):
+    def charM(self) -> float:
+        """A characteristic mass (kg) used to nondimensionalize masses"""
         return self._charM
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         """
         Compare two Model objects. This can be overridden for more specific
         comparisons in derived classes
@@ -167,96 +232,110 @@ class AbstractDynamicsModel(ABC):
         )
 
     @abstractmethod
-    def bodyState(self, ix, t, params):
+    def bodyState(
+        self,
+        ix: int,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
-        Evaluate a body state vector at a time
+        Evaluate a body state vector
 
         Args:
-            ix (int): index of the body within :attr:`bodies`
-            t (float): time value
-            params (float, [float]): one or more parameter values
+            ix: index of the body within :attr:`bodies`
+            t: independent variable (e.g., time)
+            w: variable vector
+            varGroups: describes the variable groups included in the ``w`` vector
+            params: one or more parameter values
 
         Returns:
-            numpy.ndarray: state vector for the body
+            the state vector for the body
         """
         pass
 
     @abstractmethod
-    def diffEqs(self, t, y, varGroups, params):
+    def diffEqs(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Evaluate the differential equations that govern the variable array
 
         Args:
-            t (float): independent variable (e.g., time)
-            y (numpy.ndarray<float>): One-dimensional variable array
-            varGroups (tuple of VarGroup): describes the variable groups included
-                in the ``y`` vector
-            params (float, [float]): one or more parameter values. These are
+            t: independent variable (e.g., time)
+            w: variable vector
+            varGroups: describes the variable groups included
+                in the ``w`` vector
+            params: one or more parameter values. These are
                 generally constants that may vary integration to integration
                 within a model (e.g., thrust magnitude) but are not constants
                 of the model itself (e.g., mass ratio).
 
         Returns:
-            numpy.ndarray: the derivative of the ``y`` vector with respect to ``t``
+            the derivative of the ``w`` vector with respect to ``t``
         """
         pass
 
     @property
     @abstractmethod
-    def epochIndependent(self):
+    def epochIndependent(self) -> bool:
         """
         Returns:
-            bool: True if the dynamics model has no dependencies on epoch, False
-            otherwise.
+            True if the differetial equations have no dependencies on epoch,
+            False otherwise.
         """
         pass
 
     @abstractmethod
-    def stateSize(self, varGroups):
+    def groupSize(self, varGroups: VarGroup | Iterable[VarGroup]) -> int:
         """
         Get the size (i.e., number of elements) for one or more variable groups.
 
         Args:
-            varGroups (VarGroup, [VarGroup]): describes one or more groups of variables
+            varGroups: describes one or more groups of variables
 
         Returns:
-            int: the size of a variable array with the specified variable groups
+            the size of a variable array with the specified variable groups
         """
         pass
 
     def checkPartials(
         self,
-        y0,
-        tspan,
-        params=None,
-        initStep=1e-4,
-        rtol=1e-6,
-        atol=1e-8,
-        printTable=True,
-    ):
+        w0: np.ndarray[float],
+        tspan: list[float, float],
+        params: Union[np.ndarray[float], None] = None,
+        initStep: float = 1e-4,
+        rtol: float = 1e-6,
+        atol: float = 1e-8,
+        printTable: bool = True,
+    ) -> bool:
         """
-        Check the partial derivatives included in the equations of motion
+        Check the partial derivatives included in the differential equations
 
         Args:
-            y0 (numpy.ndarray): afull state vector (includes all VarGroup) for
-                this model
-            tspan ([float]): a 2-element vector defining the start and end times
+            w0: a full state vector (includes all VarGroup) for this model
+            tspan: a 2-element vector defining the start and end times
                 for numerical propagation
-            params (Optional, [float]): propagation parameters
-            initStep (Optional, float): the initial step size for the multivariate
+            params: propagation parameters
+            initStep: the initial step size for the multivariate
                 numerical derivative function in :func:`numerics.derivative_multivar`
-            rtol (Optional, float): the numeric and analytical values are
+            rtol: the numeric and analytical values are
                 equal when the absolute value of (numeric - analytic)/numeric
                 is less than ``rtol``
-            atol (Optional, float): the numeric and analytic values are equal
+            atol: the numeric and analytic values are equal
                 when the absolute value of (numeric - analytic) is less than ``atol``
-            printTable (Optional, bool): whether or not to print a table of the
+            printTable: whether or not to print a table of the
                 partial derivatives, their expected (numeric) and actual (analytic)
                 values, and the relative and absolute errors between the expected
                 and actual values.
 
         Returns:
-            bool: True if each partial derivative satisfies the relative *or*
+            True if each partial derivative satisfies the relative *or*
             absolute tolerance; False is returned if any of the partials fail
             both tolerances.
         """
@@ -272,19 +351,21 @@ class AbstractDynamicsModel(ABC):
             VarGroup.PARAM_PARTIALS,
         ]
 
-        if not len(y0) == self.stateSize(allVars):
+        if not len(w0) == self.groupSize(allVars):
             raise ValueError(
-                "y0 must define the full vector (STATE + STM + EPOCH_PARTIALS + PARAM_PARTIALS"
+                "w0 must define the full vector (STATE + STM + EPOCH_PARTIALS + PARAM_PARTIALS"
             )
 
         # TODO ensure tolerances are tight enough?
         prop = Propagator(self, dense=False)
-        state0 = self.extractVars(y0, VarGroup.STATE, varGroupsIn=allVars)
+        state0 = self.extractGroups(w0, VarGroup.STATE, varGroupsIn=allVars)
 
-        solution = prop.propagate(y0, tspan, params=params, varGroups=allVars)
+        solution = prop.propagate(w0, tspan, params=params, varGroups=allVars)
         sol_vec = np.concatenate(
             [
-                self.extractVars(solution.y[:, -1], grp, varGroupsIn=allVars).flatten()
+                self.extractGroups(
+                    solution.y[:, -1], grp, varGroupsIn=allVars
+                ).flatten()
                 for grp in allVars[1:]
             ]
         )
@@ -297,7 +378,7 @@ class AbstractDynamicsModel(ABC):
         num_stm = numerics.derivative_multivar(prop_state, state0, initStep)
 
         # Compute epoch partials
-        if self.stateSize(VarGroup.EPOCH_PARTIALS) > 0:
+        if self.groupSize(VarGroup.EPOCH_PARTIALS) > 0:
 
             def prop_epoch(epoch):
                 sol = prop.propagate(
@@ -315,7 +396,7 @@ class AbstractDynamicsModel(ABC):
             num_epochPartials = np.array([])
 
         # Compute parameter partials
-        if self.stateSize(VarGroup.PARAM_PARTIALS) > 0:
+        if self.groupSize(VarGroup.PARAM_PARTIALS) > 0:
 
             def prop_params(p):
                 sol = prop.propagate(state0, tspan, params=p, varGroups=VarGroup.STATE)
@@ -379,23 +460,28 @@ class AbstractDynamicsModel(ABC):
 
         return equal
 
-    def extractVars(self, y, varGroup, varGroupsIn=None):
+    def extractGroups(
+        self,
+        w: np.ndarray[float],
+        varGroup: VarGroup,
+        varGroupsIn: Union[Iterable[VarGroup], None] = None,
+    ) -> np.ndarray[float]:
         """
-        Extract a variable group from a vector
+        Extract a variable group from a variable vector
 
         Args:
-            y (numpy.ndarray): the state vector
-            varGroup (VarGroup): the variable group to extract
-            varGroupsIn ([VarGroup]): the variable groups in ``y``. If ``None``, it
+            w: the state vector
+            varGroup: the variable group to extract
+            varGroupsIn: the variable groups in ``w``. If ``None``, it
                 is assumed that all variable groups with lower indices than
-                ``varGroup`` are included in ``y``.
+                ``varGroup`` are included in ``w``.
 
         Returns:
-            numpy.ndarray: the subset of ``y`` that corresponds to the ``VarGroup``
+            the subset of ``w`` that corresponds to the ``VarGroup``
             group. The vector elements are reshaped into a matrix if applicable.
 
         Raises:
-            ValueError: if ``y`` doesn't have enough elements to extract the
+            ValueError: if ``w`` doesn't have enough elements to extract the
                 requested variable groups
         """
         if varGroupsIn is None:
@@ -407,23 +493,23 @@ class AbstractDynamicsModel(ABC):
                 f"Requested variable group {varGroup} is not part of input set, {varGroupsIn}"
             )
 
-        nPre = sum([self.stateSize(tp) for tp in varGroupsIn if tp < varGroup])
-        sz = self.stateSize(varGroup)
+        nPre = sum([self.groupSize(tp) for tp in varGroupsIn if tp < varGroup])
+        sz = self.groupSize(varGroup)
 
-        if y.size < nPre + sz:
+        if w.size < nPre + sz:
             raise ValueError(
                 f"Need {nPre + sz} vector elements to extract {varGroup} "
-                f"but y has size {y.size}"
+                f"but w has size {w.size}"
             )
 
-        nState = self.stateSize(VarGroup.STATE)
+        nState = self.groupSize(VarGroup.STATE)
         nCol = int(sz / nState)
         if nCol > 1:
-            return np.reshape(y[nPre : nPre + sz], (nState, nCol))
+            return np.reshape(w[nPre : nPre + sz], (nState, nCol))
         else:
-            return np.array(y[nPre : nPre + sz])
+            return np.array(w[nPre : nPre + sz])
 
-    def defaultICs(self, varGroup):
+    def defaultICs(self, varGroup: VarGroup) -> np.ndarray[float]:
         """
         Get the default initial conditions for a set of equations. This basic
         implementation returns a flattened identity matrix for the :attr:`~VarGroup.STM`
@@ -431,47 +517,48 @@ class AbstractDynamicsModel(ABC):
         this method to provide other values.
 
         Args:
-            varGroup (VarGroup): describes the group of variables
+            varGroup: describes the group of variables
 
         Returns:
-            numpy.ndarray: initial conditions for the specified equation type
+            initial conditions for the specified equation type
         """
         if varGroup == VarGroup.STM:
-            return np.identity(self.stateSize(VarGroup.STATE)).flatten()
+            return np.identity(self.groupSize(VarGroup.STATE)).flatten()
         else:
-            return np.zeros((self.stateSize(varGroup),))
+            return np.zeros((self.groupSize(varGroup),))
 
-    def appendICs(self, y0, varsToAppend):
+    def appendICs(
+        self, w0: np.ndarray[float], varsToAppend: Iterable[VarGroup]
+    ) -> np.ndarray[float]:
         """
         Append initial conditions for the specified variable groups to the
         provided state vector
 
         Args:
-            y0 (numpy.ndarray): variable vector of arbitrary length
-            varsToAppend (VarGroup): the variable group(s) to append initial
-                conditions for.
+            w0: variable vector of arbitrary length
+            varsToAppend: the variable group(s) to append initial conditions for.
 
         Returns:
-            numpy.ndarray: an initial condition vector, duplicating ``q`` at
+            an initial condition vector, duplicating ``w0`` at
             the start of the array with the additional initial conditions
             appended afterward
         """
-        y0 = np.asarray(y0)
+        w0 = np.asarray(w0)
         varsToAppend = np.array(varsToAppend, ndmin=1)
-        nIn = y0.size
-        nOut = self.stateSize(varsToAppend)
-        y0_out = np.zeros((nIn + nOut,))
-        y0_out[:nIn] = y0
+        nIn = w0.size
+        nOut = self.groupSize(varsToAppend)
+        w0_out = np.zeros((nIn + nOut,))
+        w0_out[:nIn] = w0
         ix = nIn
         for v in sorted(varsToAppend):
             ic = self.defaultICs(v)
             if ic.size > 0:
-                y0_out[ix : ix + ic.size] = ic
+                w0_out[ix : ix + ic.size] = ic
                 ix += ic.size
 
-        return y0_out
+        return w0_out
 
-    def validForPropagation(self, varGroups):
+    def validForPropagation(self, varGroups: Iterable[VarGroup]) -> bool:
         """
         Check that the set of variables can be propagated.
 
@@ -481,15 +568,15 @@ class AbstractDynamicsModel(ABC):
         evaluation but ``[VarGroup.STATE, VarGroup.STM]`` would be valid.
 
         Args:
-            varGroups (VarGroup, [VarGroup]): the group(s) variables to be propagated
+            varGroups: the group(s) variables to be propagated
 
         Returns:
-            bool: True if the set is valid, False otherwise
+            True if the set is valid, False otherwise
         """
         # General principle: STATE vars are always required
         return VarGroup.STATE in np.array(varGroups, ndmin=1)
 
-    def varNames(self, varGroup):
+    def varNames(self, varGroup: VarGroup) -> list[str]:
         """
         Get names for the variables in each group.
 
@@ -503,7 +590,7 @@ class AbstractDynamicsModel(ABC):
             list of str: a list containing the names of the variables in the order
             they would appear in a variable vector.
         """
-        N = self.stateSize(VarGroup.STATE)
+        N = self.groupSize(VarGroup.STATE)
         if varGroup == VarGroup.STATE:
             return [f"State {ix:d}" for ix in range(N)]
         elif varGroup == VarGroup.STM:
@@ -511,18 +598,18 @@ class AbstractDynamicsModel(ABC):
         elif varGroup == VarGroup.EPOCH_PARTIALS:
             return [
                 f"Epoch Dep {ix:d}"
-                for ix in range(self.stateSize(VarGroup.EPOCH_PARTIALS))
+                for ix in range(self.groupSize(VarGroup.EPOCH_PARTIALS))
             ]
         elif varGroup == VarGroup.PARAM_PARTIALS:
             return [
                 f"Param Dep({r:d},{c:d})"
                 for r in range(N)
-                for c in range(int(self.stateSize(VarGroup.PARAM_PARTIALS) / N))
+                for c in range(int(self.groupSize(VarGroup.PARAM_PARTIALS) / N))
             ]
         else:
             raise ValueError(f"Unrecognized enum: varGroup = {varGroup}")
 
-    def indexToVarName(self, ix, varGroups):
+    def indexToVarName(self, ix: int, varGroups: Iterable[VarGroup]) -> str:
         # TODO test and document
         allNames = np.asarray(
             [self.varNames(varTp) for varTp in util.toList(varGroups)]

@@ -31,7 +31,7 @@ class DynamicsModel(CrtbpDynamics):
     def epochIndependent(self):
         return self.ctrlLaw.epochIndependent
 
-    def stateSize(self, varGroups):
+    def groupSize(self, varGroups):
         varGroups = util.toList(varGroups)
         N = 6 + self.ctrlLaw.numStates
         nCtrlParam = len(self.ctrlLaw.params)
