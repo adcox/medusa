@@ -21,6 +21,7 @@ Module Reference
 
 """
 import xml.etree.ElementTree as ET
+from typing import Union
 
 from .util import float_eq
 
@@ -39,50 +40,61 @@ class Body:
     Describe a celestial body (star, planet, moon)
 
     Args:
-        name (str): Body name
-        gm (float): gravitational parameter (km**2/sec**3)
-        sma (Optional, float): orbital semimajor axis (km)
-        ecc (Optional, float): orbital eccentricity
-        inc (Optional, float): orbital inclination w.r.t. Earth Equatorial J2000 (deg)
-        raan (Optional, float): right ascenscion of the ascending node w.r.t.
+        name: Body name
+        gm: gravitational parameter (km**2/sec**3)
+        sma: orbital semimajor axis (km)
+        ecc: orbital eccentricity
+        inc: orbital inclination w.r.t. Earth Equatorial J2000 (deg)
+        raan: right ascenscion of the ascending node w.r.t.
             Earth Equatorial J2000 (deg)
-        spiceId (Optional, int): SPICE ID for this body
-        parentId (Optional, int): SPICE ID for the body this body orbits. Set to
-            ``None`` if there is no parent body
-
-    Attributes:
-        name (str): Body name
-        gm (float): gravitational parameter (km**2/sec**3)
-        sma (float): orbital semimajor axis (km)
-        ecc (float): orbital eccentricity
-        inc (float): orbital inclination w.r.t. Earth Equatorial J2000 (deg)
-        raan (float): right ascenscion of the ascending node w.r.t.
-            Earth Equatorial J2000 (deg)
-        spiceId (int): SPICE ID for this body
-        parentId (int): SPICE ID for the body this body orbits. Set to
+        spiceId: SPICE ID for this body
+        parentId: SPICE ID for the body this body orbits. Set to
             ``None`` if there is no parent body
     """
 
     def __init__(
-        self, name, gm, sma=0.0, ecc=0.0, inc=0.0, raan=0.0, spiceId=0, parentId=None
+        self,
+        name: str,
+        gm: float,
+        sma: float = 0.0,
+        ecc: float = 0.0,
+        inc: float = 0.0,
+        raan: float = 0.0,
+        spiceId: int = 0,
+        parentId: Union[int, None] = None,
     ):
+        #: Body name
         self.name = name
+
+        #: Gravitational parameter (km**2/sec**3)
         self.gm = float(gm)
+
+        #: orbital semimajor axis (km)
         self.sma = float(sma)
+
+        #: orbital eccentricity
         self.ecc = float(ecc)
+
+        #: orbital inclination w.r.t. Earth equatorial J2000 (deg)
         self.inc = float(inc)
+
+        #: right ascension of the ascending node w.r.t. Earth equatorial J2000 (deg)
         self.raan = float(raan)
+
+        #: SPICE ID for this body
         self.id = int(spiceId)
+
+        #: SPICE ID for body this one orbits; set to ``None`` if there is no parent
         self.parentId = parentId
 
     @staticmethod
-    def fromXML(file, name):
+    def fromXML(file: str, name: str):
         """
         Create a body from an XML file
 
         Args:
-            file (str): path to the XML file
-            name (str): Body name
+            file: path to the XML file
+            name: Body name
 
         Returns:
             Body: the corresponding data in a :class:`Body` object. If no body

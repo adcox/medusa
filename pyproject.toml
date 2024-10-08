@@ -64,6 +64,20 @@ packages = [
 
 [tool.pytest.ini_options]
 addopts = "-ra"
+testpaths = [
+    # List in order of increasing complexity
+    "tests/test_util.py",
+    "tests/test_numerics.py",
+    "tests/test_data.py",
+    "tests/test_dynamics.py",
+    "tests/test_dynamics-crtbp.py",
+    "tests/test_propagate.py",
+    "tests/test_dynamics-lowthrust.py",
+    "tests/test_dynamics-lowthrust-crtbp.py",
+    "tests/test_corrections.py",
+    "tests/test_corrections-constraints.py",
+    "tests",    # catch-all
+]
 
 [tool.black]
 line-length = 88

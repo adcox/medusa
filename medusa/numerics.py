@@ -13,13 +13,21 @@ Routines for numerical approximations of calculus evaluations are included here.
 .. autofunction:: linesearch
 """
 import logging
+from typing import Callable, Union
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
+def derivative(
+    func: Callable,
+    x: Union[float, np.ndarray[float]],
+    step: Union[float, np.ndarray[float]],
+    nIter: int = 10,
+    maxRelChange: float = 2.0,
+    meta: dict = {},
+) -> Union[float, np.ndarray[float]]:
     """
     Compute the derivative of a function at ``x``.
 
@@ -27,27 +35,28 @@ def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
         func: a function handle that accepts a single argument, ``x``, and
             returns a single object (either a scalar :class:`float` or an
             :class:`~numpy.ndarray`).
-        x (float, numpy.ndarray): the state at which to evaluate ``func``
-        step (float, numpy.ndarray): the initial step size; it need not be small
-            but rather should be an increment in ``x`` over which ``func`` changes
-            *substantially*.
-        meta (dict): a dictionary in which to store metadata about the derivative
+        x: the state at which to evaluate ``func``
+        step: the initial step size; it need not be small but rather should be an
+            increment in ``x`` over which ``func`` changes *substantially*.
+        meta: a dictionary in which to store metadata about the derivative
             calculations
-        nIter (int): maximum number of iterations, i.e., the max size of the
+        nIter: maximum number of iterations, i.e., the max size of the
             Neville tableau
-        maxRelChange (float): Return when the error is worse than the best so
+        maxRelChange: Return when the error is worse than the best so
             far by this factor.
 
 
     Returns:
-        float, numpy.ndarray: the derivative of ``func`` with respect to ``x``,
-        evaluated at the given value of ``x``.
+        the derivative of ``func`` with respect to ``x``, evaluated at the given
+        value of ``x``.
 
     *The algorithm implemented in this function is "Richardson's deferred approach
     to the limit," detailed in Numerical Recipes in C, 2nd Edition by Press,
     Teukolsky, Vetterling, and Flannery (1996), adapted from Ridders, C.J.F. 1982,
     Advances in Engineering Software, vol. 4, no. 2 pp. 75-76*
     """
+    # TODO document - how is this different than multivariate??
+
     CON = 1.4  # step size is decreased by CON at each iteration
     CON2 = CON * CON
 
@@ -141,21 +150,30 @@ def derivative_multivar(func, x, step, nIter=10, maxRelChange=2.0):
     return deriv
 
 
-def linesearch(func, x, funcVal, grad, xStep):
+def linesearch(
+    func: Callable,
+    x: np.ndarray[float],
+    funcVal: float,
+    grad: np.ndarray[float],
+    xStep: np.ndarray[float],
+) -> tuple[np.ndarray[float], float, bool]:
     """
     Find a step size that sufficiently decreases the cost function.
 
     Args:
         func: a function handle that accepts an input state vector, :math:`\\vec{x}`,
             and returns a scalar, :math:`f`
-        x (numpy.ndarray): the current value of the state vector, :math:`\\vec{x}_0`.
-        funcVal (float): the current value of ``func``, i.e., :math:`f_0 = f(\\vec{x}_0)`
-        grad (numpy.ndarray): the gradient of the function evaluated at the current 
+        x: the current value of the state vector, :math:`\\vec{x}_0`.
+        funcVal: the current value of ``func``, i.e., :math:`f_0 = f(\\vec{x}_0)`
+        grad: the gradient of the function evaluated at the current 
             input vector, i.e., :math:`g_0 = \\nabla f(\\vec{x}_0)`
-        xStep (numpy.ndarray): the proposed step, :math:`\\delta \\vec{x}`. This
+        xStep: the proposed step, :math:`\\delta \\vec{x}`. This
             is usually the Newton step, which is guaranteed to decrease :math:`f`
             for some small, scalar multiple of this step.
 
+    Returns:
+        a tuple with the new ``x`` vector, the new value of ``func``, and a boolean
+        flag indicating whether the caller should check for a local minimum.
 
     *The algorithm implemented in this function is derived and detailed 
     section 9.7 in Numerical Recipes in C, 2nd Edition by Press,
