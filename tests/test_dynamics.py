@@ -95,10 +95,10 @@ class TestAbstractDynamicsModel:
             [VarGroup.PARAM_PARTIALS, (2, 3), [[8, 9, 10], [11, 12, 13]]],
         ],
     )
-    def test_extractGroups(self, model, varGroup, shape, out, varIn):
+    def test_extractGroup(self, model, varGroup, shape, out, varIn):
         # standard use case: y has all the variable groups, we want subset out
         y = np.arange(14)
-        varOut = model.extractGroups(y, varGroup, varGroupsIn=varIn)
+        varOut = model.extractGroup(y, varGroup, varGroupsIn=varIn)
         assert isinstance(varOut, np.ndarray)
         assert varOut.shape == shape
         np.testing.assert_array_equal(varOut, out)
@@ -120,16 +120,16 @@ class TestAbstractDynamicsModel:
             ],
         ],
     )
-    def test_extractGroups_notFull(self, model, y, varIn, varOut, yOut):
+    def test_extractGroup_notFull(self, model, y, varIn, varOut, yOut):
         # Test extracting from a vector that doesn't include all the VarGroup
-        assert np.array_equal(model.extractGroups(y, varOut, varIn), yOut)
+        assert np.array_equal(model.extractGroup(y, varOut, varIn), yOut)
 
     @pytest.mark.parametrize(
         "y, varIn, varOut",
         [
-            [np.arange(2), VarGroup.STATE, VarGroup.STM],
-            [np.arange(2), VarGroup.STATE, VarGroup.EPOCH_PARTIALS],
-            [np.arange(2), VarGroup.STATE, VarGroup.PARAM_PARTIALS],
+            [np.arange(2), [VarGroup.STATE], VarGroup.STM],
+            [np.arange(2), [VarGroup.STATE], VarGroup.EPOCH_PARTIALS],
+            [np.arange(2), [VarGroup.STATE], VarGroup.PARAM_PARTIALS],
             [np.arange(4), [VarGroup.STATE, VarGroup.EPOCH_PARTIALS], VarGroup.STM],
             [
                 np.arange(4),
@@ -144,18 +144,18 @@ class TestAbstractDynamicsModel:
             ],
         ],
     )
-    def test_extractGroups_missingVarIn(self, model, y, varIn, varOut):
+    def test_extractGroup_missingVarIn(self, model, y, varIn, varOut):
         # varIn doesn't include the desired varOut
         with pytest.raises(RuntimeError):
-            model.extractGroups(y, varOut, varIn)
+            model.extractGroup(y, varOut, varIn)
 
     @pytest.mark.parametrize(
         "y, varIn, varOut",
         [[np.arange(3), [VarGroup.STATE, VarGroup.STM], VarGroup.STM]],
     )
-    def test_extractGroups_missingData(self, model, y, varIn, varOut):
+    def test_extractGroup_missingData(self, model, y, varIn, varOut):
         with pytest.raises(ValueError):
-            model.extractGroups(y, varOut, varIn)
+            model.extractGroup(y, varOut, varIn)
 
     @pytest.mark.parametrize(
         "VarGroup, out",

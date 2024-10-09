@@ -13,16 +13,18 @@ the object's **state** is described by its Cartesian position and velocity coord
 
 where :math:`\\vec{q}` is the state vector, :math:`\\tau` is the independent variable
 (usually time), :math:`T` is an absolute epoch corresponding to :math:`\\tau = 0`, 
-and :math:`\\vec{p}` is a set of parameters (e.g., engine thrust).
+and :math:`\\vec{p}` is a set of constant parameters (e.g., engine thrust).
 In this notation, the dot over the coordinates represents the derivative with 
 respect to :math:`\\tau`. Some models may append more 
 variables, such as a thrust vector parameterization, to this state vector.
 
 In addition to the state vector, models can include equations that describe three
-other "variable groups" that provide extra dynamical information and are frequently
+other "variable groups", described by :class:`VarGroup`, that provide extra 
+dynamical information and are frequently
 used in differential corrections and optimization processes:
 
-- State transition matrix (:data:`~VarGroup.STM`): this matrix relates changes 
+- :data:`VarGroup.STM`, the state transition matrix, :math:`\mathbf{\Phi}`. 
+  This matrix relates changes 
   in :math:`\\vec{q}` at one value of :math:`\\tau` to changes in :math:`\\vec{q}`
   at a different value, i.e.,
 
@@ -31,15 +33,14 @@ used in differential corrections and optimization processes:
 
   When :math:`\\tau_2 = \\tau_1`, the state transition matrix is identity.
 
-- Epoch partials (:data:`~VarGroup.EPOCH_PARTIALS`): a vector of partial derivatives
-  of the state vector with respect to the epoch, :math:`\partial \\vec{q} / \partial T`
+- :data:`VarGroup.EPOCH_PARTIALS`, epoch partials, :math:`\partial \\vec{q} / \partial T`. 
+  A vector of partial derivatives of the state vector with respect to the epoch
 
-- Parameter partials (:data:`~VarGroup.PARAM_PARTIALS`): a matrix of partial 
-  derivatives of the state vector with respect to the parameter vector,
-  :math:`\partial \\vec{q} / \partial \\vec{p}`.
+- :data:`VarGroup.PARAM_PARTIALS`, parameter partials, :math:`\partial \\vec{q} / \partial \\vec{q}`. 
+  A matrix of partial derivatives of the state vector with respect to the parameter vector
 
 
-Grouped together with  matrix expanded in row-major order, the variable groups
+Grouped together with matrices expanded in row-major order, the variable groups
 are collected into a **variable vector**, denoted by
 
 .. math::
@@ -49,7 +50,7 @@ are collected into a **variable vector**, denoted by
      \\frac{\partial \\vec{q}}{\partial \\vec{p}}
    \\end{Bmatrix}.
 
-The :class:`AbstractDynamicsModel` provides the framework for these definitions
+The :class:`AbstractDynamicsModel` defines the evolution of this vector
 via the :func:`~AbstractDynamicsModel.diffEqs` function, which returns the
 deriative of the variable vector with respect to the independent variable,
 
@@ -60,20 +61,41 @@ Several other methods are supplied to initialize, extract, and append variable
 groups:
 
 .. autosummary::
+   :nosignatures:
+
    ~AbstractDynamicsModel.groupSize
    ~AbstractDynamicsModel.defaultICs
    ~AbstractDynamicsModel.appendICs
-   ~AbstractDynamicsModel.extractGroups
-   ~AbstractDynamicsModel.validForPropagation
+   ~AbstractDynamicsModel.extractGroup
    ~AbstractDynamicsModel.varNames
+   ~AbstractDynamicsModel.validForPropagation
+
+Additional information about the system of equations are available via properties
+and attributes of the model,
 
 .. autosummary::
+   :nosignatures:
+
+   ~AbstractDynamicsModel.charL
+   ~AbstractDynamicsModel.charT
+   ~AbstractDynamicsModel.charM
+   ~AbstractDynamicsModel.isEpochIndependent
+
+Finally, a convenience method to check the partial derivatives included in the
+differential equations is provided. This method is primarily for debugging purposes
+but can save many hours of time when deriving and coding the partial differential
+equations.
+
+.. autosummary::
+   :nosignatures:
+
    ~AbstractDynamicsModel.checkPartials
 
 Implementations
 ---------------
 
-Several dynamical models are implemented in submodules.
+The ``AbstractDynamicsModel`` defined in this module is just that -- abstract.
+Concrete implementations are included in the submodules listed below.
 
 .. toctree::
    :maxdepth: 1
@@ -81,7 +103,7 @@ Several dynamical models are implemented in submodules.
    dynamics.crtbp
    dynamics.lowthrust
 
-Module Reference
+Reference
 -----------------
 
 .. autoclass:: VarGroup
@@ -94,15 +116,17 @@ Module Reference
 """
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from copy import copy, deepcopy
 from enum import IntEnum
-from typing import Union
+from typing import Any, Union
 
 import numpy as np
+from numpy.typing import ArrayLike, NDArray
 
 from medusa import util
 from medusa.data import Body
+from medusa.typing import FloatArray
 
 logger = logging.getLogger(__name__)
 
@@ -169,9 +193,9 @@ class AbstractDynamicsModel(ABC):
 
     def __init__(
         self,
-        *bodies: Iterable[Body],
-        **properties: dict,
-    ):
+        *bodies: Body,
+        **properties: Any,
+    ) -> None:
         if any([not isinstance(body, Body) for body in bodies]):
             raise TypeError("Expecting Body objects")
 
@@ -236,10 +260,10 @@ class AbstractDynamicsModel(ABC):
         self,
         ix: int,
         t: float,
-        w: np.ndarray[float],
+        w: FloatArray,
         varGroups: tuple[VarGroup, ...],
-        params: np.ndarray[float],
-    ) -> np.ndarray[float]:
+        params: FloatArray,
+    ) -> NDArray[np.double]:
         """
         Evaluate a body state vector
 
@@ -259,10 +283,10 @@ class AbstractDynamicsModel(ABC):
     def diffEqs(
         self,
         t: float,
-        w: np.ndarray[float],
+        w: FloatArray,
         varGroups: tuple[VarGroup, ...],
-        params: np.ndarray[float],
-    ) -> np.ndarray[float]:
+        params: FloatArray,
+    ) -> NDArray[np.double]:
         """
         Evaluate the differential equations that govern the variable array
 
@@ -292,7 +316,7 @@ class AbstractDynamicsModel(ABC):
         pass
 
     @abstractmethod
-    def groupSize(self, varGroups: VarGroup | Iterable[VarGroup]) -> int:
+    def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
         """
         Get the size (i.e., number of elements) for one or more variable groups.
 
@@ -306,9 +330,9 @@ class AbstractDynamicsModel(ABC):
 
     def checkPartials(
         self,
-        w0: np.ndarray[float],
-        tspan: list[float, float],
-        params: Union[np.ndarray[float], None] = None,
+        w0: FloatArray,
+        tspan: FloatArray,
+        params: Union[FloatArray, None] = None,
         initStep: float = 1e-4,
         rtol: float = 1e-6,
         atol: float = 1e-8,
@@ -358,14 +382,13 @@ class AbstractDynamicsModel(ABC):
 
         # TODO ensure tolerances are tight enough?
         prop = Propagator(self, dense=False)
-        state0 = self.extractGroups(w0, VarGroup.STATE, varGroupsIn=allVars)
+        w0 = np.array(w0, copy=True)
+        state0 = self.extractGroup(w0, VarGroup.STATE, varGroupsIn=allVars)
 
         solution = prop.propagate(w0, tspan, params=params, varGroups=allVars)
         sol_vec = np.concatenate(
             [
-                self.extractGroups(
-                    solution.y[:, -1], grp, varGroupsIn=allVars
-                ).flatten()
+                self.extractGroup(solution.y[:, -1], grp, varGroupsIn=allVars).flatten()
                 for grp in allVars[1:]
             ]
         )
@@ -390,7 +413,7 @@ class AbstractDynamicsModel(ABC):
                 return sol.y[:, -1]
 
             num_epochPartials = numerics.derivative_multivar(
-                prop_epoch, tspan[0], initStep
+                prop_epoch, tspan[0], initStep  # type: ignore
             )
         else:
             num_epochPartials = np.array([])
@@ -403,7 +426,7 @@ class AbstractDynamicsModel(ABC):
                 return sol.y[:, -1]
 
             num_paramPartials = numerics.derivative_multivar(
-                prop_params, params, initStep
+                prop_params, params, initStep  # type: ignore
             )
         else:
             num_paramPartials = np.array([])
@@ -460,12 +483,12 @@ class AbstractDynamicsModel(ABC):
 
         return equal
 
-    def extractGroups(
+    def extractGroup(
         self,
-        w: np.ndarray[float],
+        w: NDArray[np.double],
         varGroup: VarGroup,
-        varGroupsIn: Union[Iterable[VarGroup], None] = None,
-    ) -> np.ndarray[float]:
+        varGroupsIn: Union[Sequence[VarGroup], None] = None,
+    ) -> NDArray[np.double]:
         """
         Extract a variable group from a variable vector
 
@@ -485,8 +508,8 @@ class AbstractDynamicsModel(ABC):
                 requested variable groups
         """
         if varGroupsIn is None:
-            varGroupsIn = [v for v in range(varGroup + 1)]
-        varGroupsIn = np.array(varGroupsIn, ndmin=1)
+            varGroupsIn = [VarGroup(v) for v in range(varGroup + 1)]
+        # varGroupsIn = np.array(varGroupsIn, ndmin=1)
 
         if not varGroup in varGroupsIn:
             raise RuntimeError(
@@ -509,12 +532,13 @@ class AbstractDynamicsModel(ABC):
         else:
             return np.array(w[nPre : nPre + sz])
 
-    def defaultICs(self, varGroup: VarGroup) -> np.ndarray[float]:
+    def defaultICs(self, varGroup: VarGroup) -> NDArray[np.double]:
         """
-        Get the default initial conditions for a set of equations. This basic
-        implementation returns a flattened identity matrix for the :attr:`~VarGroup.STM`
-        and zeros for the other equation types. Derived classes can override
-        this method to provide other values.
+        Get the default initial conditions for a variable vector.
+
+        This basic implementation returns a flattened identity matrix for the
+        :attr:`~VarGroup.STM` and zeros for the other equation types. Derived
+        classes can override this method to provide different values.
 
         Args:
             varGroup: describes the group of variables
@@ -528,11 +552,11 @@ class AbstractDynamicsModel(ABC):
             return np.zeros((self.groupSize(varGroup),))
 
     def appendICs(
-        self, w0: np.ndarray[float], varsToAppend: Iterable[VarGroup]
-    ) -> np.ndarray[float]:
+        self, w0: ArrayLike, varsToAppend: Union[VarGroup, Sequence[VarGroup]]
+    ) -> NDArray[np.double]:
         """
         Append initial conditions for the specified variable groups to the
-        provided state vector
+        provided variable vector
 
         Args:
             w0: variable vector of arbitrary length
@@ -543,14 +567,13 @@ class AbstractDynamicsModel(ABC):
             the start of the array with the additional initial conditions
             appended afterward
         """
-        w0 = np.asarray(w0)
-        varsToAppend = np.array(varsToAppend, ndmin=1)
-        nIn = w0.size
+        w0_ = np.asarray(w0, copy=True)
+        nIn = w0_.size
         nOut = self.groupSize(varsToAppend)
         w0_out = np.zeros((nIn + nOut,))
-        w0_out[:nIn] = w0
+        w0_out[:nIn] = w0_
         ix = nIn
-        for v in sorted(varsToAppend):
+        for v in sorted(util.toList(varsToAppend)):
             ic = self.defaultICs(v)
             if ic.size > 0:
                 w0_out[ix : ix + ic.size] = ic
@@ -558,7 +581,9 @@ class AbstractDynamicsModel(ABC):
 
         return w0_out
 
-    def validForPropagation(self, varGroups: Iterable[VarGroup]) -> bool:
+    def validForPropagation(
+        self, varGroups: Union[VarGroup, Sequence[VarGroup]]
+    ) -> bool:
         """
         Check that the set of variables can be propagated.
 
@@ -609,7 +634,7 @@ class AbstractDynamicsModel(ABC):
         else:
             raise ValueError(f"Unrecognized enum: varGroup = {varGroup}")
 
-    def indexToVarName(self, ix: int, varGroups: Iterable[VarGroup]) -> str:
+    def indexToVarName(self, ix: int, varGroups: Sequence[VarGroup]) -> str:
         # TODO test and document
         allNames = np.asarray(
             [self.varNames(varTp) for varTp in util.toList(varGroups)]
@@ -618,7 +643,11 @@ class AbstractDynamicsModel(ABC):
 
 
 class ModelBlockCopyMixin:
-    # A mixin class to prevent another class from copying stored DynamicsModels
+    """
+    A mixin class that prevents the parent class from copying stored
+    :class:`AbstractDynamisModel` objects
+    """
+
     def __deepcopy__(self, memo):
         cls = self.__class__
         result = cls.__new__(cls)

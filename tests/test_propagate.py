@@ -81,7 +81,7 @@ class TestPropagator:
         assert pytest.approx(sol.y[5, -1], 1e-4) == 0.00061782
 
         if VarGroup.STM in groups:
-            stm = emModel.extractGroups(sol.y[:, -1], VarGroup.STM)
+            stm = emModel.extractGroup(sol.y[:, -1], VarGroup.STM)
 
             # Check determinant of STM is unity
             assert pytest.approx(np.linalg.det(stm)) == 1.0

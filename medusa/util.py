@@ -13,12 +13,12 @@ Miscellaneous utility functions.
 .. autofunction:: toList
 .. autofunction:: toArray
 """
-from typing import Iterable, Union
+from typing import Iterable
 
 import numpy as np
 
 
-def _iterate(val: object) -> Union[str, Iterable]:
+def _iterate(val: object) -> Iterable:
     """
     A generator that iterates on the input, ``val``. If the input is a string,
     it is yielded without iterating.
@@ -27,7 +27,7 @@ def _iterate(val: object) -> Union[str, Iterable]:
         yield val
     else:
         try:
-            for item in val:
+            for item in val:  # type: ignore
                 yield item
         except TypeError:
             yield val

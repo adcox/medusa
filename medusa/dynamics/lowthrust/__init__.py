@@ -94,8 +94,11 @@ __all__ = [
 ]
 
 from abc import ABC, abstractmethod
+from typing import Iterable, Union
 
 import numpy as np
+
+from medusa.dynamics import VarGroup
 
 # ------------------------------------------------------------------------------
 # Control Terms
@@ -119,11 +122,11 @@ class ControlTerm(ABC):
             this term defines.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._coreStateSize = None
         self._paramIx0 = None
 
-    def register(self, nCore, ix0):
+    def register(self, nCore: int, ix0: int) -> None:
         """
         Register the control law within the context of the full dynamics model
 
@@ -137,30 +140,36 @@ class ControlTerm(ABC):
         self._paramIx0 = ix0
 
     @property
-    def epochIndependent(self):
+    def epochIndependent(self) -> bool:
         return True
 
     @property
-    def params(self):
+    def params(self) -> Iterable[float]:
         return []
 
     @property
-    def numStates(self):
+    def numStates(self) -> int:
         return 0
 
     @property
-    def stateICs(self):
+    def stateICs(self) -> Iterable[float]:
         if self.numStates == 0:
             return np.asarray([])
         else:
             return np.zeros((self.numStates,))
 
     @property
-    def stateNames(self):
+    def stateNames(self) -> Iterable[str]:
         me = self.__class__.__name__
         return [f"{me} {ix}" for ix in range(self.numStates)]
 
-    def stateDiffEqs(self, t, y, varGroups, params):
+    def stateDiffEqs(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Defines the differential equations that govern the state variables this
         term defines, i.e., derivatives of the state variables with respect to
@@ -173,7 +182,7 @@ class ControlTerm(ABC):
            by default. Override it to define custom behavior.
 
         Returns:
-            numpy.ndarray: the time derivatives of the state variables. If this
+            the time derivatives of the state variables. If this
             term doesn't define any state variables, an empty array is returned.
         """
         if self.numStates == 0:
@@ -182,7 +191,13 @@ class ControlTerm(ABC):
             return np.zeros((self.numStates,))
 
     @abstractmethod
-    def evalTerm(self, t, y, varGroups, params):
+    def evalTerm(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> Union[float, np.ndarray[float]]:
         """
         Evaluate the term.
 
@@ -190,12 +205,18 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            float, numpy.ndarray: the evaluated term
+            the evaluated term
         """
         pass
 
     @abstractmethod
-    def partials_term_wrt_coreState(self, t, y, varGroups, params):
+    def partials_term_wrt_coreState(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Compute the partial derivatives of :func:`evalTerm` with respect to the
         "core state", i.e., the state variables that exist independently of the
@@ -205,13 +226,19 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives where the rows represent the
+            the partial derivatives where the rows represent the
             elements in :func:`evalTerm` and the columns represent the core states.
         """
         pass
 
     @abstractmethod
-    def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_term_wrt_ctrlState(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Compute the partial derivatives of :func:`evalTerm` with respect to the
         control state variables that are defined by *this term*.
@@ -220,12 +247,18 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives
+            the partial derivatives
         """
         pass
 
     @abstractmethod
-    def partials_term_wrt_epoch(self, t, y, varGroups, params):
+    def partials_term_wrt_epoch(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Compute the partial derivatives of :func:`evalTerm` with respect to the epoch.
 
@@ -233,13 +266,19 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives where the rows represent the
+            the partial derivatives where the rows represent the
             elements in :func:`evalTerm` and the column represents the epoch.
         """
         pass
 
     @abstractmethod
-    def partials_term_wrt_params(self, t, y, varGroups, params):
+    def partials_term_wrt_params(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Compute the partial derivatives of :func:`evalTerm` with respect to the
         parameters *this term* defines.
@@ -248,12 +287,18 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives where the rows represent the
+            the partial derivatives where the rows represent the
             elements in :func:`evalTerm` and the columns represent the parameters.
         """
         pass
 
-    def partials_coreStateDEQs_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_coreStateDEQs_wrt_ctrlState(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Compute the partial derivatives of the core state differential equations
         (defined in :func:`~medusa.dynamics.AbstractDynamicsModel.diffEqs`) with
@@ -263,7 +308,7 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives where the rows represent the
+            the partial derivatives where the rows represent the
             core states and the columns represent the control states defined by
             this term. If this term doesn't define any control states, an
             empty array is returned.
@@ -273,7 +318,13 @@ class ControlTerm(ABC):
         else:
             return np.zeros((self._coreStateSize, self.numStates))
 
-    def partials_ctrlStateDEQs_wrt_coreState(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_coreState(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Compute the partial derivatives of :func:`stateDiffEqs` with respect to
         the "core state," i.e., the state variables that exist independent of the
@@ -283,7 +334,7 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives where the rows represent the
+            the partial derivatives where the rows represent the
             elements in :func:`stateDiffEqs` and the columns represent the core
             states. If this term doesn't define any control states, an empty
             array is returned.
@@ -293,7 +344,13 @@ class ControlTerm(ABC):
         else:
             return np.zeros((self.numStates, self._coreStateSize))
 
-    def partials_ctrlStateDEQs_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_ctrlState(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Compute the partial derivatives of :func:`stateDiffEqs` with respect to
         the control state variables defined by this term.
@@ -302,7 +359,7 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives where the rows represent the
+            the partial derivatives where the rows represent the
             elements in :func:`stateDiffEqs` and the columns represent the core
             states. If this term doesn't define any control states, an empty
             array is returned.
@@ -312,7 +369,13 @@ class ControlTerm(ABC):
         else:
             return np.zeros((self.numStates, self.numStates))
 
-    def partials_ctrlStateDEQs_wrt_epoch(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_epoch(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray:
         """
         Compute the partial derivatives of :func:`stateDiffEqs` with respect to
         the epoch.
@@ -321,7 +384,7 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives where the rows represent the
+            the partial derivatives where the rows represent the
             elements in :func:`stateDiffEqs` and the column represents epoch.
             If this term doesn't define any control states, an empty array is
             returned.
@@ -331,7 +394,13 @@ class ControlTerm(ABC):
         else:
             return np.zeros((self.numStates,))
 
-    def partials_ctrlStateDEQs_wrt_params(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_params(
+        self,
+        t: float,
+        w: np.ndarray[float],
+        varGroups: tuple[VarGroup, ...],
+        params: np.ndarray[float],
+    ) -> np.ndarray[float]:
         """
         Compute the partial derivatives of :func:`stateDiffEqs` with respect to
         the parameters defined by this term.
@@ -340,7 +409,7 @@ class ControlTerm(ABC):
         :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
 
         Returns:
-            numpy.ndarray: the partial derivatives where the rows represent the
+            the partial derivatives where the rows represent the
             elements in :func:`stateDiffEqs` and the columns represent the
             parameters. If this term doesn't define any control states, an empty
             array is returned.
@@ -356,12 +425,12 @@ class ConstThrustTerm(ControlTerm):
     Defines a constant thrust. The thrust is stored as a parameter.
 
     Args:
-        thrust (float): the thrust force in units consistent with the model
+        thrust: the thrust force in units consistent with the model
             (i.e., if the model nondimensionalizes values, this value should
             also be nondimensionalized).
     """
 
-    def __init__(self, thrust):
+    def __init__(self, thrust: float) -> None:
         super().__init__()
         self.thrust = thrust
 
@@ -369,19 +438,19 @@ class ConstThrustTerm(ControlTerm):
     def params(self):
         return [self.thrust]
 
-    def evalTerm(self, t, y, varGroups, params):
+    def evalTerm(self, t, w, varGroups, params):
         return params[self._paramIx0]
 
-    def partials_term_wrt_coreState(self, t, y, varGroups, params):
+    def partials_term_wrt_coreState(self, t, w, varGroups, params):
         return np.zeros((1, self._coreStateSize))
 
-    def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_term_wrt_ctrlState(self, t, w, varGroups, params):
         return np.asarray([])  # No control states
 
-    def partials_term_wrt_epoch(self, t, y, varGroups, params):
+    def partials_term_wrt_epoch(self, t, w, varGroups, params):
         return np.array([0], ndmin=2)
 
-    def partials_term_wrt_params(self, t, y, varGroups, params):
+    def partials_term_wrt_params(self, t, w, varGroups, params):
         partials = np.zeros((1, len(params)))
         partials[0, self._paramIx0] = 1
         return partials
@@ -392,12 +461,12 @@ class ConstMassTerm(ControlTerm):
     Defines a constant mass. The mass is stored as a parameter.
 
     Args:
-        mass (float): the mass in units consistent with the model
+        mass: the mass in units consistent with the model
             (i.e., if the model nondimensionalizes values, this value should
             also be nondimensionalized).
     """
 
-    def __init__(self, mass):
+    def __init__(self, mass: float) -> None:
         super().__init__()
         self.mass = mass
 
@@ -405,19 +474,19 @@ class ConstMassTerm(ControlTerm):
     def params(self):
         return [self.mass]
 
-    def evalTerm(self, t, y, varGroups, params):
+    def evalTerm(self, t, w, varGroups, params):
         return params[self._paramIx0]
 
-    def partials_term_wrt_coreState(self, t, y, varGroups, params):
+    def partials_term_wrt_coreState(self, t, w, varGroups, params):
         return np.zeros((1, self._coreStateSize))
 
-    def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_term_wrt_ctrlState(self, t, w, varGroups, params):
         return np.asarray([])  # No control states
 
-    def partials_term_wrt_epoch(self, t, y, varGroups, params):
+    def partials_term_wrt_epoch(self, t, w, varGroups, params):
         return np.array([0], ndmin=2)
 
-    def partials_term_wrt_params(self, t, y, varGroups, params):
+    def partials_term_wrt_params(self, t, w, varGroups, params):
         partials = np.zeros((1, len(params)))
         partials[0, self._paramIx0] = 1
         return partials
@@ -430,15 +499,15 @@ class ConstOrientTerm(ControlTerm):
     parameters
 
     Args:
-        alpha (float): the angle between the projection of the thrust vector
+        alpha: the angle between the projection of the thrust vector
             into the xy-plane and the x-axis, measured about the z-axis. Units
             are radians.
-        beta (float): the angle between the thrust vector and the xy-plane. A
+        beta: the angle between the thrust vector and the xy-plane. A
             positive value corresponds to a positive z-component. Units are
             radians.
     """
 
-    def __init__(self, alpha, beta):
+    def __init__(self, alpha: float, beta: float) -> None:
         super().__init__()
         self.alpha = alpha
         self.beta = beta
@@ -450,7 +519,7 @@ class ConstOrientTerm(ControlTerm):
     def _getAngles(self, params):
         return params[self._paramIx0], params[self._paramIx0 + 1]
 
-    def evalTerm(self, t, y, varGroups, params):
+    def evalTerm(self, t, w, varGroups, params):
         alpha, beta = self._getAngles(params)
         return np.asarray(
             [
@@ -460,16 +529,16 @@ class ConstOrientTerm(ControlTerm):
             ]
         )
 
-    def partials_term_wrt_coreState(self, t, y, varGroups, params):
+    def partials_term_wrt_coreState(self, t, w, varGroups, params):
         return np.zeros((3, self._coreStateSize))
 
-    def partials_term_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_term_wrt_ctrlState(self, t, w, varGroups, params):
         return np.asarray([])  # no control states
 
-    def partials_term_wrt_epoch(self, t, y, varGroups, params):
+    def partials_term_wrt_epoch(self, t, w, varGroups, params):
         return np.zeros((3, 1))
 
-    def partials_term_wrt_params(self, t, y, varGroups, params):
+    def partials_term_wrt_params(self, t, w, varGroups, params):
         partials = np.zeros((3, len(params)))
         alpha, beta = self._getAngles(params)
         partials[:, self._paramIx0] = [
@@ -503,7 +572,7 @@ class ControlLaw(ABC):
         params (list of float): the default parameter values for the control law
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._coreStateSize = None
         self._paramIx0 = None
 
@@ -521,7 +590,7 @@ class ControlLaw(ABC):
         self._paramIx0 = ix0
 
     @abstractmethod
-    def accelVec(self, t, y, varGroups, params):
+    def accelVec(self, t, w, varGroups, params):
         """
         Compute the acceleration vector delivered by this control law.
 
@@ -555,7 +624,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def stateDiffEqs(self, t, y, varGroups, params):
+    def stateDiffEqs(self, t, w, varGroups, params):
         """
         Defines the differential equations that govern the state variables this
         control law defines, i.e., derivatives of the state variables with respect
@@ -571,7 +640,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def partials_accel_wrt_coreState(self, t, y, varGroups, params):
+    def partials_accel_wrt_coreState(self, t, w, varGroups, params):
         """
         The partial derivatives of :func:`accelVec` with respect to the "core state,"
         i.e., the state variables that exist independent of the control
@@ -588,7 +657,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def partials_accel_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_accel_wrt_ctrlState(self, t, w, varGroups, params):
         """
         The partial derivatives of :func:`accelVec` with respect to the control
         states defined by the control law.
@@ -604,7 +673,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def partials_accel_wrt_epoch(self, t, y, varGroups, params):
+    def partials_accel_wrt_epoch(self, t, w, varGroups, params):
         """
         The partial derivatives of :func:`accelVec` with respect to the epoch.
 
@@ -618,7 +687,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def partials_accel_wrt_params(self, t, y, varGroups, params):
+    def partials_accel_wrt_params(self, t, w, varGroups, params):
         """
         The partial derivatives of :func:`accelVec` with respect to the parameters
         defined by the control law.
@@ -633,7 +702,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def partials_ctrlStateDEQs_wrt_coreState(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_coreState(self, t, w, varGroups, params):
         """
         The partial derivatives of :func:`stateDiffEqs` with respect to the "core
         states," i.e., the state variables that exist independently of the
@@ -650,7 +719,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def partials_ctrlStateDEQs_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_ctrlState(self, t, w, varGroups, params):
         """
         The partial derivatives of :func:`stateDiffEqs` with respect to the state
         variables defined by the control law.
@@ -666,7 +735,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def partials_ctrlStateDEQs_wrt_epoch(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_epoch(self, t, w, varGroups, params):
         """
         The partial derivatives of :func:`stateDiffEqs` with respect to the epoch.
 
@@ -680,7 +749,7 @@ class ControlLaw(ABC):
         pass
 
     @abstractmethod
-    def partials_ctrlStateDEQs_wrt_params(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_params(self, t, w, varGroups, params):
         """
         The partial derivatives of :func:`stateDiffEqs` with respect to the
         parameters defined by the control law.
@@ -707,10 +776,10 @@ class SeparableControlLaw(ControlLaw):
        acceleration vector and its associated partial derivatives.
 
     Args:
-        terms (ControlTerm): the term(s) to include in the control parameterization.
+        terms: the term(s) to include in the control parameterization.
     """
 
-    def __init__(self, *terms):
+    def __init__(self, *terms: Iterable[ControlTerm]) -> None:
         self.terms = tuple(terms)
 
     def _concat(self, arrays):
@@ -744,9 +813,9 @@ class SeparableControlLaw(ControlLaw):
     def stateICs(self):
         return self._concat([term.stateICs for term in self.terms])
 
-    def stateDiffEqs(self, t, y, varGroups, params):
+    def stateDiffEqs(self, t, w, varGroups, params):
         return self._concat(
-            [term.stateDiffEqs(t, y, varGroups, params) for term in self.terms]
+            [term.stateDiffEqs(t, w, varGroups, params) for term in self.terms]
         )
 
     def register(self, nCore, ix0):
@@ -765,36 +834,36 @@ class SeparableControlLaw(ControlLaw):
             term.register(nCore, ix0)
             ix0 += len(term.params)
 
-    def partials_ctrlStateDEQs_wrt_coreState(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_coreState(self, t, w, varGroups, params):
         # Because the control terms are independent, we can just concatenate
         #   the partial derivatives of the control state diff eqs.
         return self._concat(
             [
-                term.partials_ctrlStateDEQs_wrt_coreState(t, y, varGroups, params)
+                term.partials_ctrlStateDEQs_wrt_coreState(t, w, varGroups, params)
                 for term in self.terms
             ]
         )
 
-    def partials_ctrlStateDEQs_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_ctrlState(self, t, w, varGroups, params):
         return self._concat(
             [
-                term.partials_ctrlStateDEQs_wrt_ctrlState(t, y, varGroups, params)
+                term.partials_ctrlStateDEQs_wrt_ctrlState(t, w, varGroups, params)
                 for term in self.terms
             ]
         )
 
-    def partials_ctrlStateDEQs_wrt_epoch(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_epoch(self, t, w, varGroups, params):
         return self._concat(
             [
-                term.partials_ctrlStateDEQs_wrt_epoch(t, y, varGroups, params)
+                term.partials_ctrlStateDEQs_wrt_epoch(t, w, varGroups, params)
                 for term in self.terms
             ]
         )
 
-    def partials_ctrlStateDEQs_wrt_params(self, t, y, varGroups, params):
+    def partials_ctrlStateDEQs_wrt_params(self, t, w, varGroups, params):
         return self._concat(
             [
-                term.partials_ctrlStateDEQs_wrt_params(t, y, varGroups, params)
+                term.partials_ctrlStateDEQs_wrt_params(t, w, varGroups, params)
                 for term in self.terms
             ]
         )
@@ -805,36 +874,38 @@ class ForceMassOrientLaw(SeparableControlLaw):
     A separable control law that accepts three terms: force, mass, and orientation.
 
     Args:
-        force (ControlTerm): defines the scalar thrust force
-        mass (ControlTerm): defines the scalar mass
-        orient (ControlTerm): defines the unit vector that orients the thrust
+        force: defines the scalar thrust force
+        mass: defines the scalar mass
+        orient: defines the unit vector that orients the thrust
 
     The acceleration is computed as: :math:`\\vec{a} = \\frac{f}{m} \\hat{u}`
     where :math:`f` is the thrust force, :math:`m` is the mass, and
     :math:`\\hat{u}` is the orientation.
     """
 
-    def __init__(self, force, mass, orient):
+    def __init__(
+        self, force: ControlTerm, mass: ControlTerm, orient: ControlTerm
+    ) -> None:
         super().__init__(force, mass, orient)
 
-    def accelVec(self, t, y, varGroups, params):
+    def accelVec(self, t, w, varGroups, params):
         # Returns Cartesian acceleration vector
-        force = self.terms[0].evalTerm(t, y, varGroups, params)
-        mass = self.terms[1].evalTerm(t, y, varGroups, params)
-        vec = self.terms[2].evalTerm(t, y, varGroups, params)
+        force = self.terms[0].evalTerm(t, w, varGroups, params)
+        mass = self.terms[1].evalTerm(t, w, varGroups, params)
+        vec = self.terms[2].evalTerm(t, w, varGroups, params)
 
         return (force / mass) * vec
 
-    def _accelPartials(self, t, y, varGroups, params, partialFcn):
+    def _accelPartials(self, t, w, varGroups, params, partialFcn):
         # Use chain rule to combine partials of the acceleration w.r.t. some other
         #   parameter
-        f = self.terms[0].evalTerm(t, y, varGroups, params)
-        m = self.terms[1].evalTerm(t, y, varGroups, params)
-        vec = self.terms[2].evalTerm(t, y, varGroups, params)
+        f = self.terms[0].evalTerm(t, w, varGroups, params)
+        m = self.terms[1].evalTerm(t, w, varGroups, params)
+        vec = self.terms[2].evalTerm(t, w, varGroups, params)
 
-        dfdX = getattr(self.terms[0], partialFcn)(t, y, varGroups, params)
-        dmdX = getattr(self.terms[1], partialFcn)(t, y, varGroups, params)
-        dodX = getattr(self.terms[2], partialFcn)(t, y, varGroups, params)
+        dfdX = getattr(self.terms[0], partialFcn)(t, w, varGroups, params)
+        dmdX = getattr(self.terms[1], partialFcn)(t, w, varGroups, params)
+        dodX = getattr(self.terms[2], partialFcn)(t, w, varGroups, params)
 
         term1 = (vec @ dfdX / m) if dfdX.size > 0 else 0
         term2 = (-f * vec / (m * m)) @ dmdX if dmdX.size > 0 else 0
@@ -843,18 +914,18 @@ class ForceMassOrientLaw(SeparableControlLaw):
         partials = term1 + term2 + term3
         return np.asarray([]) if isinstance(partials, int) else partials
 
-    def partials_accel_wrt_coreState(self, t, y, varGroups, params):
+    def partials_accel_wrt_coreState(self, t, w, varGroups, params):
         return self._accelPartials(
-            t, y, varGroups, params, "partials_term_wrt_coreState"
+            t, w, varGroups, params, "partials_term_wrt_coreState"
         )
 
-    def partials_accel_wrt_ctrlState(self, t, y, varGroups, params):
+    def partials_accel_wrt_ctrlState(self, t, w, varGroups, params):
         return self._accelPartials(
-            t, y, varGroups, params, "partials_term_wrt_ctrlState"
+            t, w, varGroups, params, "partials_term_wrt_ctrlState"
         )
 
-    def partials_accel_wrt_epoch(self, t, y, varGroups, params):
-        return self._accelPartials(t, y, varGroups, params, "partials_term_wrt_epoch")
+    def partials_accel_wrt_epoch(self, t, w, varGroups, params):
+        return self._accelPartials(t, w, varGroups, params, "partials_term_wrt_epoch")
 
-    def partials_accel_wrt_params(self, t, y, varGroups, params):
-        return self._accelPartials(t, y, varGroups, params, "partials_term_wrt_params")
+    def partials_accel_wrt_params(self, t, w, varGroups, params):
+        return self._accelPartials(t, w, varGroups, params, "partials_term_wrt_params")

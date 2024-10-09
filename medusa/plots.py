@@ -5,7 +5,7 @@ Plotting
 Plotting tools are defined here.
 """
 import numpy as np
-import scipy.optimize
+import scipy.optimize  # type: ignore
 
 from medusa import util
 from medusa.dynamics import VarGroup

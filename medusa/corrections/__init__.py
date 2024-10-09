@@ -108,6 +108,9 @@ Module Reference
    :show-inheritance:
 
 """
+
+from __future__ import annotations
+
 import logging
 import warnings
 from abc import ABC, abstractmethod
@@ -167,7 +170,7 @@ class Variable:
         values: Iterable[float],
         mask: Union[bool, Iterable[bool]] = False,
         name: str = "",
-    ):
+    ) -> None:
         #: ma.array: the masked values
         self.values = ma.array(values, mask=mask, ndmin=1)
         self.name = name  #: str: the variable name
@@ -241,16 +244,16 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
 
     @property
     @abstractmethod
-    def size(self):
+    def size(self) -> int:
         """
         Get the number of scalar constraint equations
 
         Returns:
-            int: the number of constraint equations
+            the number of constraint equations
         """
         pass
 
-    def clearCache(self):
+    def clearCache(self) -> None:
         """
         Called by correctors when variables are updated to signal a constraint
         that any caches ought to be cleared and re-computed.
@@ -261,12 +264,12 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
         pass
 
     @abstractmethod
-    def evaluate(self):
+    def evaluate(self) -> Union[float, np.ndarray[float]]:
         """
         Evaluate the constraint
 
         Returns:
-            numpy.ndarray or float: the value of the constraint funection; evaluates
+            the value of the constraint funection; evaluates
             to zero when the constraint is satisfied
 
         Raises:
@@ -275,17 +278,19 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
         pass
 
     @abstractmethod
-    def partials(self, freeVarIndexMap):
+    def partials(
+        self, freeVarIndexMap: dict[int, Variable]
+    ) -> dict[Variable, np.ndarray[float]]:
         """
         Compute the partial derivatives of the constraint vector with respect to
         all variables
 
         Args:
-            freeVarIndexMap (dict): maps the first index (:class:`int`) of each⋅
+            freeVarIndexMap: maps the first index (:class:`int`) of each
                 :class:`Variable` within ``freeVars`` to the variable object
 
         Returns:
-            dict: a dictionary mapping a :class:`Variable` object to the partial
+            a dictionary mapping a :class:`Variable` object to the partial
             derivatives of this constraint with respect to that variable
             (:class:`numpy.ndarray` of :class:`float`). The partial derivatives with respect
             to variables that are not included in the returned dict are assumed
@@ -309,12 +314,12 @@ class ControlPoint(ModelBlockCopyMixin):
     Defines a propagation start point
 
     Args:
-        model (AbstractDynamicsModel): defines the dynamics model for the propagation
-        epoch (float, Variable): the epoch at which the propagation begins. An
+        model: defines the dynamics model for the propagation
+        epoch: the epoch at which the propagation begins. An
             input ``float`` is converted to a :class:`Variable` with name "Epoch"
-        state ([float], Variable): the state at which the propagation begins. An
+        state: the state at which the propagation begins. An
             input list of floats is converted to a :class:`Variable` with name "State"
-        autoMask (Optional, bool): whether or not to auto-mask the ``epoch`` variable.
+        autoMask: whether or not to auto-mask the ``epoch`` variable.
             If True and ``model``
             :func:`~medusa.dynamics.AbstractDynamicsModel.epochIndependent` is True,
             the ``epoch`` variable has its mask set to True.
@@ -326,7 +331,13 @@ class ControlPoint(ModelBlockCopyMixin):
             allows for :attr:`VarGroup.STATE`
     """
 
-    def __init__(self, model, epoch, state, autoMask=True):
+    def __init__(
+        self,
+        model: AbstractDynamicsModel,
+        epoch: Union[float, Variable],
+        state: Union[Iterable[float], Variable],
+        autoMask: bool = True,
+    ) -> None:
         if not isinstance(model, AbstractDynamicsModel):
             raise TypeError("Model must be derived from AbstractDynamicsModel")
 
@@ -347,33 +358,42 @@ class ControlPoint(ModelBlockCopyMixin):
         if autoMask:
             epoch.values.mask = model.epochIndependent
 
-        self.model = model
-        self.epoch = epoch
-        self.state = state
+        self.model = model  #: AbstractDynamicsModel: the associated model
+        self.epoch = epoch  #: Variable: the epoch
+        self.state = state  #: Variable: the state
 
     @property
-    def importableVars(self):
-        # Define variables attribute for CorrectionsProblem.importVariables
-        # Defined as property so that evaluation occurs at runtime, allowing
-        #   user to modify/reassign the variables
+    def importableVars(self) -> tuple[Variable, ...]:
+        """
+        A tuple of variables that can be imported into a corrections problem.
+
+        Importing is accomplished via :func:`CorrectionsProblem.importVariables`.
+        These variables are defined as a property so that evaluation occurs at
+        runtime, allowing the user to modify or reassign the variables.
+        """
         return self.state, self.epoch
 
     @staticmethod
-    def fromProp(solution, ix=0, autoMask=True):
+    def fromProp(
+        solution: scipy.integrate.OptimizeResult, ix: int = 0, autoMask: bool = True
+    ) -> ControlPoint:
         """
         Construct a control point from a propagated arc
 
         Args:
-            solution (scipy.integrate.OptimizeResult): the output from the propagation
-            ix (Optional, int): the index of the point within the ``solution``
-            autoMask (Optional, bool): whether or not to auto-mask the ``epoch``
+            solution: the output from a propagation
+            ix: the index of the point within the ``solution``
+            autoMask: whether or not to auto-mask the ``epoch``
                 variable. If True and ``solution.model``
                 :func:`~medusa.dynamics.AbstractDynamicsModel.epochIndependent`
                 is True, the ``epoch`` variable has its mask set to True.
 
         Returns:
-            ControlPoint: a control point with epoch and state retrieved from the
+            a control point with epoch and state retrieved from the
             propagation solution
+
+        Raises:
+            ValueError: if ``ix`` is out of bounds with respect to the ``solution`` indices
         """
         if not isinstance(solution, scipy.optimize.OptimizeResult):
             raise TypeError("Expecting OptimizeResult from scipy solve_ivp")
@@ -390,38 +410,35 @@ class Segment:
     specified time-of-flight.
 
     Args:
-        origin (ControlPoint): the starting point for the propagated trajectory.
+        origin: the starting point for the propagated trajectory.
             This control point defines the dynamics model, the initial state, and
             the initial epoch.
-        tof (float, Variable): the time-of-flight for the propagated trajectory
+        tof: the time-of-flight for the propagated trajectory
             in units consistent with the origin's model and state. If the input
             is a float, a :class:`Variable` object with name "Time-of-flight"
             is created.
-        terminus (Optional, ControlPoint): a control point located at the terminus
+        terminus: a control point located at the terminus
             of the propagated arc. This is useful when defining differential
             corrections problems that seek to constrain the numerical integration.
             It is not required that the terminus state or epoch are numerically
             consistent with the state or epoch values at the end of the arc. The
             ``terminus`` is not used or modified by the Segment.
-        prop (Optional, Propagator): the propagator to use. If ``None``, a
+        prop: the propagator to use. If ``None``, a
             :class:`~medusa.propagate.Propagator` is constructed for the ``origin``
             model with the ``dense`` flag set to False.
-        propParams (Optional, list, numpy.ndarray, Variable): parameters to be
+        propParams: parameters to be
             passed to the model's equations of motion. If the input is not a
             :class:`Variable`, a variable is constructed with a name "Params"
-
-    Attributes:
-        origin (ControlPoint): the starting point for the propagated trajectory
-        terminus (ControlPoint): the terminal point for the propagated trajectory.
-            This object is *not* updated by the Segment.
-        tof (Variable): the time-of-flight
-        prop (Propagtor): the propagator
-        propParams (Variable): propagation parameters
-        propSol (scipy.optimize.OptimizeResult): the propagation output, if
-            :func:`propagate` has been called, otherwise ``None``
     """
 
-    def __init__(self, origin, tof, terminus=None, prop=None, propParams=[]):
+    def __init__(
+        self,
+        origin: ControlPoint,
+        tof: Union[float, Variable],
+        terminus: Union[None, ControlPoint] = None,
+        prop: Union[None, Propagator] = None,
+        propParams: Union[float, Iterable[float], Variable] = [],
+    ) -> None:
         if not isinstance(origin, ControlPoint):
             raise TypeError("origin must be a ControlPoint")
 
@@ -447,49 +464,67 @@ class Segment:
         if not isinstance(propParams, Variable):
             propParams = Variable(propParams, name="Params")
 
+        #: ContrlolPoint: the starting point for the propagated trajectory.
+        #: Defines the dynamics model, initial state, and initial epoch.
         self.origin = origin
+
+        #: Union[None, ControlPoint]: the stoping point for the propagated trajectory
+        #: Does not affect the propagation.
         self.terminus = terminus
+
+        #: Variable: the time-of-flight
         self.tof = tof
+
+        #: Propagator: the propagator
         self.prop = prop
+
+        #: Variable: propagation parameters
         self.propParams = propParams
+
+        #: Union[None, scipy.optimize.OptimizeResult]: the propagation output, if
+        #: :func:`propagate` has been called, otherwise ``None``.
         self.propSol = None
 
     @property
-    def importableVars(self):
-        # Define variables attribute for CorrectionsProblem.importVariables
-        # Defined as property so that evaluation occurs at runtime, allowing
-        #   user to modify/reassign the variables
+    def importableVars(self) -> tuple[Variable, ...]:
+        """
+        A tuple of variables that can be imported into a corrections problem.
+
+        Importing is accomplished via :func:`CorrectionsProblem.importVariables`.
+        These variables are defined as a property so that evaluation occurs at
+        runtime, allowing the user to modify or reassign the variables.
+        """
         return self.tof, self.propParams
 
-    def resetProp(self):
+    def resetProp(self) -> None:
         """
         Reset the propagation cache, :attr:`propSol`, to ``None``
         """
         self.propSol = None
 
-    def state(self, ix=-1):
+    def state(self, ix: int = -1) -> np.ndarray[float]:
         """
         Lazily propagate the trajectory and retrieve the state
 
         Args:
-            ix (int): the index within the :attr:`propSol` ``y`` array.
+            ix: the index within the :attr:`propSol` ``y`` array.
 
         Returns:
-            numpy.ndarray: the propagated state (:class:`VarGroup` ``STATE``) on the
+            the propagated state (:class:`VarGroup` ``STATE``) on the
             propagated trajectory
         """
         self.propagate(VarGroup.STATE)
-        return self.origin.model.extractGroups(self.propSol.y[:, ix], VarGroup.STATE)
+        return self.origin.model.extractGroup(self.propSol.y[:, ix], VarGroup.STATE)
 
-    def partials_state_wrt_time(self, ix=-1):
+    def partials_state_wrt_time(self, ix: int = -1) -> np.ndarray[float]:
         """
         Lazily propagate the trajectory and retrieve the partial derivatives
 
         Args:
-            ix (int): the index within the :attr:`propSol` ``y`` array.
+            ix: the index within the :attr:`propSol` ``y`` array.
 
         Returns:
-            numpy.ndarray: the partials of the propagated state with respect to
+            the partials of the propagated state with respect to
             :attr:`tof`, i.e., the time derivative of the
             :attr:`~medusa.dynamics.VarGroup.STATE` variables
         """
@@ -500,37 +535,37 @@ class Segment:
             (VarGroup.STATE,),
             self.propParams.allVals,
         )
-        return self.origin.model.extractGroups(dy_dt, VarGroup.STATE)
+        return self.origin.model.extractGroup(dy_dt, VarGroup.STATE)
 
-    def partials_state_wrt_initialState(self, ix=-1):
+    def partials_state_wrt_initialState(self, ix: int = -1) -> np.ndarray[float]:
         """
         Lazily propagate the trajectory and retrieve the partial derivatives
 
         Args:
-            ix (int): the index within the :attr:`propSol` ``y`` array.
+            ix: the index within the :attr:`propSol` ``y`` array.
 
         Returns:
-            numpy.ndarray: the partials of the propagated state with respect to the
+            the partials of the propagated state with respect to the
             :attr:`origin` ``state``, i.e., the :attr:`~medusa.dynamics.VarGroup.STM`.
             The partials are returned in matrix form.
         """
         self.propagate([VarGroup.STATE, VarGroup.STM])
-        return self.origin.model.extractGroups(self.propSol.y[:, ix], VarGroup.STM)
+        return self.origin.model.extractGroup(self.propSol.y[:, ix], VarGroup.STM)
 
-    def partials_state_wrt_epoch(self, ix=-1):
+    def partials_state_wrt_epoch(self, ix: int = -1) -> np.ndarray[float]:
         """
         Lazily propagate the trajectory and retrieve the partial derivatives
 
         Args:
-            ix (int): the index within the :attr:`propSol` ``y`` array.
+            ix: the index within the :attr:`propSol` ``y`` array.
 
         Returns:
-            numpy.ndarray: the partials of the propagated state with respect to
+            the partials of the propagated state with respect to
             the :attr:`origin` ``epoch``, i.e., the
             :attr:`~medusa.dynamics.VarGroup.EPOCH_PARTIALS`.
         """
         self.propagate([VarGroup.STATE, VarGroup.STM, VarGroup.EPOCH_PARTIALS])
-        partials = self.origin.model.extractGroups(
+        partials = self.origin.model.extractGroup(
             self.propSol.y[:, ix], VarGroup.EPOCH_PARTIALS
         )
 
@@ -540,15 +575,15 @@ class Segment:
 
         return partials
 
-    def partials_state_wrt_params(self, ix=-1):
+    def partials_state_wrt_params(self, ix: int = -1) -> np.ndarray[float]:
         """
         Lazily propagate the trajectory and retrieve the partial derivatives
 
         Args:
-            ix (int): the index within the :attr:`propSol` ``y`` array.
+            ix: the index within the :attr:`propSol` ``y`` array.
 
         Returns:
-            numpy.ndarray: the partials of the propagated state with respect to
+            the partials of the propagated state with respect to
             the :attr:`propParams`, i.e., the :attr:`~medusa.dynamics.VarGroup.PARAM_PARTIALS`.
         """
         self.propagate(
@@ -559,7 +594,7 @@ class Segment:
                 VarGroup.PARAM_PARTIALS,
             ]
         )
-        partials = self.origin.model.extractGroups(
+        partials = self.origin.model.extractGroup(
             self.propSol.y[:, ix], VarGroup.PARAM_PARTIALS
         )
 
@@ -570,22 +605,23 @@ class Segment:
 
         return partials
 
-    def propagate(self, varGroups, lazy=True):
+    def propagate(
+        self, varGroups: Iterable[VarGroup], lazy: bool = True
+    ) -> scipy.optimize.OptimizeResult:
         """
         Propagate from the :attr:`origin` for the specified :attr:`tof`. Results
         are stored in :attr:`propSol`.
 
         Args:
-            varGroups ([VarGroup]): defines which equations of motion should be included
+            varGroups: which equations of motion should be included
                 in the propagation.
-            lazy (Optional, bool): whether or not to lazily propagate the
+            lazy: whether or not to lazily propagate the
                 trajectory. If True, the :attr:`prop` ``propagate()`` function is
                 called if :attr:`propSol` is ``None`` or if the previous propagation
                 did not include one or more of the ``varGroups``.
 
         Returns:
-            scipy.optimize.OptimizeResult: the propagation result. This is also
-            stored in :attr:`propSol`.
+            the propagation result. This is also stored in :attr:`propSol`.
         """
         # Check to see if we can skip the propagation
         if lazy and self.propSol is not None:
@@ -628,7 +664,7 @@ class CorrectionsProblem:
             columns correspond to free variables.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # free variables and constraints are stored in a list for add/remove
         self._freeVars = []
         self._constraints = []
@@ -642,22 +678,23 @@ class CorrectionsProblem:
         self._jacobian = None
 
     @staticmethod
-    def fromIteration(problem, correctorLog, it=-1):
+    def fromIteration(
+        problem: CorrectionsProblem, correctorLog: dict, it: int = -1
+    ) -> CorrectionsProblem:
         """
         Create a corrections problem from a logged corrector iteration
 
         Args:
-            problem (CorrectionsProblem): a template corrections problem that
+            problem: a template corrections problem that
                 matches the free-variable and constraint structure of the
                 logged solutions. This can be either the initial guess or the
                 converged solution.
-            correctorLog (dict): the corrections log output from
+            correctorLog: the corrections log output from
                 :func:`DifferentialCorrector.solve`
-            it (Optional, int): the iteration index
+            it: the iteration index
 
         Returns:
-            CorrectionsProblem: a corrections problem that matches the specified
-            iteration.
+            A corrections problem that matches the specified iteration.
         """
         prob = deepcopy(problem)
 
@@ -669,7 +706,7 @@ class CorrectionsProblem:
     # -------------------------------------------
     # Variables
 
-    def addVariables(self, variable):
+    def addVariables(self, variable: Union[Variable, Iterable[Variable]]) -> None:
         """
         Add one or more variables to the problem
 
@@ -700,7 +737,7 @@ class CorrectionsProblem:
             self._freeVarVec = None
             self._jacobian = None
 
-    def importVariables(self, obj):
+    def importVariables(self, obj: object) -> None:
         """
         Imports variables from an object. The object must define a ``importableVars``
         attribute that contains any variables that can be imported by the problem.
@@ -708,11 +745,11 @@ class CorrectionsProblem:
         applicable.
 
         Args:
-            obj: an object
+            obj: an object that defines an ``importableVars`` attribute.
         """
         self.addVariables(util.toList(getattr(obj, "importableVars", [])))
 
-    def rmVariables(self, variable):
+    def rmVariables(self, variable: Union[Variable, Iterable[Variable]]) -> None:
         """
         Remove one or more variables from the problem
 
@@ -720,7 +757,7 @@ class CorrectionsProblem:
         and :func:`jacobian`.
 
         Args:
-            variable (Variable, [Variable]): the variable(s) to remove. If the
+            variable: the variable(s) to remove. If the
                 variable is not part of the problem, no action is taken.
         """
         for var in util.toList(variable):
@@ -732,7 +769,7 @@ class CorrectionsProblem:
             except ValueError:
                 logger.debug(f"Could not remove variable {var}")
 
-    def clearVariables(self):
+    def clearVariables(self) -> None:
         """
         Remove all variables from the problem
 
@@ -744,12 +781,12 @@ class CorrectionsProblem:
         self._freeVarVec = None
         self._jacobian = None
 
-    def freeVarVec(self):
+    def freeVarVec(self) -> np.ndarray[float]:
         """
         Get the free variable vector
 
         Returns:
-            numpy.ndarray<float>: the free variable vector. This result is cached
+            the free variable vector. This result is cached
             until the free variables are updated.
         """
         if self._freeVarVec is None:
@@ -759,12 +796,12 @@ class CorrectionsProblem:
 
         return self._freeVarVec
 
-    def freeVarIndexMap(self):
+    def freeVarIndexMap(self) -> dict[Variable, int]:
         """
         Get the free variable index map
 
         Returns:
-            dict: a dictionary mapping the variables included in the problem
+            a dictionary mapping the variables included in the problem
             (as :class:`Variable` objects) to the index within the free variable
             vector (as an :class:`int`). This result is cached until the free
             variables are modified.
@@ -779,7 +816,7 @@ class CorrectionsProblem:
 
         return self._freeVarIndexMap
 
-    def freeVarIndexMap_reversed(self):
+    def freeVarIndexMap_reversed(self) -> dict[int, Variable]:
         varMap = {}
         for var, ix0 in self.freeVarIndexMap().items():
             for k in range(var.numFree):
@@ -789,7 +826,7 @@ class CorrectionsProblem:
                 varMap[ix0 + k] = var
         return varMap
 
-    def updateFreeVars(self, newVec):
+    def updateFreeVars(self, newVec: np.ndarray[float]) -> None:
         """
         Update the free variable vector and corresponding Variable objects
 
@@ -798,7 +835,7 @@ class CorrectionsProblem:
         also called on all constraints in the problem.
 
         Args:
-            newVec (numpy.ndarray): an updated free variable vector. It must
+            newVec: an updated free variable vector. It must
                 be the same size and shape as the existing free variable vector.
 
         Raises:
@@ -821,7 +858,7 @@ class CorrectionsProblem:
             constraint.clearCache()
 
     @property
-    def numFreeVars(self):
+    def numFreeVars(self) -> int:
         """
         Get the number of scalar free variable values in the problem. This is
         distinct from the number of :class:`Variable` objects as each object
@@ -829,14 +866,16 @@ class CorrectionsProblem:
         from the free variable vector
 
         Returns:
-            int: number of free variables
+            number of free variables
         """
         return sum([var.numFree for var in self._freeVars])
 
     # -------------------------------------------
     # Constraints
 
-    def addConstraints(self, constraint):
+    def addConstraints(
+        self, constraint: Union[AbstractConstraint, Iterable[AbstractConstraint]]
+    ) -> None:
         """
         Add one or more constraints to the problem. If the constraint defines variables,
         they are also added to the problem via :func:`importVariables`.
@@ -845,9 +884,8 @@ class CorrectionsProblem:
         :func:`constraintVec`, and :func:`jacobian`
 
         Args:
-            constraint (AbstractConstraint, [AbstractConstraint]): one or more
-                constraints to add. Constraints are stored by reference (they are
-                not copied).
+            constraint: one or more constraints to add. Constraints are stored by
+                reference (they are not copied).
         """
         for con in util.toList(constraint):
             # TODO allow input to be an iterable
@@ -869,7 +907,9 @@ class CorrectionsProblem:
             self._constraintVec = None
             self._jacobian = None
 
-    def rmConstraints(self, constraint):
+    def rmConstraints(
+        self, constraint: Union[AbstractConstraint, Iterable[AbstractConstraint]]
+    ) -> None:
         """
         Remove one or more constraints from the problem. If the constraint defines
         variables, they are also removed from the problem.
@@ -878,9 +918,8 @@ class CorrectionsProblem:
         :func:`constraintVec`, and :func:`jacobian`
 
         Args:
-            constraint (AbstractConstraint, [AbstractConstraint]): the constraint(s)
-                to remove. If the constraint is not part of the problem, no action
-                is taken.
+            constraint: the constraint(s) to remove. If the constraint is not part
+                of the problem, no action is taken.
         """
         for con in util.toList(constraint):
             try:
@@ -892,7 +931,7 @@ class CorrectionsProblem:
             except ValueError:
                 logger.debug(f"Could not remove constraint {con}")
 
-    def clearConstraints(self):
+    def clearConstraints(self) -> None:
         """
         Remove all constraints from the problem.
 
@@ -904,17 +943,12 @@ class CorrectionsProblem:
         self._constraintVec = None
         self._jacobian = None
 
-    def constraintVec(self):
+    def constraintVec(self) -> np.ndarray[float]:
         """
         Get the constraint vector
 
-        Args:
-            recompile (bool): whether or not to recompute the constraint vector.
-                The :func:`constraintIndexMap` function and :func:`freeVarIndexMap`
-                must be called first (with ``recompute = True``).
-
         Returns:
-            numpy.ndarray<float>: the constraint vector. This result is cached
+            the constraint vector. This result is cached
             until the free variables or constraints are updated.
         """
         if self._constraintVec is None:
@@ -923,20 +957,15 @@ class CorrectionsProblem:
                 self._constraintVec[ix : ix + constraint.size] = constraint.evaluate()
         return self._constraintVec
 
-    def constraintIndexMap(self):
+    def constraintIndexMap(self) -> dict[AbstractConstraint, int]:
         """
         Get the constraint index map
 
-        Args:
-            recompute (bool): whether or not to recompute the constraint index
-                map, e.g., after constraints have been added or removed from
-                the problem
-
         Returns:
-            dict: a dictionary mapping the constraints included in the problem
-                (as objects derived from :class:`AbstractConstraint`) to the index
-                within the constraint vector (as an :class:`int`). This result is
-                cached until the constraints are updated.
+            a dictionary mapping the constraints included in the problem
+            (as objects derived from :class:`AbstractConstraint`) to the index
+            within the constraint vector (as an :class:`int`). This result is
+            cached until the constraints are updated.
         """
         if self._constraintIndexMap is None:
             # TODO sort constraints by type?
@@ -948,7 +977,7 @@ class CorrectionsProblem:
 
         return self._constraintIndexMap
 
-    def constraintIndexMap_reversed(self):
+    def constraintIndexMap_reversed(self) -> dict[int, AbstractConstraint]:
         conMap = {}
         for con, ix0 in self.constraintIndexMap().items():
             for k in range(con.size):
@@ -959,21 +988,23 @@ class CorrectionsProblem:
         return conMap
 
     @property
-    def numConstraints(self):
+    def numConstraints(self) -> int:
         """
         Get the number of scalar constraint equations. This is distinct from the
         number of :class:`AbstractConstraint` objects as each object can define
         a vector of equations.
 
         Returns:
-            int: the number of scalar constraint equations
+            the number of scalar constraint equations
         """
         return sum([con.size for con in self._constraints])
 
     # -------------------------------------------
     # Jacobian
 
-    def jacobian(self, numeric=False, stepSize=1e-4):
+    def jacobian(
+        self, numeric: bool = False, stepSize: float = 1e-4
+    ) -> np.ndarray[float]:
         """
         Get the Jacobian matrix, i.e., the partial derivative of the constraint
         vector with respect to the free variable vector. The rows of the matrix
@@ -981,14 +1012,15 @@ class CorrectionsProblem:
         correspond to the scalar free variables.
 
         Args:
-            numeric (bool, Optional): if False, the Jacobian is computed analytically.
+            numeric: if False, the Jacobian is computed analytically using partial
+                derivatives from the dynamics model and the constraints.
                 Otherwise, the :func:`medusa.numerics.derivative_multivar` method is
                 used to compute the Jacobian numerically.
-            stepSize (float, Optional): if ``numeric`` is True, this is the step
+            stepSize: if ``numeric`` is True, this is the step
                 size for the ``derivative_multivar`` function.
 
         Returns:
-            numpy.ndarray: the Jacobian matrix. This result is cached until either
+            the Jacobian matrix. This result is cached until either
             the free variables or constraints are updated.
         """
         if numeric:
@@ -1034,7 +1066,13 @@ class CorrectionsProblem:
 
         return self._jacobian
 
-    def checkJacobian(self, stepSize=1e-4, rtol=1e-6, atol=1e-8, printTable=True):
+    def checkJacobian(
+        self,
+        stepSize: float = 1e-4,
+        rtol: float = 1e-6,
+        atol: float = 1e-8,
+        printTable: bool = True,
+    ) -> bool:
         """
         Compute a numerical Jacobian and compare against the analytically-computed
         one.
@@ -1057,18 +1095,18 @@ class CorrectionsProblem:
         helpful tool in debugging partial derivative derivations.
 
         Args:
-            stepSize (Optional, float): the initial free variable step size; this
-            value should be sufficiently large such that the constraint vector
-            changes *substantially* as a result.
-            rtol (Optional, float): relative tolerance for equality between the
+            stepSize: the initial free variable step size; this
+                value should be sufficiently large such that the constraint vector
+                changes *substantially* as a result.
+            rtol: relative tolerance for equality between the
                 numeric and analytical Jacobian matrices
-            atol (Optional, float): absolute tolerance for equality between the
+            atol: absolute tolerance for equality between the
                 numeric and analystical Jacobian matrics
-            printTable (Optional, bool): whether or not to plot a table with the
+            printTable: whether or not to plot a table with the
                 comparison data to screen.
 
         Returns:
-            bool: True if the numeric and analytical Jacobian matrices are equal
+            True if the numeric and analytical Jacobian matrices are equal
         """
         from rich.table import Table
 
@@ -1137,7 +1175,7 @@ class CorrectionsProblem:
 
     # -------------------------------------------
     # Printing
-    def printFreeVars(self):
+    def printFreeVars(self) -> None:
         """
         Print free variables to the screen
         """
@@ -1153,7 +1191,7 @@ class CorrectionsProblem:
             columns.add_renderable(Panel(indices, title=f"[b]{name}[/b]"))
         console.print(columns)
 
-    def printConstraints(self):
+    def printConstraints(self) -> None:
         """
         Print constraints to the screen
         """
@@ -1169,7 +1207,7 @@ class CorrectionsProblem:
             columns.add_renderable(Panel(indices, title=f"[b]{name}[/b]"))
         console.print(columns)
 
-    def printJacobian(self, numeric=False):
+    def printJacobian(self, numeric: bool = False) -> None:
         """
         Print the Jacobian matrix to the screen
         """
@@ -1228,30 +1266,29 @@ class ShootingProblem(CorrectionsProblem):
 
     # TODO need public access to segments
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         self._segments, self._points = [], []
         self._adjMat = None  # adjacency matrix
 
     @property
-    def controlPoints(self):
+    def controlPoints(self) -> list[ControlPoint]:
         # TODO unit test
         return self._points
 
     @property
-    def segments(self):
+    def segments(self) -> list[Segment]:
         # TODO unit test
         return self._segments
 
-    def addSegments(self, segment):
+    def addSegments(self, segment: Union[Segment, Iterable[Segment]]) -> None:
         """
         Add one or more segments to the problem. Segments are not added if they
         already exist in the problem.
 
         Args:
-            segment (Segment, [Segment]): a single or multiple segments to add
-                to the problem
+            segment: the segment(s) to add to the problem
 
         Raises:
             ValueError: if one of the inputs is not a :class:`Segment`
@@ -1264,10 +1301,13 @@ class ShootingProblem(CorrectionsProblem):
                 self._segments.append(seg)
                 self._adjMat = None
 
-    def rmSegments(self, segment):
+    def rmSegments(self, segment: Union[Segment, Iterable[Segment]]) -> None:
         """
         Remove one or more segments from the problem. Segments that are not
         in the problem are ignored.
+
+        Args:
+            segment: the segment(s) to remove from the problem
         """
         for seg in util.toList(segment):
             try:
@@ -1276,7 +1316,7 @@ class ShootingProblem(CorrectionsProblem):
             except ValueError:
                 logger.debug(f"Can not remove {seg} from segments")
 
-    def build(self):
+    def build(self) -> None:
         """
         Call this method after all segments, variables, and constraints have
         been added to the problem (i.e., right before calling
@@ -1319,7 +1359,7 @@ class ShootingProblem(CorrectionsProblem):
 
         # TODO set flag for built = True?
 
-    def adjacencyMatrix(self):
+    def adjacencyMatrix(self) -> np.ndarray[Union[int, None]]:
         """
         Create an adjacency matrix for the directed graph of control points and
         segments.
@@ -1333,7 +1373,7 @@ class ShootingProblem(CorrectionsProblem):
         segment linking the two control points.
 
         Returns:
-            numpy.ndarray: the adjacency matrix. This value is cached and reset
+            the adjacency matrix. This value is cached and reset
             whenever segments are added or removed.
 
         Raises:
@@ -1370,7 +1410,7 @@ class ShootingProblem(CorrectionsProblem):
 
         return self._adjMat
 
-    def checkValidGraph(self):
+    def checkValidGraph(self) -> list[str]:
         """
         Check that the directed graph (adjacency matrix) is valid. Four rules apply:
 
@@ -1437,27 +1477,31 @@ class ShootingProblem(CorrectionsProblem):
 class DifferentialCorrector:
     """
     Apply a differential corrections method to solve a corrections problem
-
-    Attributes:
-        maxIterations (int): the maximum number of iterations to attempt
-        convergenceCheck (object): an object containing a "isConverged" method
-            that accepts a :class:`CorrectionsProblem` as an input and returns
-            a :class:`bool`.
-        updateGenerator (object): an object containing a "update" method that
-            accepts a :class:`CorrectionsProblem` as an input and returns a
-            :class:`~numpy.ndarray` representing the change in the free
-            variable vector. See :class:`MinimumNormUpdate` for an example.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
+        #: int: maximum number of iterations that can be attempted
         self.maxIterations = 20
+
+        # TODO define an interface?
+        #: An object containing a ``isConverged`` method that accepts a
+        #: :class`CorrectionsProblem` as an input and returns a :class:`bool`
         self.convergenceCheck = L2NormConvergence(1e-8)
+
+        # TODO define an interface?
+        #: An object containing and ``update`` method that accepts a
+        #: :class:`CorrectionsProblem` as an input and returns a :class:`numpy.ndarray`
+        #: representing the change in the free variable vector.
         self.updateGenerator = MinimumNormUpdate()
 
-    def _validateArgs(self):
+    def _validateArgs(self) -> None:
         """
         Check the types and values of class attributes so that useful errors
         can be thrown before those attributes are evaluated or used.
+
+        Raises:
+            TypeError: if any attribute type is incorrect
+            ValueError: if any attribute value is invalid
         """
         # maxIterations
         if not isinstance(self.maxIterations, int):
@@ -1485,17 +1529,19 @@ class DifferentialCorrector:
         if not callable(self.updateGenerator.update):
             raise TypeError("updateGenerator.update must be callable")
 
-    def solve(self, problem, lineSearch=True):
+    def solve(
+        self, problem: CorrectionsProblem, lineSearch: bool = True
+    ) -> tuple[CorrectionsProblem, dict]:
         """
         Solve a corrections problem by iterating the :attr:`updateGenerator`
         until the :attr:`convergenceCheck` returns True or the :attr:`maxIterations`
         are reached.
 
         Args:
-            problem (CorrectionsProblem): the corrections problem to be solved
+            problem: the corrections problem to be solved
 
         Returns:
-            tuple: a Tuple with two elements. The first is a :class:`CorrectionsProblem`
+            A tuple with two elements. The first is a :class:`CorrectionsProblem`
             that stores the solution after the final iteration of the solver. The
             second is a :class:`dict` with the following keywords:
 
@@ -1619,15 +1665,15 @@ class MinimumNormUpdate:
     TODO link to math spec
     """
 
-    def update(self, problem):
+    def update(self, problem: CorrectionsProblem) -> np.ndarray[float]:
         """
         Compute the minimum-norm update
 
         Args:
-            problem (CorrectionsProblem): the corrections problem to be solved
+            problem: the corrections problem to be solved
 
         Returns:
-            numpy.ndarray: the free variable vector step, `dX`
+            the free variable vector step, `dX`
         """
         nFree = problem.numFreeVars
         # using -FX for all equations, so premultiply
@@ -1662,15 +1708,15 @@ class LeastSquaresUpdate:
     TODO link to math spec
     """
 
-    def update(self, problem):
+    def update(self, problem: CorrectionsProblem) -> np.ndarray[float]:
         """
         Compute the least-squares update
 
         Args:
-            problem (CorrectionsProblem): the corrections problem to be solved
+            problem: the corrections problem to be solved
 
         Returns:
-            numpy.ndarray: the free variable vector step, `dX`
+            the free variable vector step, `dX`
         """
         # Using -FX for all equations, so pre-multiply
         FX = -1 * problem.constraintVec()
@@ -1695,19 +1741,20 @@ class L2NormConvergence:
     Define convergence via the L2 norm of the constraint vector
 
     Args:
-        tol (float): the maximum L2 norm for convergence
+        tol: the maximum L2 norm for convergence
     """
 
-    def __init__(self, tol):
+    def __init__(self, tol: float):
+        #: float: the maximum L2 norm for convergence
         self.tol = tol
 
-    def isConverged(self, problem):
+    def isConverged(self, problem: CorrectionsProblem) -> bool:
         """
         Args:
-            problem (CorrectionsProblem): the corrections problem to be evaluated
+            problem: the corrections problem to be evaluated
 
         Returns:
-            bool: True if the L2 norm of the :func:`~CorrectionsProblem.constraintVec`
+            True if the L2 norm of the :func:`~CorrectionsProblem.constraintVec`
             is less than or equal to ``tol``
         """
         return np.linalg.norm(problem.constraintVec()) <= self.tol

@@ -15,7 +15,7 @@ two massive primaries lie on the :math:`\hat{x}` axis and their angular momentum
 is along :math:`\hat{z}`; the :math:`\hat{y}` axis completes the right-handed set.
 
 The dynamics are characterized by a mass ratio, :math:`\mu = m_2/(m_1 + m_2)`.
-Furthermore, a characteristic length, :math:`L_*` is defined to be the distance
+Furthermore, a characteristic length, :math:`L_*`, is defined to be the distance
 between :math:`P_1` and :math:`P_2`, and a characteristic mass, 
 :math:`M_* = m_1 + m_2`, is defined as the total system mass (neglecting the 
 third body). A characteristic time is derived from the mean motion of the primaries,
@@ -30,10 +30,15 @@ constant.
    ~medusa.dynamics.AbstractDynamicsModel.charT
    medusa.data.GRAV_PARAM
 
-Within this implementation of the CR3BP, the "state" vector is defined as the
-6-element vector containing the Cartesian position and velocity of a body relative
-to the system barycenter, evaluated in the rotating frame.
+All quantities in the CR3BP model are nondimensionalized via these characteristic
+quantities. For example, a distance of 1.1 is equal to :math:`1.1 L_*`, or 1.1 
+times the mean distance between the two massive primaries. Similarly, a time
+duration of :math:`2\pi` is the amount of time for :math:`P_2` to complete one
+revolution of :math:`P_1`.
 
+Within this implementation of the CR3BP, the state vector is defined as the
+6-element vector containing the Cartesian position and velocity of a body relative
+to the system barycenter, evaluated in the rotating frame. 
 The locations of the two massive primaries are fixed in the rotating frame on the
 :math:`\hat{x}` axis, thus their states are simple. Given
 in nondimensional coordinates within the rotating frame,
@@ -74,9 +79,11 @@ Partial derivatives of the state derivative with respect to the initial state ca
 also be propagated via the :data:`~medusa.dynamics.VarGroup.STM` group.
 
 .. math::
-   \dot{\Phi} = \mathbf{A} \dot{\Phi}
+   \dot{\mathbf{\Phi}} = \mathbf{A} \mathbf{\Phi}
 
-where :math:`\Phi` is initialized to the 6x6 identity matrix and 
+where :math:`\mathbf{\Phi}` is initialized to the 6x6 identity matrix and 
+:math:`\mathbf{A}` is the partial derivative of the state differential equations
+with respect to the state vector,
 
 .. math::
    \mathbf{A} = \\frac{\partial \dot{\\vec{q}}}{\partial \\vec{q}}
@@ -89,11 +96,15 @@ where :math:`\Phi` is initialized to the 6x6 identity matrix and
      \Omega_{xz} & \Omega_{yz} & \Omega_{zz} & 0 & 0 & 0
    \\end{bmatrix}.
 
-In this notation, :math:`\Omega` is the "pseudo-potential" function and the
-subscripts denote second-order partial derivatives,
+In this notation, :math:`\Omega` is the "pseudo-potential" function,
 
 .. math::
-   \Omega &= \\frac{1-\mu}{r_{13}} + \\frac{\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2)\\\\
+   \Omega = \\frac{1-\mu}{r_{13}} + \\frac{\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2),
+
+and the subscripts denote second-order partial derivatives with respect to the
+position state variables,
+
+.. math::
    \Omega_{xx} = \\frac{\partial^2 \Omega}{\partial x^2} &= 1 - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)(x + \mu)^2}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)^2}{r_{23}^5}\\\\
    \Omega_{yy} = \\frac{\partial^2 \Omega}{\partial y^2} &= 1 - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)y^2}{r_{13}^5} + \\frac{3\mu y^2}{r_{23}^5}\\\\
    \Omega_{zz} = \\frac{\partial^2 \Omega}{\partial z^2} &=  - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)z^2}{r_{13}^5} + \\frac{3\mu z^2}{r_{23}^5}\\\\
@@ -110,7 +121,8 @@ Reference
 
 """
 import numpy as np
-from numba import njit
+from numba import njit  # type: ignore
+from numpy.typing import NDArray
 
 import medusa.util as util
 from medusa.data import GRAV_PARAM, Body
@@ -171,8 +183,8 @@ class DynamicsModel(AbstractDynamicsModel):
     @staticmethod
     @njit
     def _eoms(
-        t: float, q: np.ndarray[float], mu: float, varGroups: tuple[VarGroup, ...]
-    ) -> np.ndarray[float]:
+        t: float, q: NDArray[np.double], mu: float, varGroups: tuple[VarGroup, ...]
+    ) -> NDArray[np.double]:
         qdot = np.zeros(q.shape)
 
         # Pre-compute some values; multiplication is faster than exponents

@@ -16,18 +16,21 @@ import logging
 from typing import Callable, Union
 
 import numpy as np
+from numpy.typing import ArrayLike, NDArray
+
+from medusa.typing import FloatArray
 
 logger = logging.getLogger(__name__)
 
 
 def derivative(
     func: Callable,
-    x: Union[float, np.ndarray[float]],
-    step: Union[float, np.ndarray[float]],
+    x: Union[float, FloatArray],
+    step: Union[float, FloatArray],
     nIter: int = 10,
     maxRelChange: float = 2.0,
     meta: dict = {},
-) -> Union[float, np.ndarray[float]]:
+) -> Union[float, NDArray[np.double]]:
     """
     Compute the derivative of a function at ``x``.
 
@@ -101,7 +104,7 @@ def derivative(
             # order lower, both at the present step size and the previous one
             if errt <= err:
                 # If error is decreased, save the improved answer
-                err = errt
+                err = float(errt)
                 deriv = tableau[row, col]
 
         if (
@@ -116,7 +119,13 @@ def derivative(
     return deriv
 
 
-def derivative_multivar(func, x, step, nIter=10, maxRelChange=2.0):
+def derivative_multivar(
+    func: Callable,
+    x: FloatArray,
+    step: Union[float, FloatArray],
+    nIter: int = 10,
+    maxRelChange: float = 2.0,
+) -> NDArray[np.double]:
     """
     Multivariate version of :func:`derivative`
 
@@ -152,11 +161,11 @@ def derivative_multivar(func, x, step, nIter=10, maxRelChange=2.0):
 
 def linesearch(
     func: Callable,
-    x: np.ndarray[float],
+    x: NDArray[np.double],
     funcVal: float,
-    grad: np.ndarray[float],
-    xStep: np.ndarray[float],
-) -> tuple[np.ndarray[float], float, bool]:
+    grad: NDArray[np.double],
+    xStep: NDArray[np.double],
+) -> tuple[NDArray[np.double], float, bool]:
     """
     Find a step size that sufficiently decreases the cost function.
 
@@ -288,7 +297,7 @@ def linesearch(
 
     # Attenuation factor begins at 1.0 to try the full step first
     lam = 1.0
-    lam_prev, funcVal_prev = None, None  # will be set later
+    lam_prev, funcVal_prev = 1.0, funcVal  # will be set later
     for it in range(maxIt):
         xNew = x + lam * xStep  # take a step
         funcValNew = func(xNew)
@@ -342,3 +351,5 @@ def linesearch(
 
     if funcValNew <= funcVal + ALF * lam * initROD:
         raise RuntimeError("Line search has diverged")
+    else:
+        raise RuntimeError("Line search has reached max iterations with convergence??")

@@ -25,7 +25,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "matplotlib",
-    "numpy",
+    "numpy>=1.21",
     "numba",
     "scipy",
     "rich",
@@ -41,6 +41,7 @@ dev = [
     "pydata-sphinx-theme",
 ]
 test = [
+    "mypy",
     "pytest>=6.2.4",
     "pytest-mock",
     "pytest-cov",
@@ -60,6 +61,11 @@ packages = [
     "medusa.corrections", 
     "medusa.dynamics",
     "medusa.dynamics.lowthrust",
+]
+
+[tool.mypy]
+plugins = [
+    "numpy.typing.mypy_plugin",
 ]
 
 [tool.pytest.ini_options]

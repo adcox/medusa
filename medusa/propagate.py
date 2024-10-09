@@ -50,18 +50,20 @@ Module Reference
    :show-inheritance:
 
 """
-
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from copy import copy
-from typing import Iterable, Union
+from typing import Union
 
 import numpy as np
-from numba import njit
-from scipy.integrate import solve_ivp
-from scipy.optimize import OptimizeResult
+from numba import njit  # type: ignore
+from scipy.integrate import solve_ivp  # type: ignore
+from scipy.optimize import OptimizeResult  # type: ignore
 
+import medusa.util as util
 from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
+from medusa.typing import FloatArray, IntArray
 
 logger = logging.getLogger(__name__)
 
@@ -95,24 +97,24 @@ class Propagator(ModelBlockCopyMixin):
         dense: bool = True,
         atol: float = 1e-12,
         rtol: float = 1e-10,
-    ):
+    ) -> None:
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
-        self.method = method  #: str: the numerical integration method
-        self.atol = atol  #: float: absolute tolerance
-        self.rtol = rtol  #: float: relative tolerance
-        self.model = model  #: AbstractDynamicsModel: dynamics model
-        self.dense = dense  #: bool: whether or not to output dense propagation data
-        self.events = []  #: list[AbstractEvent]: integration events
+        self.method: str = method  #: the numerical integration method
+        self.atol: float = atol  #: absolute tolerance
+        self.rtol: float = rtol  #: relative tolerance
+        self.model: AbstractDynamicsModel = model  #: dynamics model
+        self.dense: bool = dense  #: whether or not to output dense propagation data
+        self.events: list[AbstractEvent] = []  #: integration events
 
     def propagate(
         self,
-        w0: np.ndarray[float],
-        tspan: list[float, float],
+        w0: FloatArray,
+        tspan: FloatArray,
         *,
-        params: Union[Iterable[float], None] = None,
-        varGroups: Iterable[VarGroup] = VarGroup.STATE,
+        params: Union[FloatArray, None] = None,
+        varGroups: Union[VarGroup, Sequence[VarGroup]] = VarGroup.STATE,
         **kwargs,
     ) -> OptimizeResult:
         """
@@ -122,10 +124,8 @@ class Propagator(ModelBlockCopyMixin):
             w0: initial state vector
             tspan: a 2-element vector defining the start and end times
                 for the propagation
-            params: parameters that are passed to the dynamics
-                model
-            varGroups: the variable groups that are included
-                 in ``w0``.
+            params: parameters that are passed to the dynamics model
+            varGroups: the variable groups that are included in ``w0``.
             kwargs: additional arguments passed to :func:`scipy.integrate.solve_ivp`.
                 Note that the ``method`` and ``dense_output`` arguments, defined
                 in the :class:`Propagator` constructor, cannot be overridden.
@@ -160,28 +160,27 @@ class Propagator(ModelBlockCopyMixin):
         if "args" in kwargs_in:
             logger.warning("Overwriting 'args' passed to propagate()")
 
+        # make varGroups an array and then cast to tuple; need simple type for
+        #   JIT compilation support
+        varGroups = tuple(sorted(np.array(varGroups, ndmin=1)))
+
         # Ensure state is an array with the right number of elements
-        w0 = np.array(w0, ndmin=1)
-        if not w0.size == self.model.groupSize(varGroups):
+        w0_ = np.array(w0, ndmin=1, dtype=float, copy=True)
+        if not w0_.size == self.model.groupSize(varGroups):
             # Likely scenario: user wants default ICs for other variable groups
-            if w0.size == self.model.groupSize(VarGroup.STATE):
-                w0 = self.model.appendICs(
-                    w0, [v for v in varGroups if not v == VarGroup.STATE]
+            if w0_.size == self.model.groupSize(VarGroup.STATE):
+                w0_ = self.model.appendICs(
+                    w0_, [v for v in varGroups if not v == VarGroup.STATE]
                 )
             else:
                 raise RuntimeError(
-                    f"w0 size is {w0.size}, which is not the STATE size "
+                    f"w0 size is {w0_.size}, which is not the STATE size "
                     f"({self.model.groupSize(VarGroup.STATE)}); don't know how to respond."
                     " Please pass in a STATE-sized vector or a vector with all "
                     "initial conditions defined for the specified VarGroup"
                 )
 
-        # make varGroups an array and then cast to tuple; need simple type for
-        #   JIT compilation support
-        varGroups = tuple(sorted(np.array(varGroups, ndmin=1)))
-
-        # TODO also cast params to tuple?
-        kwargs_in["args"] = (varGroups, params)
+        kwargs_in["args"] = (varGroups, tuple(params) if params is not None else params)
 
         # Gather event functions and assign attributes
         for event in self.events:
@@ -190,11 +189,11 @@ class Propagator(ModelBlockCopyMixin):
             event.assignEvalAttr()
 
         eventFcns = [event.eval for event in self.events]
-        eventFcns.extend(kwargs_in.get("events", []))
+        eventFcns.extend(util.toList(kwargs_in.get("events", [])))
         kwargs_in["events"] = eventFcns
 
         # Run propagation
-        sol = solve_ivp(self.model.diffEqs, tspan, w0, **kwargs_in)
+        sol = solve_ivp(self.model.diffEqs, tspan, w0_, **kwargs_in)
 
         # Append our own metadata
         sol.model = self.model
@@ -219,7 +218,7 @@ class AbstractEvent(ABC):
             and ``0`` will trigger the event in either direction.
     """
 
-    def __init__(self, terminal: bool = False, direction: float = 0.0):
+    def __init__(self, terminal: bool = False, direction: float = 0.0) -> None:
         if not isinstance(terminal, bool):
             try:
                 terminal = int(terminal)
@@ -234,24 +233,24 @@ class AbstractEvent(ABC):
         if isinstance(terminal, int) and terminal < 0:
             logger.warning("Unexpected negative value for 'terminal'")
 
-        self.terminal = terminal
-        self.direction = direction
+        self.terminal = terminal  #: bool: whether or not to terminate propagation
+        self.direction = direction  #: float: event direction
 
-    def assignEvalAttr(self):
+    def assignEvalAttr(self) -> None:
         """
         Must be called before starting propagation so that the
         :attr:`terminal` and :attr:`direction` values take effect
         """
-        self.eval.__func__.terminal = self.terminal
-        self.eval.__func__.direction = self.direction
+        self.eval.__func__.terminal = self.terminal  # type: ignore
+        self.eval.__func__.direction = self.direction  # type: ignore
 
     @abstractmethod
     def eval(
         self,
         t: float,
-        w: np.ndarray[float],
+        w: Sequence[float],
         varGroups: tuple[VarGroup, ...],
-        params: Iterable[float],
+        params: Sequence[float],
     ) -> float:
         """
         Event evaluation method
@@ -290,7 +289,7 @@ class ApseEvent(AbstractEvent):
         bodyIx: int,
         terminal: bool = False,
         direction: float = 0.0,
-    ):
+    ) -> None:
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
@@ -299,14 +298,15 @@ class ApseEvent(AbstractEvent):
         self._ix = bodyIx
 
     def eval(self, t, w, varGroups, params):
-        return self._eval(t, w, params, self._model, self._ix)
+        return self._eval(t, w, tuple(varGroups), params, self._model, self._ix)
 
     @staticmethod
     # @njit  # would need to pass bodyState in as arg (TODO?)
     def _eval(
         t: float,
-        w: np.ndarray[float],
-        params: Iterable[float],
+        w: FloatArray,
+        varGroups: tuple[VarGroup, ...],
+        params: FloatArray,
         model: AbstractDynamicsModel,
         ix: int,
     ) -> float:
@@ -314,7 +314,7 @@ class ApseEvent(AbstractEvent):
         # velocity is zero
         # TODO this assumes the state vector is the Cartesian position and velocity
         #   vectors
-        relState = w[:6] - model.bodyState(ix, t, params)
+        relState = w[:6] - model.bodyState(ix, t, w, varGroups, params)
         return (
             relState[0] * relState[3]
             + relState[1] * relState[4]
@@ -347,7 +347,7 @@ class BodyDistanceEvent(AbstractEvent):
         dist: float,
         terminal: bool = False,
         direction: float = 0.0,
-    ):
+    ) -> None:
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
@@ -383,11 +383,11 @@ class DistanceEvent(AbstractEvent):
     def __init__(
         self,
         dist: float,
-        vec: Iterable[float],
-        ixs: Iterable[int] = [0, 1, 2],
+        vec: FloatArray,
+        ixs: IntArray = [0, 1, 2],
         terminal: bool = False,
         direction: float = 0.0,
-    ):
+    ) -> None:
         vec, ixs = np.array(vec, ndmin=1), np.array(ixs, ndmin=1)
         if not vec.shape == ixs.shape:
             raise ValueError("vec and ixs must have the same shape")
@@ -419,15 +419,13 @@ class VariableValueEvent(AbstractEvent):
             and ``0`` will trigger the event in either direction.
     """
 
-    # TODO - rename StateValueEvent for consistency with VarGroup?
-
     def __init__(
         self,
         varIx: int,
         varValue: float,
         terminal: bool = False,
         direction: float = 0.0,
-    ):
+    ) -> None:
         super().__init__(terminal, direction)
         self._ix = varIx
         self._val = varValue
@@ -437,5 +435,5 @@ class VariableValueEvent(AbstractEvent):
 
     @staticmethod
     @njit
-    def _eval(w: np.ndarray[float], ix: int, val: float):
+    def _eval(w: FloatArray, ix: int, val: float):
         return val - w[ix]

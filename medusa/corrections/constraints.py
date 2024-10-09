@@ -31,15 +31,18 @@ Module Reference
    :show-inheritance:
 
 """
+from __future__ import annotations
+
 import logging
 from enum import IntEnum
+from typing import Iterable, Union
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 from medusa import util
-from medusa.corrections import AbstractConstraint, ControlPoint, Variable
+from medusa.corrections import AbstractConstraint, ControlPoint, Segment, Variable
 
 
 class Angle(AbstractConstraint):
@@ -49,7 +52,15 @@ class Angle(AbstractConstraint):
     TODO document
     """
 
-    def __init__(self, refDir, state, angle, stateIx=(0, 1, 2), center=(0, 0, 0)):
+    def __init__(
+        self,
+        refDir: Iterable[float],
+        state: Variable,
+        angle: float,
+        stateIx: Iterable[int] = (0, 1, 2),
+        center: Iterable[int] = (0, 0, 0),
+    ) -> None:
+        # TODO document attributes
         self.refDir = np.array(refDir)
         self.state = state  # TODO check type
         self.angleVal = np.cos(angle * np.pi / 180.0)
@@ -72,29 +83,37 @@ class Angle(AbstractConstraint):
         self.state.allVals[self.stateIx]
 
     @property
-    def size(self):
+    def size(self) -> int:
         return 1
 
-    def evaluate(self):
+    def evaluate(self) -> float:
         # TODO note about no sign distinction due to cosine?
         # Use dot product to compute angle between vectors
         stateVec = self.state.allVals[self.stateIx] - self.center
         evalAngle = self.refDir.T @ stateVec
         return evalAngle - self.angleVal
 
-    def partials(self, freeVarIndexMap):
+    def partials(
+        self, freeVarIndexMap: dict[Variable, int]
+    ) -> dict[Variable, np.ndarray[float]]:
         if self.state in freeVarIndexMap:
             dFdq = np.zeros((1, self.state.values.size))
             dFdq[0, self.stateIx] = self.refDir
             return {self.state: dFdq}
+        else:
+            return {}
 
 
 class StateContinuity(AbstractConstraint):
     """
     Constrain the terminal end of a segment to match the control point state
+
+    TODO document
     """
 
-    def __init__(self, segment, indices=None):
+    def __init__(
+        self, segment: Segment, indices: Union[None, Iterable[int]] = None
+    ) -> None:
         if segment.terminus is None:
             raise RuntimeError("Cannot constraint StateContinuity with terminus = None")
 
@@ -110,20 +129,22 @@ class StateContinuity(AbstractConstraint):
         self.constrainedIx = sorted(indices)
 
     @property
-    def size(self):
+    def size(self) -> int:
         return len(self.constrainedIx)
 
-    def clearCache(self):
+    def clearCache(self) -> None:
         self.segment.resetProp()
 
-    def evaluate(self):
+    def evaluate(self) -> np.ndarray[float]:
         # F = propFinalState - terminalState
         termVar = self.segment.terminus.state
         propState = self.segment.state(-1)[self.constrainedIx]
         termState = termVar.allVals[self.constrainedIx]
         return propState - termState
 
-    def partials(self, freeVarIndexMap):
+    def partials(
+        self, freeVarIndexMap: dict[Variable, int]
+    ) -> dict[Variable, np.ndarray[float]]:
         originVar = self.segment.origin.state
         epochVar = self.segment.origin.epoch
         termVar = self.segment.terminus.state
@@ -174,7 +195,7 @@ class VariableValue(AbstractConstraint):
             free value in ``variable`` is unconstrained.
     """
 
-    def __init__(self, variable, values):
+    def __init__(self, variable: Variable, values: Iterable[float]) -> None:
         if not isinstance(variable, Variable):
             raise ValueError("variable must be a Variable object")
 
@@ -189,13 +210,15 @@ class VariableValue(AbstractConstraint):
         self.values = np.ma.array(values, mask=[v is None for v in values])
 
     @property
-    def size(self):
+    def size(self) -> int:
         return sum(~self.values.mask)
 
-    def evaluate(self):
+    def evaluate(self) -> np.ndarray[float]:
         return self.variable.allVals[~self.values.mask] - self.values[~self.values.mask]
 
-    def partials(self, freeVarIndexMap):
+    def partials(
+        self, freeVarIndexMap: dict[Variable, int]
+    ) -> dict[Variable, np.ndarray[float]]:
         # Partial is 1 for each constrained variable, zero otherwise
         deriv = np.zeros((self.size, self.variable.values.size))
         count = 0
@@ -212,13 +235,18 @@ class Inequality(AbstractConstraint):
     Convert an equality constraint into an inequality constraint.
 
     Args:
-        constraint (AbstractConstraint): the equality constraint
-        mode (Inequality.Mode): the inequality mode
-        defaultSlackVal(Optional, float): the default slack variable value if it
-            cannot be computed during instantiation
+        constraint: the equality constraint
+        mode: the inequality mode
+        defaultSlackVal: the default slack variable value if it cannot be
+            computed during instantiation
     """
 
-    def __init__(self, constraint, mode, defaultSlackValue=1e-6):
+    def __init__(
+        self,
+        constraint: AbstractConstraint,
+        mode: Inequality.Mode,
+        defaultSlackValue: float = 1e-6,
+    ) -> None:
         if not isinstance(constraint, AbstractConstraint):
             raise TypeError("constraint must be derived from AbstractConstraint")
         if not isinstance(mode, Inequality.Mode):
@@ -244,20 +272,27 @@ class Inequality(AbstractConstraint):
         self.slack = Variable(slackVals, name="Slack")
 
     @property
-    def size(self):
+    def size(self) -> int:
         return self.equalCon.size
 
     @property
-    def importableVars(self):
+    def importableVars(self) -> list[Variable]:
+        """
+        A list of variables that can be imported into a corrections problem.
+
+        Importing is accomplished via :func:`CorrectionsProblem.importVariables`.
+        These variables are defined as a property so that evaluation occurs at
+        runtime, allowing the user to modify or reassign the variables.
+        """
         impVars = util.toList(getattr(self.equalCon, "importableVars", []))
         impVars.append(self.slack)
         return impVars
 
-    def clearCache(self):
+    def clearCache(self) -> None:
         self.equalCon.clearCache()
         self._slackInit = False  # Force re-init slack variable values
 
-    def evaluate(self):
+    def evaluate(self) -> np.ndarray[float]:
         vals = self.equalCon.evaluate()
         return np.asarray(
             [
@@ -266,7 +301,9 @@ class Inequality(AbstractConstraint):
             ]
         )
 
-    def partials(self, freeVarIndexMap):
+    def partials(
+        self, freeVarIndexMap: dict[Variable, int]
+    ) -> dict[Variable, np.ndarray[float]]:
         # Compute partials of equality constraint
         partials = self.equalCon.partials(freeVarIndexMap)
 

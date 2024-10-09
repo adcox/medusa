@@ -20,6 +20,8 @@ Module Reference
    :members:
 
 """
+from __future__ import annotations
+
 import xml.etree.ElementTree as ET
 from typing import Union
 
@@ -62,7 +64,7 @@ class Body:
         raan: float = 0.0,
         spiceId: int = 0,
         parentId: Union[int, None] = None,
-    ):
+    ) -> None:
         #: Body name
         self.name = name
 
@@ -88,7 +90,7 @@ class Body:
         self.parentId = parentId
 
     @staticmethod
-    def fromXML(file: str, name: str):
+    def fromXML(file: str, name: str) -> Body:
         """
         Create a body from an XML file
 
@@ -97,28 +99,40 @@ class Body:
             name: Body name
 
         Returns:
-            Body: the corresponding data in a :class:`Body` object. If no body
+            the corresponding data in a :class:`Body` object. If no body
             can be found that matches ``name``, ``None`` is returned.
         """
         tree = ET.parse(file)
         root = tree.getroot()
 
+        def _expect(data: ET.Element, key: str) -> str:
+            # Get value from data element, raise exception if it isn't there
+            obj = data.find(key)
+            if obj is None:
+                raise RuntimeError(f"Could not read '{key}' for {name}")
+            else:
+                return str(obj.text)
+
         for data in root.iter("body"):
-            _name = data.find("name").text
+            obj = data.find("name")
+            if obj is None:
+                continue
+
+            _name = obj.text
             if _name == name:
                 try:
-                    pid = int(data.find("parentId").text)
+                    pid = int(data.find("parentId").text)  # type: ignore
                 except:
                     pid = None
 
                 return Body(
                     name,
-                    float(data.find("gm").text),
-                    sma=float(data.find("circ_r").text),
+                    float(_expect(data, "gm")),
+                    sma=float(_expect(data, "circ_r")),
                     ecc=0.0,  # TODO why is this not read from data??
-                    inc=float(data.find("inc").text),
-                    raan=float(data.find("raan").text),
-                    spiceId=int(data.find("id").text),
+                    inc=float(_expect(data, "inc")),
+                    raan=float(_expect(data, "raan")),
+                    spiceId=int(_expect(data, "id")),
                     parentId=pid,
                 )
 
