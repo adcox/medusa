@@ -946,7 +946,8 @@ class TestShootingProblem:
 
 # ------------------------------------------------------------------------------
 class TestDifferentialCorrector:
-    def test_simpleCorrections(self):
+    @pytest.mark.parametrize("linesearch", [True, False])
+    def test_simpleCorrections(self, linesearch):
         # Create an initial state with velocity states free
         q0 = Variable(
             [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], [True] * 3 + [False] * 3
@@ -966,7 +967,7 @@ class TestDifferentialCorrector:
         problem.addConstraints(constraints.StateContinuity(segment, indices=[0, 1, 2]))
 
         corrector = DifferentialCorrector()
-        solution, log = corrector.solve(problem)
+        solution, log = corrector.solve(problem, lineSearch=linesearch)
 
         assert isinstance(solution, CorrectionsProblem)
         assert not id(solution) == id(problem)
@@ -976,7 +977,8 @@ class TestDifferentialCorrector:
         assert log["status"] == "converged"
         assert len(log["iterations"]) > 2
 
-    def test_multipleShooter(self):
+    @pytest.mark.parametrize("linesearch", [True, False])
+    def test_multipleShooter(self, linesearch):
         q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         period = 6.311
         prop = Propagator(emModel, dense=False)
@@ -1019,7 +1021,8 @@ class TestDifferentialCorrector:
         assert len(problem._freeVars) == 5
 
         corrector = DifferentialCorrector()
-        solution, log = corrector.solve(problem)
+        corrector.convergenceCheck.tol = 1e-7  # make it a little easier to solve
+        solution, log = corrector.solve(problem, lineSearch=linesearch)
 
         assert isinstance(solution, ShootingProblem)
         assert log["status"] == "converged"

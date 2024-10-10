@@ -64,11 +64,11 @@ class Angle(AbstractConstraint):
         center: FloatArray = (0.0, 0.0, 0.0),
     ) -> None:
         # TODO document attributes
-        self.refDir: NDArray[np.double] = np.array(refDir)
+        self.refDir: NDArray[np.double] = np.array(refDir, copy=True)
         self.state: Variable = state  # TODO check type
         self.angleVal: float = float(np.cos(angle * np.pi / 180.0))
-        self.stateIx: NDArray[np.int_] = np.array(stateIx)
-        self.center: NDArray[np.double] = np.array(center)
+        self.stateIx: NDArray[np.int_] = np.array(stateIx, copy=True)
+        self.center: NDArray[np.double] = np.array(center, copy=True)
 
         if self.refDir.size < 2:
             raise ValueError("refDir must be at least 2D")
@@ -209,7 +209,7 @@ class VariableValue(AbstractConstraint):
         if not isinstance(variable, Variable):
             raise ValueError("variable must be a Variable object")
 
-        values = np.array(values, ndmin=1)
+        values = np.array(values, ndmin=1, copy=True)
         if not values.size == variable.values.size:
             raise ValueError(
                 f"Values has {values.size} elements, but must have same number "

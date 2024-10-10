@@ -175,7 +175,7 @@ class Variable:
         name: str = "",
     ) -> None:
         #: ma.array: the masked values
-        self.values = ma.array(values, mask=mask, ndmin=1)
+        self.values = ma.array(values, mask=mask, ndmin=1, copy=True)
 
         #: str: the variable name
         self.name = name

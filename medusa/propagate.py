@@ -390,7 +390,8 @@ class DistanceEvent(AbstractEvent):
         terminal: bool = False,
         direction: float = 0.0,
     ) -> None:
-        vec, ixs = np.array(vec, ndmin=1), np.array(ixs, ndmin=1)
+        vec = np.array(vec, ndmin=1, copy=True)
+        ixs = np.array(ixs, ndmin=1, copy=True)
         if not vec.shape == ixs.shape:
             raise ValueError("vec and ixs must have the same shape")
 

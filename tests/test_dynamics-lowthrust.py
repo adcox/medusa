@@ -204,7 +204,7 @@ class TestForceMassOrientLaw_noStates:
         assert law.numStates == 0
 
     def test_stateICs(self, law):
-        ics = law.stateICs()
+        ics = law.stateICs
         assert isinstance(ics, np.ndarray)
         assert ics.size == 0
 

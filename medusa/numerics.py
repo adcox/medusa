@@ -92,7 +92,7 @@ def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
     CON2 = CON * CON
 
     # Generalize to arbitrary dimensions
-    x, step = np.asarray(x), np.asarray(step)
+    x, step = np.array(x, copy=True), np.array(step, copy=True)
     if not x.shape == step.shape:
         raise RuntimeError(
             f"x {x.shape} and step {step.shape} must have the same shapes"
@@ -168,13 +168,13 @@ def derivative_multivar(
     each entry is the step size corresponding to an entry in ``x``. If ``step``
     is instead a scalar, that single step size is used for all entries in ``x``.
     """
-    x = np.asarray(x)
+    x = np.array(x, copy=True)
 
     # Ensure "step" is a vector the same size as x
     if isinstance(step, float):
         step = np.full(x.shape, step)
     else:
-        step = np.asarray(step)
+        step = np.array(step, copy=True)
         if not step.shape == x.shape:
             raise ValueError(
                 f"'step' is a vector with shape {step.shape}, but that shape"
@@ -314,7 +314,7 @@ def linesearch(
 
     # Initialize the full step; scale if attempted step is too big, e.g.,
     #   if there is some unbounded value thing going on
-    xStep = np.array(xStep)  # make a copy
+    xStep = np.array(xStep, copy=True)  # make a copy
     if np.linalg.norm(xStep) > maxStep:
         xStep *= maxStep / np.linalg.norm(xStep)
 
@@ -340,7 +340,7 @@ def linesearch(
         )
 
         if lam < minLam:
-            xNew = np.array(xStep)
+            xNew = np.array(xStep, copy=True)
             checkLocalMin = True
             logger.debug(f"Reached local minimum; lambda < minimum = {minLam:.2e}")
             return xNew, funcValNew, checkLocalMin
