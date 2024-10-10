@@ -4,6 +4,9 @@ Numerics
 
 Routines for numerical approximations of calculus evaluations are included here.
 
+Reference
+-----------
+
 .. autosummary::
    derivative
    derivative_multivar
@@ -11,12 +14,28 @@ Routines for numerical approximations of calculus evaluations are included here.
 .. autofunction:: derivative
 .. autofunction:: derivative_multivar
 .. autofunction:: linesearch
+
+Sources
+---------
+
+.. [NumRecipes] 
+   Press, W.H., Teukolsky, S.A., Vetterling, W.T., and Flannery, B.P.,
+   "Numerical Recipes in C - 2nd Edition", Cambridge University Press, 1996
+
+.. [Ridders]
+   Ridders, C.J.F., "Accurate computation of F'(x)  and F'(x)F''(x)", 
+   Advances in Engineering Software, vol 4, no. 2, April 1982, 
+   pp. 75--76. doi: 10.1016/S0141-1195(82)80057-0
+
+.. [Neville]
+   Neville, E.H., "Iterative Interpolation", Journal of the Indian Mathematical Society,
+   1934, pp. 87--120
 """
 import logging
 from typing import Callable, Union, overload
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 
 from medusa.typing import FloatArray
 
@@ -51,9 +70,13 @@ def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
     """
     Compute the derivative of a function at ``x``.
 
-    Given a function, :math:`\\vec{y} = f(\\vec{z})`, this method numerically
-    computes the derivative :math:`\mathrm{d}f / \mathrm{d}\\vec{z}` evaluated
-    at the ``x`` value. Note that :math:`f` can be a univariate function
+    Given a function, :math:`\\vec{y} = \\vec{f}(\\vec{z})`, this method numerically
+    computes the scalar derivative :math:`\mathrm{d}f / \mathrm{d}\zeta` evaluated
+    at the ``x`` value. Because the function argument, :math:`\\vec{z}`, is only
+    perturbed along one direction (``step``), the derivative only reflects variations
+    along that vector.
+
+    Note that :math:`f` can be a univariate function
     (:math:`f(z)`) or multivariate (:math:`f(\\vec{z})`) and may return a scalar
     or vector output.
 
@@ -81,12 +104,18 @@ def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
         RuntimeError: if ``x`` and ``step`` have different shapes
         ValueError: if ``step`` includes only zeros
 
-    *The algorithm implemented in this function is "Richardson's deferred approach
-    to the limit," detailed in Numerical Recipes in C, 2nd Edition by Press,
-    Teukolsky, Vetterling, and Flannery (1996), adapted from Ridders, C.J.F. 1982,
-    Advances in Engineering Software, vol. 4, no. 2 pp. 75-76*
+    **Algorithm**
+
+    This method leverages the idea of "Richardson's deferred appraoch to the limit."
+    We aim to extrapolate, to a step size of :math:`h \\to 0`, the result of finite
+    difference calculations with smaller and smaller finite values of :math:`h`.
+    Using Neville's algorithm [Neville]_, each new finite-difference calculation
+    produces both an extrapolation of higher order and extrapolations of previous,
+    lower-orders but with smaller scales :math:`h`.
+
+    The code implemented here is transcribed from section 5.7 of [NumRecipes]_,
+    which itself is based on [Ridders]_.
     """
-    # TODO document - how is this different than multivariate??
 
     CON = 1.4  # step size is decreased by CON at each iteration
     CON2 = CON * CON
@@ -161,7 +190,12 @@ def derivative_multivar(
     maxRelChange: float = 2.0,
 ) -> NDArray[np.double]:
     """
-    Multivariate version of :func:`derivative`
+    Iteratively perturbs each element of ``x`` to compute the multivariate derivative.
+
+    Given a function, :math:`\\vec{y} = \\vec{f}(\\vec{z})`, this method numerically
+    computes the derivative :math:`\mathrm{d}\\vec{f} / \mathrm{d} \\vec{z}`,
+    evaluated at the ``x`` value. Note that the function must multivariate
+    (accepts a vector input) but can return a scalar or a vector.
 
     The inputs are identical to :func:`derivative` with the exception of the
     ``step``. If ``step`` is an array, it must have the same size as ``x`` and
@@ -218,24 +252,25 @@ def linesearch(
         a tuple with the new ``x`` vector, the new value of ``func``, and a boolean
         flag indicating whether the caller should check for a local minimum.
 
-    *The algorithm implemented in this function is derived and detailed 
-    section 9.7 in Numerical Recipes in C, 2nd Edition by Press,
-    Teukolsky, Vetterling, and Flannery (1996).*
+    **Algorithm**
+
+    This algorithm and its derivation are transcribed from section 9.7 of 
+    [NumRecipes]_ .
 
     The goal is to find an **attenuation factor**, :math:`\lambda`, that yields
-    a new state vector along the direction of the full step (but not necessarily
+    a new variable vector along the direction of the full step (but not necessarily
     all the way),
 
     .. math::
-       \\vec{x}^* = \\vec{x}_0 + \lambda \delta \\vec{x}, \qquad 0 < \lambda \leq 1
+       \\vec{X}^* = \\vec{X}_0 + \lambda \delta \\vec{X}, \qquad 0 < \lambda \leq 1
 
-    such that :math:`f(\\vec{x}_1)` has decreased sufficiently relative to 
-    :math:`f(\\vec{x}_0)`. The algorithm proceeds as follows:
+    such that :math:`f(\\vec{X}_1)` has decreased sufficiently relative to 
+    :math:`f(\\vec{X}_0)`. The algorithm proceeds as follows:
 
-    1. First try :math:`\lambda = 1`, the full step. When :math:`\delta \\vec{x}`
+    1. First try :math:`\lambda = 1`, the full step. When :math:`\delta \\vec{X}`
        is the Newton step, this will lead to quadratic convergence when 
-       :math:`\\vec{x}` is sufficiently close to the solution.
-    2. If :math:`f(\\vec{x}_1)` does not meet acceptance criteria, *backtrack*
+       :math:`\\vec{X}` is sufficiently close to the solution.
+    2. If :math:`f(\\vec{X}_1)` does not meet acceptance criteria, *backtrack*
        along the step direction, trying a smaller value of :math:`\lambda` until
        a suitable point is found.
 
@@ -243,27 +278,27 @@ def linesearch(
     relative to the step lengths,
     the average rate of decrease of :math:`f` is required to be at least some 
     fraction :math:`\\alpha` of the *initial* rate of decrease, 
-    :math:`\\nabla f \cdot \delta \\vec{x}`:
+    :math:`\\nabla f \cdot \delta \\vec{X}`:
 
     .. math::
-       f(\\vec{x}^*) \leq f(\\vec{x}_0) + \\alpha \\nabla f \cdot (\\vec{x}^* - \\vec{x}_0)
+       f(\\vec{X}^*) \leq f(\\vec{X}_0) + \\alpha \\nabla f \cdot (\\vec{X}^* - \\vec{X}_0)
 
     where :math:`0 < \\alpha < 1`. A small value, e.g., 1e-4, works well.
 
     To understand the backtracking routine, define
 
     .. math::
-       g(\lambda) = f(\\vec{x}_0 + \lambda \delta \\vec{x})
+       g(\lambda) = f(\\vec{X}_0 + \lambda \delta \\vec{X})
 
     so that
 
     .. math::
-       g'(\lambda) = \\nabla f \cdot \delta \\vec{x}
+       g'(\lambda) = \\nabla f \cdot \delta \\vec{X}
 
     If backtracking is needed, :math:`g` is modeled with the most current information
     available and :math:`\lambda` is selected to minimize the model. Initially,
-    :math:`g(0) = \\vec{x}_0` and :math:`g'(0)` are available, as is 
-    :math:`g(1) = \\vec{x} + \delta \\vec{x}`. A quadratic model can be defined,
+    :math:`g(0) = \\vec{X}_0` and :math:`g'(0)` are available, as is 
+    :math:`g(1) = \\vec{X} + \delta \\vec{X}`. A quadratic model can be defined,
 
     .. math::
        g(\lambda) \\approx [g(1) - g(0) - g'(0)]\lambda^2 + g'(0)\lambda + g(0)

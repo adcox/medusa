@@ -11,7 +11,7 @@ about a celestial body (planet, moon, star, etc.)
    Body
 
 Reference
-==========
+---------
 
 .. autodata:: GRAV_PARAM
 .. autodata:: G_MEAN_EARTH
