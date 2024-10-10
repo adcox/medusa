@@ -436,12 +436,12 @@ class ControlLaw(ABC):
 
     @property
     @abstractmethod
-    def stateNames(self) -> Sequence[str]:
+    def stateNames(self) -> list[str]:
         """The names of the control state variables defined by the control law"""
         pass
 
     @property
-    def stateICs(self) -> FloatArray:
+    def stateICs(self) -> NDArray[np.double]:
         """
         Initial conditions for the control state variables defined by the control law.
 
@@ -712,7 +712,7 @@ class ControlTerm(ABC):
         return 0
 
     @property
-    def stateICs(self) -> FloatArray:
+    def stateICs(self) -> NDArray[np.double]:
         """
         The initial conditions for the control state variables this term defines.
 
@@ -724,7 +724,7 @@ class ControlTerm(ABC):
             return np.zeros((self.numStates,))
 
     @property
-    def stateNames(self) -> Sequence[str]:
+    def stateNames(self) -> list[str]:
         """
         The names of the control state variables defined by this term.
 
@@ -1070,6 +1070,7 @@ class SeparableControlLaw(ControlLaw):
         """
         return self._concat([term.params for term in self.terms])
 
+    @property
     @override
     def stateICs(self) -> NDArray[np.double]:
         """

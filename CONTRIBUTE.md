@@ -13,7 +13,7 @@ pre-commit install
 ```
 source test-env/bin/activate
 pytest --cov medusa --cov-report html
-mypy -p medusa
+mypy
 ```
 
 ## Documentation

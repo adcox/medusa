@@ -3,6 +3,7 @@
 # Python
 __pycache__/
 *.py[cod]
+build/
 
 # pip
 *.egg-info/*

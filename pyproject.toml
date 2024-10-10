@@ -64,10 +64,12 @@ packages = [
     "medusa.dynamics.lowthrust",
 ]
 
+[tool.setuptools.package-data]
+medusa = ["py.typed"]
+
 [tool.mypy]
-plugins = [
-    "numpy.typing.mypy_plugin",
-]
+plugins = ["numpy.typing.mypy_plugin"]
+packages = ["medusa"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

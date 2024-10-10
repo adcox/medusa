@@ -21,4 +21,4 @@ try:
     # Works for python 3.12+
     from typing import override  # type: ignore
 except ImportError:
-    from overrides import override
+    from overrides import override  # type: ignore
