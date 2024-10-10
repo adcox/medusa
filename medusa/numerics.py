@@ -13,7 +13,7 @@ Routines for numerical approximations of calculus evaluations are included here.
 .. autofunction:: linesearch
 """
 import logging
-from typing import Callable, Union
+from typing import Callable, Union, overload
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -23,16 +23,39 @@ from medusa.typing import FloatArray
 logger = logging.getLogger(__name__)
 
 
+@overload
 def derivative(
     func: Callable,
-    x: Union[float, FloatArray],
-    step: Union[float, FloatArray],
+    x: float,
+    step: float,
     nIter: int = 10,
     maxRelChange: float = 2.0,
     meta: dict = {},
 ) -> Union[float, NDArray[np.double]]:
+    pass
+
+
+@overload
+def derivative(
+    func: Callable,
+    x: FloatArray,
+    step: FloatArray,
+    nIter: int = 10,
+    maxRelChange: float = 2.0,
+    meta: dict = {},
+) -> Union[float, NDArray[np.double]]:
+    pass
+
+
+def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
     """
     Compute the derivative of a function at ``x``.
+
+    Given a function, :math:`\\vec{y} = f(\\vec{z})`, this method numerically
+    computes the derivative :math:`\mathrm{d}f / \mathrm{d}\\vec{z}` evaluated
+    at the ``x`` value. Note that :math:`f` can be a univariate function
+    (:math:`f(z)`) or multivariate (:math:`f(\\vec{z})`) and may return a scalar
+    or vector output.
 
     Args:
         func: a function handle that accepts a single argument, ``x``, and
@@ -40,7 +63,9 @@ def derivative(
             :class:`~numpy.ndarray`).
         x: the state at which to evaluate ``func``
         step: the initial step size; it need not be small but rather should be an
-            increment in ``x`` over which ``func`` changes *substantially*.
+            increment in ``x`` over which ``func`` changes *substantially*. The
+            step must have the same shape as ``x`` (i.e., both scalars or both
+            arrays of the same shape).
         meta: a dictionary in which to store metadata about the derivative
             calculations
         nIter: maximum number of iterations, i.e., the max size of the
@@ -48,10 +73,13 @@ def derivative(
         maxRelChange: Return when the error is worse than the best so
             far by this factor.
 
-
     Returns:
         the derivative of ``func`` with respect to ``x``, evaluated at the given
         value of ``x``.
+
+    Raises:
+        RuntimeError: if ``x`` and ``step`` have different shapes
+        ValueError: if ``step`` includes only zeros
 
     *The algorithm implemented in this function is "Richardson's deferred approach
     to the limit," detailed in Numerical Recipes in C, 2nd Edition by Press,
@@ -64,8 +92,12 @@ def derivative(
     CON2 = CON * CON
 
     # Generalize to arbitrary dimensions
-    x = np.asarray(x)
-    step = np.asarray(step)
+    x, step = np.asarray(x), np.asarray(step)
+    if not x.shape == step.shape:
+        raise RuntimeError(
+            f"x {x.shape} and step {step.shape} must have the same shapes"
+        )
+
     stepSz = np.linalg.norm(step)
 
     if np.all(step == 0.0):
@@ -95,16 +127,18 @@ def derivative(
                 tableau[row - 1, col] * fac - tableau[row - 1, col - 1]
             ) / (fac - 1.0)
             fac *= CON2
-            errt = max(
-                np.linalg.norm(tableau[row, col] - tableau[row - 1, col]),
-                np.linalg.norm(tableau[row, col] - tableau[row - 1, col - 1]),
+            errt = float(
+                max(
+                    np.linalg.norm(tableau[row, col] - tableau[row - 1, col]),
+                    np.linalg.norm(tableau[row, col] - tableau[row - 1, col - 1]),
+                )
             )
 
             # The error strategy is to compare each new extrapolation to one
             # order lower, both at the present step size and the previous one
             if errt <= err:
                 # If error is decreased, save the improved answer
-                err = float(errt)
+                err = errt
                 deriv = tableau[row, col]
 
         if (

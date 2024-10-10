@@ -109,7 +109,7 @@ class TestAngle:
         angle = 27.0
         con = pcons.Angle(refDir, origin.state, angle, stateIx, center)
         out = con.evaluate()
-        assert isinstance(out, float)
+        assert isinstance(out, np.ndarray)
 
     @pytest.mark.parametrize("originMask, terminusMask", [[None, None]])
     @pytest.mark.parametrize(

@@ -13,4 +13,12 @@ pre-commit install
 ```
 source test-env/bin/activate
 pytest --cov medusa --cov-report html
+mypy -p medusa
+```
+
+## Documentation
+```
+source test-env/bin/activate
+cd docs
+make html
 ```

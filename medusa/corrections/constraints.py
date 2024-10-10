@@ -11,8 +11,8 @@ ways.
    StateContinuity
    VariableValue
 
-Module Reference
-----------------
+Reference
+==============
 
 .. autoclass:: Angle
    :members:
@@ -34,15 +34,18 @@ Module Reference
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from enum import IntEnum
-from typing import Iterable, Union
+from typing import Union
 
 import numpy as np
+from numpy.typing import NDArray
 
 logger = logging.getLogger(__name__)
 
 from medusa import util
 from medusa.corrections import AbstractConstraint, ControlPoint, Segment, Variable
+from medusa.typing import FloatArray, IntArray, override
 
 
 class Angle(AbstractConstraint):
@@ -54,18 +57,18 @@ class Angle(AbstractConstraint):
 
     def __init__(
         self,
-        refDir: Iterable[float],
+        refDir: FloatArray,
         state: Variable,
         angle: float,
-        stateIx: Iterable[int] = (0, 1, 2),
-        center: Iterable[int] = (0, 0, 0),
+        stateIx: IntArray = (0, 1, 2),
+        center: FloatArray = (0.0, 0.0, 0.0),
     ) -> None:
         # TODO document attributes
-        self.refDir = np.array(refDir)
-        self.state = state  # TODO check type
-        self.angleVal = np.cos(angle * np.pi / 180.0)
-        self.stateIx = np.array(stateIx)
-        self.center = np.array(center)
+        self.refDir: NDArray[np.double] = np.array(refDir)
+        self.state: Variable = state  # TODO check type
+        self.angleVal: float = float(np.cos(angle * np.pi / 180.0))
+        self.stateIx: NDArray[np.int_] = np.array(stateIx)
+        self.center: NDArray[np.double] = np.array(center)
 
         if self.refDir.size < 2:
             raise ValueError("refDir must be at least 2D")
@@ -83,19 +86,22 @@ class Angle(AbstractConstraint):
         self.state.allVals[self.stateIx]
 
     @property
+    @override
     def size(self) -> int:
         return 1
 
-    def evaluate(self) -> float:
+    @override
+    def evaluate(self) -> NDArray[np.double]:
         # TODO note about no sign distinction due to cosine?
         # Use dot product to compute angle between vectors
         stateVec = self.state.allVals[self.stateIx] - self.center
-        evalAngle = self.refDir.T @ stateVec
-        return evalAngle - self.angleVal
+        evalAngle = float(self.refDir.T @ stateVec)
+        return np.asarray(evalAngle - self.angleVal)
 
+    @override
     def partials(
         self, freeVarIndexMap: dict[Variable, int]
-    ) -> dict[Variable, np.ndarray[float]]:
+    ) -> dict[Variable, NDArray[np.double]]:
         if self.state in freeVarIndexMap:
             dFdq = np.zeros((1, self.state.values.size))
             dFdq[0, self.stateIx] = self.refDir
@@ -111,9 +117,7 @@ class StateContinuity(AbstractConstraint):
     TODO document
     """
 
-    def __init__(
-        self, segment: Segment, indices: Union[None, Iterable[int]] = None
-    ) -> None:
+    def __init__(self, segment: Segment, indices: Union[None, IntArray] = None) -> None:
         if segment.terminus is None:
             raise RuntimeError("Cannot constraint StateContinuity with terminus = None")
 
@@ -129,25 +133,31 @@ class StateContinuity(AbstractConstraint):
         self.constrainedIx = sorted(indices)
 
     @property
+    @override
     def size(self) -> int:
         return len(self.constrainedIx)
 
+    @override
     def clearCache(self) -> None:
         self.segment.resetProp()
 
-    def evaluate(self) -> np.ndarray[float]:
+    @override
+    def evaluate(self) -> NDArray[np.double]:
         # F = propFinalState - terminalState
-        termVar = self.segment.terminus.state
+
+        # Already asserted that segment.terminus is not None
+        termVar = self.segment.terminus.state  # type: ignore
         propState = self.segment.state(-1)[self.constrainedIx]
         termState = termVar.allVals[self.constrainedIx]
         return propState - termState
 
+    @override
     def partials(
         self, freeVarIndexMap: dict[Variable, int]
-    ) -> dict[Variable, np.ndarray[float]]:
+    ) -> dict[Variable, NDArray[np.double]]:
         originVar = self.segment.origin.state
         epochVar = self.segment.origin.epoch
-        termVar = self.segment.terminus.state
+        termVar = self.segment.terminus.state  # type: ignore
         tofVar = self.segment.tof
         paramVar = self.segment.propParams
 
@@ -195,7 +205,7 @@ class VariableValue(AbstractConstraint):
             free value in ``variable`` is unconstrained.
     """
 
-    def __init__(self, variable: Variable, values: Iterable[float]) -> None:
+    def __init__(self, variable: Variable, values: FloatArray) -> None:
         if not isinstance(variable, Variable):
             raise ValueError("variable must be a Variable object")
 
@@ -210,15 +220,18 @@ class VariableValue(AbstractConstraint):
         self.values = np.ma.array(values, mask=[v is None for v in values])
 
     @property
+    @override
     def size(self) -> int:
         return sum(~self.values.mask)
 
-    def evaluate(self) -> np.ndarray[float]:
+    @override
+    def evaluate(self) -> NDArray[np.double]:
         return self.variable.allVals[~self.values.mask] - self.values[~self.values.mask]
 
+    @override
     def partials(
         self, freeVarIndexMap: dict[Variable, int]
-    ) -> dict[Variable, np.ndarray[float]]:
+    ) -> dict[Variable, NDArray[np.double]]:
         # Partial is 1 for each constrained variable, zero otherwise
         deriv = np.zeros((self.size, self.variable.values.size))
         count = 0
@@ -272,6 +285,7 @@ class Inequality(AbstractConstraint):
         self.slack = Variable(slackVals, name="Slack")
 
     @property
+    @override
     def size(self) -> int:
         return self.equalCon.size
 
@@ -288,11 +302,13 @@ class Inequality(AbstractConstraint):
         impVars.append(self.slack)
         return impVars
 
+    @override
     def clearCache(self) -> None:
         self.equalCon.clearCache()
         self._slackInit = False  # Force re-init slack variable values
 
-    def evaluate(self) -> np.ndarray[float]:
+    @override
+    def evaluate(self) -> NDArray[np.double]:
         vals = self.equalCon.evaluate()
         return np.asarray(
             [
@@ -301,9 +317,10 @@ class Inequality(AbstractConstraint):
             ]
         )
 
+    @override
     def partials(
         self, freeVarIndexMap: dict[Variable, int]
-    ) -> dict[Variable, np.ndarray[float]]:
+    ) -> dict[Variable, NDArray[np.double]]:
         # Compute partials of equality constraint
         partials = self.equalCon.partials(freeVarIndexMap)
 

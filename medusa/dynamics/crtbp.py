@@ -113,13 +113,16 @@ position state variables,
    \Omega_{yz} = \Omega_{zy} = \\frac{\partial^2 \Omega}{\partial y \partial z} &= \\frac{3(1 - \mu)yz}{r_{13}^5} + \\frac{3\mu yz}{r_{23}^5}
 
 Reference
----------
+===========
 
 .. autoclass:: DynamicsModel
    :members:
    :show-inheritance:
 
 """
+from collections.abc import Sequence
+from typing import Union
+
 import numpy as np
 from numba import njit  # type: ignore
 from numpy.typing import NDArray
@@ -127,6 +130,7 @@ from numpy.typing import NDArray
 import medusa.util as util
 from medusa.data import GRAV_PARAM, Body
 from medusa.dynamics import AbstractDynamicsModel, VarGroup
+from medusa.typing import FloatArray, override
 
 
 class DynamicsModel(AbstractDynamicsModel):
@@ -156,13 +160,29 @@ class DynamicsModel(AbstractDynamicsModel):
         self._charT = np.sqrt(self._charL**3 / totalGM)
 
     @property
+    @override
     def epochIndependent(self) -> bool:
         return True
 
-    def diffEqs(self, t, w, varGroups, params=None):
+    @override
+    def diffEqs(
+        self,
+        t: float,
+        w: NDArray[np.double],
+        varGroups: tuple[VarGroup, ...],
+        params: Union[tuple[float, ...], None] = None,
+    ) -> NDArray[np.double]:
         return DynamicsModel._eoms(t, w, self._properties["mu"], varGroups)
 
-    def bodyState(self, ix, t, w=None, varGroups=None, params=None):
+    @override
+    def bodyState(
+        self,
+        ix: int,
+        t: float,
+        w: FloatArray = [],
+        varGroups: tuple[VarGroup, ...] = (VarGroup.STATE,),
+        params: Union[FloatArray, None] = None,
+    ) -> NDArray[np.double]:
         if ix == 0:
             return np.asarray([-self._properties["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
         elif ix == 1:
@@ -170,16 +190,19 @@ class DynamicsModel(AbstractDynamicsModel):
         else:
             raise IndexError(f"Index {ix} must be zero or one")
 
-    def groupSize(self, varGroups):
+    @override
+    def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
         varGroups = util.toList(varGroups)
         return 6 * (VarGroup.STATE in varGroups) + 36 * (VarGroup.STM in varGroups)
 
-    def varNames(self, varGroups):
-        if varGroups == VarGroup.STATE:
+    @override
+    def varNames(self, varGroup: VarGroup) -> list[str]:
+        if varGroup == VarGroup.STATE:
             return ["x", "y", "z", "dx", "dy", "dz"]
         else:
-            return super().varNames(varGroups)  # defaults are fine for the rest
+            return super().varNames(varGroup)  # defaults are fine for the rest
 
+    # To work with numba.njit, primitive types are enforced for most arguments
     @staticmethod
     @njit
     def _eoms(

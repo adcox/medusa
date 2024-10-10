@@ -8,7 +8,7 @@ planet, moon, asteroid, star, or spacecraft. This library generally assumes that
 the object's **state** is described by its Cartesian position and velocity coordinates,
 
 .. math::
-    \\vec{q}(\\tau, T, \\vec{p}) = 
+    \\vec{q}(\\tau, T, \\vec{p}) =
     \\begin{Bmatrix} x & y & z & \dot{x} & \dot{y} & \dot{z} \end{Bmatrix}^T,
 
 where :math:`\\vec{q}` is the state vector, :math:`\\tau` is the independent variable
@@ -18,27 +18,86 @@ In this notation, the dot over the coordinates represents the derivative with
 respect to :math:`\\tau`. Some models may append more 
 variables, such as a thrust vector parameterization, to this state vector.
 
+Partial Derivatives
+--------------------
+
 In addition to the state vector, models can include equations that describe three
 other "variable groups", described by :class:`VarGroup`, that provide extra 
 dynamical information and are frequently
 used in differential corrections and optimization processes:
 
-- :data:`VarGroup.STM`, the state transition matrix, :math:`\mathbf{\Phi}`. 
-  This matrix relates changes 
-  in :math:`\\vec{q}` at one value of :math:`\\tau` to changes in :math:`\\vec{q}`
-  at a different value, i.e.,
+State Partials
+^^^^^^^^^^^^^^
 
-  .. math::
-     \delta \\vec{q}(\\tau_2) = \mathbf{\Phi}(\\tau_1, \\tau_2) \delta \\vec{q}(\\tau_1)
+The state transition matrix (STM), :math:`\mathbf{\Phi}`, is identified via the 
+:data:`VarGroup.STM` type.
 
-  When :math:`\\tau_2 = \\tau_1`, the state transition matrix is identity.
+This matrix relates changes 
+in :math:`\\vec{q}` at one value of :math:`\\tau` to changes in :math:`\\vec{q}`
+at a different value, i.e.,
 
-- :data:`VarGroup.EPOCH_PARTIALS`, epoch partials, :math:`\partial \\vec{q} / \partial T`. 
-  A vector of partial derivatives of the state vector with respect to the epoch
+.. math::
+   \delta \\vec{q}(\\tau_2) = \mathbf{\Phi}(\\tau_1, \\tau_2) \delta \\vec{q}(\\tau_1)
 
-- :data:`VarGroup.PARAM_PARTIALS`, parameter partials, :math:`\partial \\vec{q} / \partial \\vec{q}`. 
-  A matrix of partial derivatives of the state vector with respect to the parameter vector
+Deriving an analytical expression for this matrix is difficult, but its derivative
+is straightforward to define. Accordingly, the matrix is propagated along with the
+state vector to yield an STM that relates the end of an arc to its beginning.
+The differential equation that describes this evolution is
 
+.. math::
+   \dot{\mathbf{\Phi}}(\\tau_2, \\tau_1) = \mathbf{A}(\\tau_2) \mathbf{\Phi}(\\tau_2, \\tau_1)
+
+where :math:`\mathbf{A}` is the linearization of the dynamics,
+
+.. math::
+   \mathbf{A} = \\frac{ \partial \dot{\\vec{q}} }{ \partial \\vec{q} }.
+
+When :math:`\\tau_2 = \\tau_1`, the state transition matrix is identity; this 
+serves as the initial condition for the :data:`~VarGroup.STM` type.
+
+Epoch Partials
+^^^^^^^^^^^^^^^
+
+The epoch partials, :math:`\partial \\vec{q} / \partial T`, are identified via
+the :data:`VarGroup.EPOCH_PARTIALS` type.
+
+Similar to the STM, the epoch partials are numerically integrated. Because the
+time along a propagated arc, :math:`\\tau`, is independent of the epoch, :math:`T`,
+the order of differentiation can be switched,
+
+.. math::
+   \\frac{\mathrm{d}}{\mathrm{d} \\tau} \left( \\frac{ \partial \\vec{q} }{ \partial T } \\right) =
+   \\frac{\partial}{\partial T} \left( \\frac{ \mathrm{d} \\vec{q} }{ \mathrm{d} \\tau } \\right) =
+   \\frac{\partial \dot{\\vec{q}}}{\partial T}
+
+The right side of the equation can be derived analytically from the differential 
+equations that govern the core state. The initial condition for this term is the
+zero vector.
+
+
+Parameter Partials
+^^^^^^^^^^^^^^^^^^
+
+The parameter partials, :math:`\partial \\vec{q} / \partial \\vec{q}`, are identified
+via the :data:`VarGroup.PARAM_PARTIALS`, type.
+
+Similar to the STM and epoch partials, the parameter partials are numerically 
+integrated. Because the parameters are constant and independent of the integration
+variable, :math:`t`, the same differentiation "trick" as the epoch partials is 
+applied to yield an expression for the derivative of the parameter partials:
+
+.. math::
+   \\frac{\mathrm{d}}{\mathrm{d} \\tau} \left( \\frac{ \partial \\vec{q} }{ \partial \\vec{p} } \\right) =
+   \\frac{\partial}{\partial \\vec{p}} \left( \\frac{ \mathrm{d} \\vec{q} }{ \mathrm{d} \\tau } \\right) =
+   \\frac{\partial \dot{\\vec{q}}}{\partial \\vec{p}}
+
+The right side of the equation can be derived analytically from the differential 
+equations that govern the core state. The initial condition for this term is the
+zero vector.
+
+
+Variable Vector
+----------------
 
 Grouped together with matrices expanded in row-major order, the variable groups
 are collected into a **variable vector**, denoted by
@@ -69,6 +128,9 @@ groups:
    ~AbstractDynamicsModel.extractGroup
    ~AbstractDynamicsModel.varNames
    ~AbstractDynamicsModel.validForPropagation
+
+System Properties
+-----------------
 
 Additional information about the system of equations are available via properties
 and attributes of the model,
@@ -104,7 +166,7 @@ Concrete implementations are included in the submodules listed below.
    dynamics.lowthrust
 
 Reference
------------------
+============
 
 .. autoclass:: VarGroup
    :members:
@@ -116,7 +178,7 @@ Reference
 """
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from copy import copy, deepcopy
 from enum import IntEnum
 from typing import Any, Union
@@ -180,6 +242,11 @@ class VarGroup(IntEnum):
     own governing differential equations. Parameters can include thrust magnitude,
     solar pressure coefficients, etc.
     """
+
+
+# TODO need a method to return all model parameters
+# TODO document that method above
+# TODO update low-thrust docs about parameters if needed
 
 
 class AbstractDynamicsModel(ABC):
@@ -262,7 +329,7 @@ class AbstractDynamicsModel(ABC):
         t: float,
         w: FloatArray,
         varGroups: tuple[VarGroup, ...],
-        params: FloatArray,
+        params: Union[FloatArray, None],
     ) -> NDArray[np.double]:
         """
         Evaluate a body state vector
@@ -279,13 +346,16 @@ class AbstractDynamicsModel(ABC):
         """
         pass
 
+    # Because the diffEqs method can be called millions of times during a
+    # propagation, narrow type definitions are required to minimize computational
+    # load.
     @abstractmethod
     def diffEqs(
         self,
         t: float,
-        w: FloatArray,
+        w: NDArray[np.double],
         varGroups: tuple[VarGroup, ...],
-        params: FloatArray,
+        params: Union[tuple[float, ...], None],
     ) -> NDArray[np.double]:
         """
         Evaluate the differential equations that govern the variable array

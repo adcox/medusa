@@ -2,6 +2,32 @@
 CR3BP with Low-Thrust
 =====================
 
+This model augments the "ballistic" CR3BP with a low-thrust acceleration.
+See :doc:`dynamics.crtbp` for a description of the ballistic model. As described
+in the :doc:`dynamics.lowthrust` documentation, the low-thrust acceleration is
+added to the ballistic acceleration, yielding the governing equations,
+
+.. math::
+   \dot{\\vec{q}} = \\begin{Bmatrix}
+     \dot{x} \\\\ \dot{y} \\\\ \dot{z} \\\\
+     2\dot{y} + x - (1-\mu)(x+\mu)/r_{13}^3 - \mu(x - 1 + \mu)/r_{23}^3
+         \\textcolor{orange}{+ \\vec{a}_u \cdot \hat{x}} \\\\
+     -2\dot{x} + y - (1-\mu) y / r_{13}^3 - \mu y / r_{23}^3
+         \\textcolor{orange}{+ \\vec{a}_u \cdot \hat{y}} \\\\
+     - (1-\mu) z / r_{13}^3 - \mu z / r_{23}^3 
+         \\textcolor{orange}{+ \\vec{a}_u \cdot \hat{z}}
+   \\end{Bmatrix}
+
+The ballistic CR3BP does not define any parameters, so the only parameters that
+are part of the model are those defined by the control law. Similarly, the CR3BP
+is an epoch-independent model, so the
+:math:`\partial \dot{\\vec{q}}_c / \partial T` term in the epoch partials
+expansion is zero; the only epoch 
+dependencies that exist are those defined by the control law.
+
+Reference
+=============
+
 .. autoclass:: DynamicsModel
    :members:
    :show-inheritance:
@@ -9,16 +35,19 @@ CR3BP with Low-Thrust
 """
 
 import numpy as np
+from numpy.typing import NDArray
 
 from medusa import util
+from medusa.data import Body
 from medusa.dynamics import VarGroup
 from medusa.dynamics.crtbp import DynamicsModel as CrtbpDynamics
+from medusa.typing import override
 
 from . import ControlLaw
 
 
 class DynamicsModel(CrtbpDynamics):
-    def __init__(self, body1, body2, ctrlLaw):
+    def __init__(self, body1: Body, body2: Body, ctrlLaw: ControlLaw):
         super().__init__(body1, body2)
 
         if not isinstance(ctrlLaw, ControlLaw):
@@ -28,10 +57,12 @@ class DynamicsModel(CrtbpDynamics):
         self.ctrlLaw.register(6, 0)  # set coreStateSize and paramIx0
 
     @property
-    def epochIndependent(self):
+    @override
+    def epochIndependent(self) -> bool:
         return self.ctrlLaw.epochIndependent
 
-    def groupSize(self, varGroups):
+    @override
+    def groupSize(self, varGroups) -> int:
         varGroups = util.toList(varGroups)
         N = 6 + self.ctrlLaw.numStates
         nCtrlParam = len(self.ctrlLaw.params)
@@ -43,39 +74,41 @@ class DynamicsModel(CrtbpDynamics):
             + N * nCtrlParam * (VarGroup.PARAM_PARTIALS in varGroups)
         )
 
-    def varNames(self, varGroups):
-        if varGroups == VarGroup.STATE:
-            baseNames = super().varNames(varGroups)
+    @override
+    def varNames(self, varGroup) -> list[str]:
+        if varGroup == VarGroup.STATE:
+            baseNames = super().varNames(varGroup)
             return baseNames + self.ctrlLaw.stateNames
         else:
-            return super().varNames(varGroups)
+            return super().varNames(varGroup)
 
-    def diffEqs(self, t, q, varGroups, params=None):
+    @override
+    def diffEqs(self, t, w, varGroups, params=None) -> NDArray[np.double]:
         mu = self._properties["mu"]
 
         P = len(self.ctrlLaw.params)
         if P > 0 and (params is None or not len(params) == P):
             raise ValueError(f"Expecting {P} params; {params} does not match")
 
-        qdot = np.zeros(q.shape)
+        wdot = np.zeros(w.shape)
 
         # Pre-compute some values; multiplication is faster than exponents
-        r13 = np.sqrt((q[0] + mu) * (q[0] + mu) + q[1] * q[1] + q[2] * q[2])
-        r23 = np.sqrt((q[0] - 1 + mu) * (q[0] - 1 + mu) + q[1] * q[1] + q[2] * q[2])
+        r13 = np.sqrt((w[0] + mu) * (w[0] + mu) + w[1] * w[1] + w[2] * w[2])
+        r23 = np.sqrt((w[0] - 1 + mu) * (w[0] - 1 + mu) + w[1] * w[1] + w[2] * w[2])
         omm = 1 - mu
         r23_3 = r23 * r23 * r23
         r13_3 = r13 * r13 * r13
 
         # Base model state variable derivatives
-        qdot[:3] = q[3:6]
-        qdot[3] = (
-            2 * q[4] + q[0] - omm * (q[0] + mu) / r13_3 - mu * (q[0] - omm) / r23_3
+        wdot[:3] = w[3:6]
+        wdot[3] = (
+            2 * w[4] + w[0] - omm * (w[0] + mu) / r13_3 - mu * (w[0] - omm) / r23_3
         )
-        qdot[4] = q[1] - 2 * q[3] - omm * q[1] / r13_3 - mu * q[1] / r23_3
-        qdot[5] = -omm * q[2] / r13_3 - mu * q[2] / r23_3
+        wdot[4] = w[1] - 2 * w[3] - omm * w[1] / r13_3 - mu * w[1] / r23_3
+        wdot[5] = -omm * w[2] / r13_3 - mu * w[2] / r23_3
 
         # Add accel from control
-        qdot[3:6] += self.ctrlLaw.accelVec(t, q, varGroups, params)[:, 0]
+        wdot[3:6] += self.ctrlLaw.accelVec(t, w, varGroups, params)[:, 0]
 
         count = 6  # track number of equations
 
@@ -85,8 +118,8 @@ class DynamicsModel(CrtbpDynamics):
 
         # Control state variable derivatives
         if nCtrl > 0:
-            qdot[count : count + nCtrl] = self.ctrlLaw.stateDiffEqs(
-                t, q, varGroups, params
+            wdot[count : count + nCtrl] = self.ctrlLaw.stateDiffEqs(
+                t, w, varGroups, params
             )
             count += nCtrl
 
@@ -106,8 +139,8 @@ class DynamicsModel(CrtbpDynamics):
                 1
                 - omm / r13_3
                 - mu / r23_3
-                + 3 * omm * (q[0] + mu) * (q[0] + mu) / r13_5
-                + 3 * mu * (q[0] - omm) * (q[0] - omm) / r23_5
+                + 3 * omm * (w[0] + mu) * (w[0] + mu) / r13_5
+                + 3 * mu * (w[0] - omm) * (w[0] - omm) / r23_5
             )
 
             # Uyy = d/dy (dvy/dt)
@@ -115,34 +148,34 @@ class DynamicsModel(CrtbpDynamics):
                 1
                 - omm / r13_3
                 - mu / r23_3
-                + 3 * omm * q[1] * q[1] / r13_5
-                + 3 * mu * q[1] * q[1] / r23_5
+                + 3 * omm * w[1] * w[1] / r13_5
+                + 3 * mu * w[1] * w[1] / r23_5
             )
 
             # Uzz = d/dz (dvz/dt)
             A[5, 2] = (
                 -omm / r13_3
                 - mu / r23_3
-                + 3 * omm * q[2] * q[2] / r13_5
-                + 3 * mu * q[2] * q[2] / r23_5
+                + 3 * omm * w[2] * w[2] / r13_5
+                + 3 * mu * w[2] * w[2] / r23_5
             )
 
             # Uxy = d/dy (dvx/dt) = d/dx (dvy/dt) = Uyx
             A[3, 1] = (
-                3 * omm * (q[0] + mu) * q[1] / r13_5
-                + 3 * mu * (q[0] - omm) * q[1] / r23_5
+                3 * omm * (w[0] + mu) * w[1] / r13_5
+                + 3 * mu * (w[0] - omm) * w[1] / r23_5
             )
             A[4, 0] = A[3, 1]
 
             # Uxz = d/dz (dvx/dt) = d/dx (dvx/dt) = Uzx
             A[3, 2] = (
-                3 * omm * (q[0] + mu) * q[2] / r13_5
-                + 3 * mu * (q[0] - omm) * q[2] / r23_5
+                3 * omm * (w[0] + mu) * w[2] / r13_5
+                + 3 * mu * (w[0] - omm) * w[2] / r23_5
             )
             A[5, 0] = A[3, 2]
 
             # Uyz = d/dz (dvy/dt) = d/dy (dvz/dt) = Uzy
-            A[4, 2] = 3 * omm * q[1] * q[2] / r13_5 + 3 * mu * q[1] * q[2] / r23_5
+            A[4, 2] = 3 * omm * w[1] * w[2] / r13_5 + 3 * mu * w[1] * w[2] / r23_5
             A[5, 1] = A[4, 2]
 
             A[3, 4] = 2  # d/dvy (dvx/dt)
@@ -150,7 +183,7 @@ class DynamicsModel(CrtbpDynamics):
 
             # Partials of ctrl accel w.r.t. core states
             partials = self.ctrlLaw.partials_accel_wrt_coreState(
-                t, q, varGroups, params
+                t, w, varGroups, params
             )
             for r in range(3, nCore):
                 for c in range(0, nCore):
@@ -159,10 +192,10 @@ class DynamicsModel(CrtbpDynamics):
             if nCtrl > 0:
                 # Partials of ctrl state derivatives w.r.t. core and ctrl states
                 partialsCore = self.ctrlLaw.partials_ctrlStateDEQs_wrt_coreState(
-                    t, q, varGroups, params
+                    t, w, varGroups, params
                 )
                 partialsCtrl = self.ctrlLaw.partials_ctrlStateDEQs_wrt_ctrlState(
-                    t, q, varGroups, params
+                    t, w, varGroups, params
                 )
                 for r in range(nCore, N):
                     for c in range(0, N):
@@ -173,7 +206,7 @@ class DynamicsModel(CrtbpDynamics):
 
                 # Partials of core state derivatives w.r.t. ctrl states
                 partials = self.ctrlLaw.partials_accel_wrt_ctrlState(
-                    t, q, varGroups, params
+                    t, w, varGroups, params
                 )
                 for r in range(3, nCore):
                     for c in range(nCore, N):
@@ -181,63 +214,63 @@ class DynamicsModel(CrtbpDynamics):
 
             # Compute STM derivative via matrix multiplication
             #   PhiDot = A * Phi
-            #   q[6] through q[42] represent the STM (Phi) in row-major order
-            phi = np.reshape(q[count : count + N * N], (N, N))
-            qdot[count : count + N * N] += (A @ phi).flat
+            #   w[6] through w[42] represent the STM (Phi) in row-major order
+            phi = np.reshape(w[count : count + N * N], (N, N))
+            wdot[count : count + N * N] += (A @ phi).flat
             count += N * N
 
         # Propagated epoch partials
         if not self.epochIndependent and VarGroup.EPOCH_PARTIALS in varGroups:
-            # The differential equation for the epoch partials, dq/dT is
+            # The differential equation for the epoch partials, dw/dT is
             #
-            #    d/dt (dq/dT) = A @ (dq/dT) + (dqdot/dT)
+            #    d/dt (dq/dT) = A @ (dq/dT) + (dwdot/dT)
             #
-            # The dqdot/dT term is computed analytically by the control law; the
+            # The dwdot/dT term is computed analytically by the control law; the
             # base model (CRTBP) has no dependence on epoch
-            dqdot_dT = np.zeros(N)
+            dwdot_dT = np.zeros(N)
 
             # contribution of accel terms
-            partials = self.ctrlLaw.partials_accel_wrt_epoch(t, q, varGroups, params)
+            partials = self.ctrlLaw.partials_accel_wrt_epoch(t, w, varGroups, params)
             for r in range(3, nCore):
-                dqdot_dT[r] += partials[r - 3, 0]
+                dwdot_dT[r] += partials[r - 3, 0]
 
             # contribution of ctrl states
             partials = self.ctrlLaw.partials_ctrlStateDEQs_wrt_epoch(
-                t, q, varGroups, params
+                t, w, varGroups, params
             )
             for r in range(nCore, N):
-                dqdot_dT[r] += partials[r - nCore, 0]
+                dwdot_dT[r] += partials[r - nCore, 0]
 
-            dq_dT = np.reshape(q[count : count + N], (N, 1))
-            qdot[count : count + N] += (A @ dq_dT + dqdot_dT).flat
+            dq_dT = np.reshape(w[count : count + N], (N, 1))
+            wdot[count : count + N] += (A @ dq_dT + dwdot_dT).flat
             count += N
 
         # Propagated param partials
         if VarGroup.PARAM_PARTIALS in varGroups and P > 0:
             # The differential equation for the parameter partials, dq/dp, is
             #
-            #    d/dt (dq/dp) = A @ (dq/dp) + (dqdot/dp)
+            #    d/dt (dq/dp) = A @ (dq/dp) + (dwdot/dp)
             #
-            # The dqdot/dp term is computed analytically by the control law; the
+            # The dwdot/dp term is computed analytically by the control law; the
             # base model (CRTBP) defines no parameters.
-            dqdot_dp = np.zeros((N, P))
+            dwdot_dp = np.zeros((N, P))
 
             # contribution of accel terms
-            partials = self.ctrlLaw.partials_accel_wrt_params(t, q, varGroups, params)
+            partials = self.ctrlLaw.partials_accel_wrt_params(t, w, varGroups, params)
             for r in range(3, nCore):
                 for c in range(0, P):
-                    dqdot_dp[r, c] += partials[r - 3, c]
+                    dwdot_dp[r, c] += partials[r - 3, c]
 
             # contribution of ctrl states
             partials = self.ctrlLaw.partials_ctrlStateDEQs_wrt_params(
-                t, q, varGroups, params
+                t, w, varGroups, params
             )
             for r in range(nCore, N):
                 for c in range(0, P):
-                    dqdot_dp[r, c] += partials[r - nCore, c]
+                    dwdot_dp[r, c] += partials[r - nCore, c]
 
-            dq_dp = np.reshape(q[count : count + N * P], (N, P))
-            qdot[count : count + N * P] += (A @ dq_dp + dqdot_dp).flat
+            dq_dp = np.reshape(w[count : count + N * P], (N, P))
+            wdot[count : count + N * P] += (A @ dq_dp + dwdot_dp).flat
             count += N * P
 
-        return qdot
+        return wdot

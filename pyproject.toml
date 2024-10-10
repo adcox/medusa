@@ -29,6 +29,7 @@ dependencies = [
     "numba",
     "scipy",
     "rich",
+    "overrides; python_version < '3.12'",
 ]
 
 [project.optional-dependencies]

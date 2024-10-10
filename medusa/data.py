@@ -10,8 +10,8 @@ about a celestial body (planet, moon, star, etc.)
    G_MEAN_EARTH
    Body
 
-Module Reference
------------------
+Reference
+==========
 
 .. autodata:: GRAV_PARAM
 .. autodata:: G_MEAN_EARTH

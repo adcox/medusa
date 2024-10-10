@@ -24,8 +24,8 @@ definitions with a variety of common event types defined.
    VariableValueEvent
 
 
-Module Reference
-----------------
+Reference
+==========
 
 .. autoclass:: Propagator
    :members:
@@ -63,7 +63,7 @@ from scipy.optimize import OptimizeResult  # type: ignore
 
 import medusa.util as util
 from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
-from medusa.typing import FloatArray, IntArray
+from medusa.typing import FloatArray, IntArray, override
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +297,8 @@ class ApseEvent(AbstractEvent):
         self._model = model
         self._ix = bodyIx
 
-    def eval(self, t, w, varGroups, params):
+    @override
+    def eval(self, t, w, varGroups, params) -> float:
         return self._eval(t, w, tuple(varGroups), params, self._model, self._ix)
 
     @staticmethod
@@ -356,9 +357,10 @@ class BodyDistanceEvent(AbstractEvent):
         self._ix = ix
         self._dist = dist * dist  # evaluation uses squared value
 
-    def eval(self, t, w, varGroups, params):
+    @override
+    def eval(self, t, w, varGroups, params) -> float:
         # TODO assumes Cartesian position vector is the first piece of state vector
-        relPos = w[:3] - self._model.bodyState(self._ix, t, params)[:3]
+        relPos = w[:3] - self._model.bodyState(self._ix, t, w, varGroups, params)[:3]
         return sum([x * x for x in relPos]) - self._dist
 
 
@@ -397,7 +399,8 @@ class DistanceEvent(AbstractEvent):
         self._ixs = ixs
         self._dist = dist * dist  # evaluation uses squared value
 
-    def eval(self, t, w, varGroups, params):
+    @override
+    def eval(self, t, w, varGroups, params) -> float:
         dist = self._vec - w[self._ixs]
         return sum([x * x for x in dist]) - self._dist
 
@@ -430,10 +433,11 @@ class VariableValueEvent(AbstractEvent):
         self._ix = varIx
         self._val = varValue
 
-    def eval(self, t, w, varGroups, params):
+    @override
+    def eval(self, t, w, varGroups, params) -> float:
         return self._eval(w, self._ix, self._val)
 
     @staticmethod
     @njit
-    def _eval(w: FloatArray, ix: int, val: float):
-        return val - w[ix]
+    def _eval(w: FloatArray, ix: int, val: float) -> float:
+        return float(val - w[ix])
