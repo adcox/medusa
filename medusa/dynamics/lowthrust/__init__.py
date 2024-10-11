@@ -389,39 +389,6 @@ class ControlLaw(ABC):
         self._coreStateSize: Union[None, int] = None
         self._paramIx0: Union[None, int] = None
 
-    def register(self, nCore: int, ix0: int) -> None:
-        """
-        Register the control law within the context of the full dynamics model
-
-        Args:
-            nCore (int): the number of core states, i.e., the number of state
-                variables excluding the control states
-            ix0 (int): the index of the first control parameter within the full
-                set of parameters.
-        """
-        self._coreStateSize = nCore
-        self._paramIx0 = ix0
-
-    @abstractmethod
-    def accelVec(
-        self,
-        t: float,
-        w: NDArray[np.double],
-        varGroups: tuple[VarGroup, ...],
-        params: Union[tuple[float, ...], None],
-    ) -> NDArray[np.double]:
-        """
-        Compute the acceleration vector delivered by this control law.
-
-        The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
-
-        Returns:
-            numpy.ndarray: a 3x1 array that gives the Cartesian acceleration
-            vector.
-        """
-        pass
-
     @property
     @abstractmethod
     def epochIndependent(self) -> bool:
@@ -457,6 +424,39 @@ class ControlLaw(ABC):
     @abstractmethod
     def params(self) -> FloatArray:
         """Default values for the control parameters"""
+        pass
+
+    def register(self, nCore: int, ix0: int) -> None:
+        """
+        Register the control law within the context of the full dynamics model
+
+        Args:
+            nCore (int): the number of core states, i.e., the number of state
+                variables excluding the control states
+            ix0 (int): the index of the first control parameter within the full
+                set of parameters.
+        """
+        self._coreStateSize = nCore
+        self._paramIx0 = ix0
+
+    @abstractmethod
+    def accelVec(
+        self,
+        t: float,
+        w: NDArray[np.double],
+        varGroups: tuple[VarGroup, ...],
+        params: Union[tuple[float, ...], None],
+    ) -> NDArray[np.double]:
+        """
+        Compute the acceleration vector delivered by this control law.
+
+        The input arguments are consistent with those passed to the
+        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+
+        Returns:
+            numpy.ndarray: a 3x1 array that gives the Cartesian acceleration
+            vector.
+        """
         pass
 
     @abstractmethod
@@ -671,19 +671,6 @@ class ControlTerm(ABC):
         self._coreStateSize: Union[None, int] = None
         self._paramIx0: Union[None, int] = None
 
-    def register(self, nCore: int, ix0: int) -> None:
-        """
-        Register the control law within the context of the full dynamics model
-
-        Args:
-            nCore: the number of core states, i.e., the number of state
-                variables excluding the control states
-            ix0: the index of the first control parameter within the full
-                set of parameters.
-        """
-        self._coreStateSize = nCore
-        self._paramIx0 = ix0
-
     @property
     def epochIndependent(self) -> bool:
         """
@@ -735,6 +722,19 @@ class ControlTerm(ABC):
         """
         me = self.__class__.__name__
         return [f"{me} {ix}" for ix in range(self.numStates)]
+
+    def register(self, nCore: int, ix0: int) -> None:
+        """
+        Register the control law within the context of the full dynamics model
+
+        Args:
+            nCore: the number of core states, i.e., the number of state
+                variables excluding the control states
+            ix0: the index of the first control parameter within the full
+                set of parameters.
+        """
+        self._coreStateSize = nCore
+        self._paramIx0 = ix0
 
     # Similar to AbstractDynamicsModel.diffEqs, this function and those that
     # follow may be called millions of times, so types are restricted for

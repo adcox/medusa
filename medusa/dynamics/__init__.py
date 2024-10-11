@@ -278,6 +278,28 @@ class AbstractDynamicsModel(ABC):
         self._charT = 1.0  # sec
         self._charM = 1.0  # kg
 
+    def __eq__(self, other: object) -> bool:
+        """
+        Compare two Model objects. This can be overridden for more specific
+        comparisons in derived classes
+        """
+        if not isinstance(other, AbstractDynamicsModel):
+            return False
+
+        if not type(self) == type(other):
+            return False
+
+        if not all([b1 == b2 for b1, b2 in zip(self.bodies, other.bodies)]):
+            return False
+
+        # TODO need to compare dicts by value??
+        return (
+            self.properties == other.properties
+            and self.charL == other.charL
+            and self.charT == other.charT
+            and self.charM == other.charM
+        )
+
     @property
     def properties(self) -> dict:
         """
@@ -300,27 +322,15 @@ class AbstractDynamicsModel(ABC):
         """A characteristic mass (kg) used to nondimensionalize masses"""
         return self._charM
 
-    def __eq__(self, other: object) -> bool:
+    @property
+    @abstractmethod
+    def epochIndependent(self) -> bool:
         """
-        Compare two Model objects. This can be overridden for more specific
-        comparisons in derived classes
+        Returns:
+            True if the differetial equations have no dependencies on epoch,
+            False otherwise.
         """
-        if not isinstance(other, AbstractDynamicsModel):
-            return False
-
-        if not type(self) == type(other):
-            return False
-
-        if not all([b1 == b2 for b1, b2 in zip(self.bodies, other.bodies)]):
-            return False
-
-        # TODO need to compare dicts by value??
-        return (
-            self.properties == other.properties
-            and self.charL == other.charL
-            and self.charT == other.charT
-            and self.charM == other.charM
-        )
+        pass
 
     @abstractmethod
     def bodyState(
@@ -375,16 +385,6 @@ class AbstractDynamicsModel(ABC):
         """
         pass
 
-    @property
-    @abstractmethod
-    def epochIndependent(self) -> bool:
-        """
-        Returns:
-            True if the differetial equations have no dependencies on epoch,
-            False otherwise.
-        """
-        pass
-
     @abstractmethod
     def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
         """
@@ -397,161 +397,6 @@ class AbstractDynamicsModel(ABC):
             the size of a variable array with the specified variable groups
         """
         pass
-
-    def checkPartials(
-        self,
-        w0: FloatArray,
-        tspan: FloatArray,
-        params: Union[FloatArray, None] = None,
-        initStep: float = 1e-4,
-        rtol: float = 1e-6,
-        atol: float = 1e-8,
-        printTable: bool = True,
-    ) -> bool:
-        """
-        Check the partial derivatives included in the differential equations
-
-        Args:
-            w0: a full state vector (includes all VarGroup) for this model
-            tspan: a 2-element vector defining the start and end times
-                for numerical propagation
-            params: propagation parameters
-            initStep: the initial step size for the multivariate
-                numerical derivative function in :func:`numerics.derivative_multivar`
-            rtol: the numeric and analytical values are
-                equal when the absolute value of (numeric - analytic)/numeric
-                is less than ``rtol``
-            atol: the numeric and analytic values are equal
-                when the absolute value of (numeric - analytic) is less than ``atol``
-            printTable: whether or not to print a table of the
-                partial derivatives, their expected (numeric) and actual (analytic)
-                values, and the relative and absolute errors between the expected
-                and actual values.
-
-        Returns:
-            True if each partial derivative satisfies the relative *or*
-            absolute tolerance; False is returned if any of the partials fail
-            both tolerances.
-        """
-        from rich.table import Table
-
-        from medusa import console, numerics
-        from medusa.propagate import Propagator
-
-        allVars = [
-            VarGroup.STATE,
-            VarGroup.STM,
-            VarGroup.EPOCH_PARTIALS,
-            VarGroup.PARAM_PARTIALS,
-        ]
-
-        if not len(w0) == self.groupSize(allVars):
-            raise ValueError(
-                "w0 must define the full vector (STATE + STM + EPOCH_PARTIALS + PARAM_PARTIALS"
-            )
-
-        # TODO ensure tolerances are tight enough?
-        prop = Propagator(self, dense=False)
-        w0 = np.array(w0, copy=True)
-        state0 = self.extractGroup(w0, VarGroup.STATE, varGroupsIn=allVars)
-
-        solution = prop.propagate(w0, tspan, params=params, varGroups=allVars)
-        sol_vec = np.concatenate(
-            [
-                self.extractGroup(solution.y[:, -1], grp, varGroupsIn=allVars).flatten()
-                for grp in allVars[1:]
-            ]
-        )
-
-        # Compute state partials (STM)
-        def prop_state(y):
-            sol = prop.propagate(y, tspan, params=params, varGroups=VarGroup.STATE)
-            return sol.y[:, -1]
-
-        num_stm = numerics.derivative_multivar(prop_state, state0, initStep)
-
-        # Compute epoch partials
-        if self.groupSize(VarGroup.EPOCH_PARTIALS) > 0:
-
-            def prop_epoch(epoch):
-                sol = prop.propagate(
-                    state0,
-                    [epoch + t for t in tspan],
-                    params=params,
-                    varGroups=VarGroup.STATE,
-                )
-                return sol.y[:, -1]
-
-            num_epochPartials = numerics.derivative_multivar(
-                prop_epoch, tspan[0], initStep  # type: ignore
-            )
-        else:
-            num_epochPartials = np.array([])
-
-        # Compute parameter partials
-        if self.groupSize(VarGroup.PARAM_PARTIALS) > 0:
-
-            def prop_params(p):
-                sol = prop.propagate(state0, tspan, params=p, varGroups=VarGroup.STATE)
-                return sol.y[:, -1]
-
-            num_paramPartials = numerics.derivative_multivar(
-                prop_params, params, initStep  # type: ignore
-            )
-        else:
-            num_paramPartials = np.array([])
-
-        # Combine into flat vector
-        num_vec = np.concatenate(
-            (
-                num_stm.flatten(),
-                num_epochPartials.flatten(),
-                num_paramPartials.flatten(),
-            )
-        )
-
-        # Now compare
-        absDiff = abs(num_vec - sol_vec)
-        relDiff = absDiff.copy()
-        equal = True
-        varNames = np.concatenate([self.varNames(grp) for grp in allVars[1:]])
-        table = Table(
-            "Status",
-            "Name",
-            "Numeric",
-            "Analytic",
-            "Rel Err",
-            "Abs Err",
-            title="Partial Derivative Check",
-        )
-
-        for ix in range(sol_vec.size):
-            # Compute relative difference for non-zero numeric values
-            if abs(num_vec[ix]) > 1e-12:
-                relDiff[ix] = absDiff[ix] / abs(num_vec[ix])
-
-            relOk = abs(relDiff[ix]) <= rtol
-            rStyle = "i" if relOk else "u"
-            absOk = abs(absDiff[ix]) <= atol
-            aStyle = "i" if absOk else "u"
-
-            table.add_row(
-                "OK" if relOk or absOk else "ERR",
-                varNames[ix],
-                f"{num_vec[ix]:.4e}",
-                f"{sol_vec[ix]:.4e}",
-                f"[{rStyle}]{relDiff[ix]:.4e}[/{rStyle}]",
-                f"[{aStyle}]{absDiff[ix]:.4e}[/{aStyle}]",
-                style="blue" if relOk or absOk else "red",
-            )
-
-            if not (relOk or absOk):
-                equal = False
-
-        if printTable:
-            console.print(table)
-
-        return equal
 
     def extractGroup(
         self,
@@ -710,6 +555,161 @@ class AbstractDynamicsModel(ABC):
             [self.varNames(varTp) for varTp in util.toList(varGroups)]
         ).flatten()
         return allNames[ix]
+
+    def checkPartials(
+        self,
+        w0: FloatArray,
+        tspan: FloatArray,
+        params: Union[FloatArray, None] = None,
+        initStep: float = 1e-4,
+        rtol: float = 1e-6,
+        atol: float = 1e-8,
+        printTable: bool = True,
+    ) -> bool:
+        """
+        Check the partial derivatives included in the differential equations
+
+        Args:
+            w0: a full state vector (includes all VarGroup) for this model
+            tspan: a 2-element vector defining the start and end times
+                for numerical propagation
+            params: propagation parameters
+            initStep: the initial step size for the multivariate
+                numerical derivative function in :func:`numerics.derivative_multivar`
+            rtol: the numeric and analytical values are
+                equal when the absolute value of (numeric - analytic)/numeric
+                is less than ``rtol``
+            atol: the numeric and analytic values are equal
+                when the absolute value of (numeric - analytic) is less than ``atol``
+            printTable: whether or not to print a table of the
+                partial derivatives, their expected (numeric) and actual (analytic)
+                values, and the relative and absolute errors between the expected
+                and actual values.
+
+        Returns:
+            True if each partial derivative satisfies the relative *or*
+            absolute tolerance; False is returned if any of the partials fail
+            both tolerances.
+        """
+        from rich.table import Table
+
+        from medusa import console, numerics
+        from medusa.propagate import Propagator
+
+        allVars = [
+            VarGroup.STATE,
+            VarGroup.STM,
+            VarGroup.EPOCH_PARTIALS,
+            VarGroup.PARAM_PARTIALS,
+        ]
+
+        if not len(w0) == self.groupSize(allVars):
+            raise ValueError(
+                "w0 must define the full vector (STATE + STM + EPOCH_PARTIALS + PARAM_PARTIALS"
+            )
+
+        # TODO ensure tolerances are tight enough?
+        prop = Propagator(self, dense=False)
+        w0 = np.array(w0, copy=True)
+        state0 = self.extractGroup(w0, VarGroup.STATE, varGroupsIn=allVars)
+
+        solution = prop.propagate(w0, tspan, params=params, varGroups=allVars)
+        sol_vec = np.concatenate(
+            [
+                self.extractGroup(solution.y[:, -1], grp, varGroupsIn=allVars).flatten()
+                for grp in allVars[1:]
+            ]
+        )
+
+        # Compute state partials (STM)
+        def prop_state(y):
+            sol = prop.propagate(y, tspan, params=params, varGroups=VarGroup.STATE)
+            return sol.y[:, -1]
+
+        num_stm = numerics.derivative_multivar(prop_state, state0, initStep)
+
+        # Compute epoch partials
+        if self.groupSize(VarGroup.EPOCH_PARTIALS) > 0:
+
+            def prop_epoch(epoch):
+                sol = prop.propagate(
+                    state0,
+                    [epoch + t for t in tspan],
+                    params=params,
+                    varGroups=VarGroup.STATE,
+                )
+                return sol.y[:, -1]
+
+            num_epochPartials = numerics.derivative_multivar(
+                prop_epoch, tspan[0], initStep  # type: ignore
+            )
+        else:
+            num_epochPartials = np.array([])
+
+        # Compute parameter partials
+        if self.groupSize(VarGroup.PARAM_PARTIALS) > 0:
+
+            def prop_params(p):
+                sol = prop.propagate(state0, tspan, params=p, varGroups=VarGroup.STATE)
+                return sol.y[:, -1]
+
+            num_paramPartials = numerics.derivative_multivar(
+                prop_params, params, initStep  # type: ignore
+            )
+        else:
+            num_paramPartials = np.array([])
+
+        # Combine into flat vector
+        num_vec = np.concatenate(
+            (
+                num_stm.flatten(),
+                num_epochPartials.flatten(),
+                num_paramPartials.flatten(),
+            )
+        )
+
+        # Now compare
+        absDiff = abs(num_vec - sol_vec)
+        relDiff = absDiff.copy()
+        equal = True
+        varNames = np.concatenate([self.varNames(grp) for grp in allVars[1:]])
+        table = Table(
+            "Status",
+            "Name",
+            "Numeric",
+            "Analytic",
+            "Rel Err",
+            "Abs Err",
+            title="Partial Derivative Check",
+        )
+
+        for ix in range(sol_vec.size):
+            # Compute relative difference for non-zero numeric values
+            if abs(num_vec[ix]) > 1e-12:
+                relDiff[ix] = absDiff[ix] / abs(num_vec[ix])
+
+            relOk = abs(relDiff[ix]) <= rtol
+            rStyle = "i" if relOk else "u"
+            absOk = abs(absDiff[ix]) <= atol
+            aStyle = "i" if absOk else "u"
+
+            table.add_row(
+                "OK" if relOk or absOk else "ERR",
+                varNames[ix],
+                f"{num_vec[ix]:.4e}",
+                f"{sol_vec[ix]:.4e}",
+                f"[{rStyle}]{relDiff[ix]:.4e}[/{rStyle}]",
+                f"[{aStyle}]{absDiff[ix]:.4e}[/{aStyle}]",
+                style="blue" if relOk or absOk else "red",
+            )
+
+            if not (relOk or absOk):
+                equal = False
+
+        if printTable:
+            console.print(table)
+
+        return equal
 
 
 class ModelBlockCopyMixin:

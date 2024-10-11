@@ -139,7 +139,7 @@ class DynamicsModel(AbstractDynamicsModel):
 
     Args:
         body1: one of the two primary bodies
-        body2: the othe primary body
+        body2: the other primary body
 
     The two bodies are stored in :attr:`bodies` in order of decreassing mass.
     """
