@@ -153,7 +153,7 @@ def _getDefiningParent(meth):
         https://stackoverflow.com/questions/3589311/get-defining-class-of-unbound-method-object-in-python-3
     """
     if isinstance(meth, functools.partial):
-        return get_class_that_defined_method(meth.func)
+        return _getDefiningParent(meth.func)
     if inspect.ismethod(meth) or (
         inspect.isbuiltin(meth)
         and getattr(meth, "__self__", None) is not None
