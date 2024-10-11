@@ -117,7 +117,6 @@ Reference
 
 .. autoclass:: DynamicsModel
    :members:
-   :show-inheritance:
 
 """
 from collections.abc import Sequence

@@ -42,8 +42,12 @@ intersphinx_mapping = {
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
 }
 
+autodoc_default_options = {
+    "member-order": "bysource",
+    "show-inheritance": True,
+}
+
 autoclass_content = "both"
-autodoc_member_order = "bysource"
 autodoc_typehints = "description"
 autosummary_generate = True
 
@@ -98,6 +102,7 @@ def annotateOverride(app, what, name, obj, skip, lines):
     See: https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#docstring-preprocessing
 
     .. _PEP 698: https://peps.python.org/pep-0698/
+    .. _overrides: https://github.com/mkorpela/overrides
     """
 
     # Only proceed if show-inheritance is set to True
@@ -134,6 +139,7 @@ def annotateOverride(app, what, name, obj, skip, lines):
                     if hasattr(supercls, overrider.__name__):
                         ref = _objRef(what)
                         overrideStr += f":{ref}:`{supercls.__module__}.{supercls.__name__}.{overrider.__name__}`"
+                        break
         except Exception:
             overrideStr += "*??*"  # could not determine object being overriden
 

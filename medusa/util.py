@@ -9,6 +9,9 @@ Miscellaneous utility functions.
    toList
    toArray
 
+Reference
+-----------
+
 .. autofunction:: float_eq
 .. autofunction:: toList
 .. autofunction:: toArray

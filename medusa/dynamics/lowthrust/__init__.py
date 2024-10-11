@@ -325,6 +325,7 @@ Reference
 
 .. autoclass:: ControlLaw
    :members:
+   :show-inheritance:
 
 .. autoclass:: SeparableControlLaw
    :members:
@@ -332,6 +333,7 @@ Reference
 
 .. autoclass:: ControlTerm
    :members:
+   :show-inheritance:
 
 .. autoclass:: ConstThrustTerm
    :members:
@@ -339,7 +341,7 @@ Reference
 
 .. autoclass:: ConstMassTerm
    :members:
-   :show-inheritance:   
+   :show-inheritance:
 
 .. autoclass:: ConstOrientTerm
    :members:

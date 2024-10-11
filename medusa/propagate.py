@@ -4,10 +4,34 @@ Propagation
 
 Propagation, or numerical integration, is one of the core components of the 
 library. The :func:`scipy.integrate.solve_ivp` function does the bulk of the
-heavy lifting, with the :class:`Propagator` class providing more convenient 
-data storage and functions.
+heavy lifting, with the :class:`Propagator` class providing convenient data
+storage and functions for astrodynamics applications.
 
-.. autosummary:: Propagator
+A propagator is created for a single dynamical model. After construction, the
+propagator can be called many times with different initial conditions, time spans,
+and/or parameters.
+
+.. code-block:: python
+
+   model = MyModel(...)
+   prop = Propagator(model)
+
+   w0 = [0.98, 0.0, 0.0, 0.0, 1.2, 0.0]
+   tspan = [0.0, 3.14]
+   sol = prop.propagate(w0, tspan)
+   sol2 = prop.propagate(w0, [0.0, 6.28])
+
+The output from the :func:`~Propagator.propagate` function is a "bunch object"
+with a number of fields (see the :func:`scipy.integrate.solve_ivp` method for
+details) including ``t``, the time points along the arc, and ``y``, the values of the
+solution at the time points. The ``Propagator`` object adds three fields: ``model``,
+``params``, and ``varGroups`` to capture the full set of inputs needed to recreate
+the propagated solution.
+
+.. autosummary::
+   Propagator
+   Propagator.propagate
+
 
 Events
 ------
@@ -17,11 +41,22 @@ The :class:`AbstractEvent` class provides a generic interface for event
 definitions with a variety of common event types defined.
 
 .. autosummary::
-   AbstractEvent
+   :nosignatures:
+
    ApseEvent
    BodyDistanceEvent
    DistanceEvent
    VariableValueEvent
+
+Events are added to the propagation by setting or modifying the ``events``
+attribute of the propagator,
+
+.. code-block:: python
+
+   # Stop the propagation at an apse relative to the first primary
+   prop.events.append(ApseEvent(model, 0, terminal=True))
+
+.. warning:: This event-specification API will change
 
 
 Reference
@@ -35,19 +70,15 @@ Reference
 
 .. autoclass:: ApseEvent
    :members:
-   :show-inheritance:
 
 .. autoclass:: BodyDistanceEvent
    :members:
-   :show-inheritance:
 
 .. autoclass:: DistanceEvent
    :members:
-   :show-inheritance:
 
 .. autoclass:: VariableValueEvent
    :members:
-   :show-inheritance:
 
 """
 import logging
@@ -101,13 +132,15 @@ class Propagator(ModelBlockCopyMixin):
         if not isinstance(model, AbstractDynamicsModel):
             raise ValueError("model must be derived from AbstractDynamicsModel")
 
+        self.model: AbstractDynamicsModel = model  #: dynamics model
         self.method: str = method  #: the numerical integration method
+        self.dense: bool = dense  #: whether or not to output dense propagation data
         self.atol: float = atol  #: absolute tolerance
         self.rtol: float = rtol  #: relative tolerance
-        self.model: AbstractDynamicsModel = model  #: dynamics model
-        self.dense: bool = dense  #: whether or not to output dense propagation data
         self.events: list[AbstractEvent] = []  #: integration events
 
+    # TODO need a way to pass events to the propagation dynamically, without
+    #   modifying the propagator
     def propagate(
         self,
         w0: FloatArray,
@@ -133,7 +166,17 @@ class Propagator(ModelBlockCopyMixin):
         Returns:
             scipy.optimize.OptimizeResult: the output of the
             :func:`~scipy.integrate.solve_ivp` function. This includes the times,
-            states, event data, and other integration metadata.
+            states, event data, and other integration metadata. See the ``solve_ivp``
+            documentation for a full list of the data fields in the output.
+
+            This function appends three fields to the output:
+
+            - ``model`` (:class:`~medusa.dynamics.AbstractModel`): the model from
+              the propagation. This is *not* a copy, it is a reference to the model
+              passed to the constructor.
+            - ``params``: a copy of the ``params`` passed into the function
+            - ``varGroups`` (:class:`tuple`): the variable groups passed into
+              the function.
 
         Raises:
             RuntimeError: if ``varGroups`` is not valid for the propagation as
@@ -216,6 +259,26 @@ class AbstractEvent(ABC):
             the event is only triggered when ``eval`` moves from positive to
             negative values. A positive value triggers in the opposite direction,
             and ``0`` will trigger the event in either direction.
+
+    Per the :func:`scipy.integrate.solve_ivp` documentation, an event is a
+    function that:
+
+    - has a signature ``event(t, y)``; additional arguments must be in the ``args``
+      input to the ``solve_ivp`` function.
+    - returns a :class:`float`
+    - *might* have a ``terminal`` attribute that dictates the propagation
+      termination behavior
+    - *might* have a ``direction`` attribute that dictates the direction of
+      a zero crossing.
+
+    This interface provides the :func:`eval` function to serve as this function.
+    The :func:`Propagator.propagate` function passes a :class:`tuple` of
+    :class:`~medusa.dynamics.VarGroup` and a sequence of parameter values in the
+    ``args`` argument to the ``solve_ivp`` function. Accordingly, :func:`eval`
+    includes those two extra arguments in its signature. The :attr:`terminal`
+    and :attr:`direction` attributes are added to the function object by the
+    :func:`assignEvalAttr` method, which is called automatically by
+    :func:`Propagator.propagate`.
     """
 
     def __init__(self, terminal: bool = False, direction: float = 0.0) -> None:
@@ -239,7 +302,11 @@ class AbstractEvent(ABC):
     def assignEvalAttr(self) -> None:
         """
         Must be called before starting propagation so that the
-        :attr:`terminal` and :attr:`direction` values take effect
+        :attr:`terminal` and :attr:`direction` values take effect.
+
+        .. note::
+           The user does not need to call this method; it is called automatically
+           before each propagation by the :func:`Propagator.propagate` function.
         """
         self.eval.__func__.terminal = self.terminal  # type: ignore
         self.eval.__func__.direction = self.direction  # type: ignore

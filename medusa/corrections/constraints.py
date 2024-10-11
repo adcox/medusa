@@ -16,19 +16,15 @@ Reference
 
 .. autoclass:: Angle
    :members:
-   :show-inheritance:
 
 .. autoclass:: Inequality
    :members:
-   :show-inheritance:
 
 .. autoclass:: StateContinuity
    :members:
-   :show-inheritance:
 
 .. autoclass:: VariableValue
    :members:
-   :show-inheritance:
 
 """
 from __future__ import annotations

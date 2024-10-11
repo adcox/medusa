@@ -3,7 +3,7 @@ Differential Corrections
 ========================
 
 This module provides objects to define the differential corrections problem,
-its constraints, and solver objects
+its constraints, and solver objects.
 
 Defining a Problem
 ------------------
@@ -48,7 +48,8 @@ Constraints
 
 Constraints are added to the differential corrections problem. An abstract
 class is defined within this module to provide the framework for other constraints.
-See the :doc:`constraints` documentation for a list of the provided constraints.
+See the :doc:`corrections.constraints` documentation for a list of the provided 
+constraints.
 
 .. autosummary:: AbstractConstraint
 
@@ -105,7 +106,6 @@ Reference
 
 .. autoclass:: ShootingProblem
    :members:
-   :show-inheritance:
 
 """
 
@@ -647,19 +647,6 @@ class Segment:
 class CorrectionsProblem:
     """
     Defines a mathematical problem to be solved by a corrections algorithm
-
-    Attributes:
-        freeVarIndexMap (dict): maps the first index (:class:`int`) of a variable
-            within ``freeVarVec`` to the corresponding :class:`Variable` object.
-        constraintIndexMap (dict): maps the first index (:class:`int`) of the
-            constraint equation(s) in ``constraintVec`` to the corresponding
-            :class:`AbstractConstraint` object.
-        freeVarVec (numpy.ndarray<float>): N-element free variable vector
-        constraintVec (numpy.ndarray<float>): M-element constraint vector
-        jacobian (numpy.ndarray<float>): MxN Jacobian matrix. Each row contains
-            the partial derivatives of a constraint equation with respect to
-            the free variable vector. Thus, rows correspond to constraints and
-            columns correspond to free variables.
     """
 
     def __init__(self) -> None:
@@ -712,11 +699,11 @@ class CorrectionsProblem:
         and :func:`jacobian`.
 
         Args:
-            variable (Variable, [Variable]): one or more variables to add.
-                Variables are stored by reference (they are not copied).
+            variable: one or more variables to add. Variables are stored by
+                reference (they are not copied).
 
         Raises:
-            ValueError: if any of the inputs are not :class:`Variable: objects
+            ValueError: if any of the inputs are not :class:`Variable` objects
         """
         for var in util.toList(variable):
             if not isinstance(var, Variable):
@@ -784,8 +771,8 @@ class CorrectionsProblem:
         Get the free variable vector
 
         Returns:
-            the free variable vector. This result is cached
-            until the free variables are updated.
+            the free variable vector. This result is cached until the free
+            variables are updated.
         """
         if self._freeVarVec is None:
             self._freeVarVec = np.zeros((self.numFreeVars,))

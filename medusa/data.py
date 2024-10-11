@@ -2,13 +2,17 @@
 Data
 ====
 
-This module defines a few constants and the :class:`Body` class which stores data
-about a celestial body (planet, moon, star, etc.)
+This module defines several constants,
 
 .. autosummary::
+   :nosignatures:
+
    GRAV_PARAM
    G_MEAN_EARTH
-   Body
+
+A :class:`Body` class is also defined to store data about a celestial object
+such as a planet, moon, or star.
+
 
 Reference
 ---------

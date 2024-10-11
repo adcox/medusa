@@ -141,7 +141,7 @@ and attributes of the model,
    ~AbstractDynamicsModel.charL
    ~AbstractDynamicsModel.charT
    ~AbstractDynamicsModel.charM
-   ~AbstractDynamicsModel.isEpochIndependent
+   ~AbstractDynamicsModel.epochIndependent
 
 Finally, a convenience method to check the partial derivatives included in the
 differential equations is provided. This method is primarily for debugging purposes
@@ -170,7 +170,6 @@ Reference
 
 .. autoclass:: VarGroup
    :members:
-   :show-inheritance:
 
 .. autoclass:: AbstractDynamicsModel
    :members:
