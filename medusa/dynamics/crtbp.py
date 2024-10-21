@@ -201,6 +201,106 @@ class DynamicsModel(AbstractDynamicsModel):
         else:
             return super().varNames(varGroup)  # defaults are fine for the rest
 
+    # TODO njit?
+    def equilibria(self, tol: float = 1e-12) -> NDArray[np.double]:
+        """
+        Get equilibrium points
+
+        TODO document in module docs
+        """
+        # TODO unit test
+        mu = self._properties["mu"]
+
+        pts = np.asarray(
+            [
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0.5 - mu, np.sin(np.pi / 3), 0],
+                [0.5 - mu, -np.sin(np.pi / 3), 0],
+            ]
+        )
+
+        # Solver for L1
+        #   Initial guess for g from Szebehely
+        g, g_prev = (mu / (3 * (1 - mu))) ** (1.0 / 3.0), -999
+        while abs(g - g_prev) > tol:
+            g_prev = g
+            g = g - ((mu / (g**2)) - (1.0 - mu) / (1.0 - g) ** 2 - g - mu + 1.0) / (
+                -2 * mu / g**3 - 2 * (1.0 - mu) / (1.0 - g) ** 3 - 1.0
+            )
+        pts[0, 0] = 1.0 - mu - g
+
+        # Solver for L2
+        #   Initial guess for g from Szebehely
+        g, g_prev = (mu / (3 * (1 - mu))) ** (1.0 / 3.0), -999
+        while abs(g - g_prev) > tol:
+            g_prev = g
+            g = g - (-mu / g**2 - (1 - mu) / (1 + g) ** 2 - mu + 1 + g) / (
+                2 * mu / g**3 + 2 * (1 - mu) / (1 + g) ** 3 + 1
+            )
+        pts[1, 0] = 1.0 - mu + g
+
+        # Solver for L3
+        #   Initial guess for g from Szebehely
+        g, g_prev = 1.0 - 7 * mu / 12.0, -999
+        while abs(g - g_prev) > tol:
+            g_prev = g
+            g = g - (mu / (-1 - g) ** 2 + (1 - mu) / g**2 - mu - g) / (
+                -2 * mu / (1 + g) ** 3 - 2 * (1 - mu) / g**3 - 1
+            )
+        pts[2, 0] = -mu - g
+
+        return pts
+
+    # TODO njit?
+    def pseudopotential(self, w: FloatArray) -> float:
+        """
+        Compute the pseudopotential
+
+        TODO document in module docs
+        """
+        # TODO unit test
+        mu = self._properties["mu"]
+        r13 = np.sqrt((w[0] + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
+        r23 = np.sqrt((w[0] - 1 + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
+        return (1 - mu) / r13 + mu / r23 + (w[0] ** 2 + w[1] ** 2) / 2
+
+    def partials_pseudopot_wrt_position(self, w: FloatArray) -> NDArray[np.double]:
+        """
+        Compute the partial derivatives of the pseudo potential with respect to
+        the position states
+        """
+        # TODO unit test
+        mu = self._properties["mu"]
+        r13 = np.sqrt((w[0] + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
+        r23 = np.sqrt((w[0] - 1 + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
+        r23_3 = r23 * r23 * r23
+        r13_3 = r13 * r13 * r13
+
+        return np.asarray(
+            [
+                [
+                    w[0]
+                    - (1 - mu) * (w[0] + mu) / r13_3
+                    - mu * (w[0] - 1 + mu) / r23_3,
+                    w[1] - (1 - mu) * w[1] / r13_3 - mu * w[1] / r23_3,
+                    -(1 - mu) * w[2] / r13_3 - mu * w[2] / r23_3,
+                ]
+            ]
+        )
+
+    # TODO njit?
+    def jacobi(self, w: FloatArray) -> float:
+        """
+        Compute the Jacobi constant
+
+        TODO document in module docs
+        """
+        # TODO unit test
+        U = self.pseudopotential(w)
+        return 2 * U - (w[3] ** 2 + w[4] ** 2 + w[5] ** 2)
+
     # To work with numba.njit, primitive types are enforced for most arguments
     @staticmethod
     @njit
@@ -210,9 +310,9 @@ class DynamicsModel(AbstractDynamicsModel):
         qdot = np.zeros(q.shape)
 
         # Pre-compute some values; multiplication is faster than exponents
-        r13 = np.sqrt((q[0] + mu) * (q[0] + mu) + q[1] * q[1] + q[2] * q[2])
-        r23 = np.sqrt((q[0] - 1 + mu) * (q[0] - 1 + mu) + q[1] * q[1] + q[2] * q[2])
         omm = 1 - mu
+        r13 = np.sqrt((q[0] + mu) * (q[0] + mu) + q[1] * q[1] + q[2] * q[2])
+        r23 = np.sqrt((q[0] - omm) * (q[0] - omm) + q[1] * q[1] + q[2] * q[2])
         r23_3 = r23 * r23 * r23
         r13_3 = r13 * r13 * r13
 
