@@ -202,13 +202,13 @@ class DynamicsModel(AbstractDynamicsModel):
             return super().varNames(varGroup)  # defaults are fine for the rest
 
     # TODO njit?
+    # TODO cache?
     def equilibria(self, tol: float = 1e-12) -> NDArray[np.double]:
         """
         Get equilibrium points
 
         TODO document in module docs
         """
-        # TODO unit test
         mu = self._properties["mu"]
 
         pts = np.asarray(
@@ -260,7 +260,6 @@ class DynamicsModel(AbstractDynamicsModel):
 
         TODO document in module docs
         """
-        # TODO unit test
         mu = self._properties["mu"]
         r13 = np.sqrt((w[0] + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
         r23 = np.sqrt((w[0] - 1 + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
@@ -271,7 +270,6 @@ class DynamicsModel(AbstractDynamicsModel):
         Compute the partial derivatives of the pseudo potential with respect to
         the position states
         """
-        # TODO unit test
         mu = self._properties["mu"]
         r13 = np.sqrt((w[0] + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
         r23 = np.sqrt((w[0] - 1 + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
