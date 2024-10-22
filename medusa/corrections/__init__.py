@@ -1481,8 +1481,8 @@ class DifferentialCorrector:
         #: representing the change in the free variable vector.
         self.updateGenerator = MinimumNormUpdate()
 
-        # TODO document
-        self.log = {}
+        #: A perisistent log; reset and populated every time :func:`solve` is run.
+        self.log: dict[str, object] = {}
 
     def _validateArgs(self) -> None:
         """
@@ -1533,7 +1533,7 @@ class DifferentialCorrector:
         Returns:
             A tuple with two elements. The first is a :class:`CorrectionsProblem`
             that stores the solution after the final iteration of the solver. The
-            second is a :class:`dict` with the following keywords:
+            second is a logging :class:`dict` with the following keywords:
 
             - ``status`` (:class:`str`): the status of the solver after the final
               iteration. Can be "empty" if the problem contained no free variables
@@ -1543,6 +1543,9 @@ class DifferentialCorrector:
             - ``iterations`` (:class:`list`): a list of `dict`; each dict represents
               an iteration of the solver and includes a copy of the free variable
               vector and the constraint vector.
+
+            The log from the most recent call to ``solve`` is stored in :attr:`log`
+            in case the solver encounters an error and does not return the log.
         """
         tolA = 1e-12  # tolerance for spurious convergence; TODO user set
         self._validateArgs()
@@ -1550,7 +1553,7 @@ class DifferentialCorrector:
         solution = deepcopy(problem)
         # TODO clear all caches in solution
 
-        self.log = {"status": "", "iterations": []}
+        self.log = {"status": "", "iterations": [], "lineSearch": lineSearch}
 
         if solution.numFreeVars == 0 or solution.numConstraints == 0:
             self.log["status"] = "empty"
