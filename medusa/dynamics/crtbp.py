@@ -101,6 +101,7 @@ In this notation, :math:`\Omega` is the "pseudo-potential" function,
 .. math::
    \Omega = \\frac{1-\mu}{r_{13}} + \\frac{\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2),
 
+available via :func:`~DynamicsModel.pseudopotential`,
 and the subscripts denote second-order partial derivatives with respect to the
 position state variables,
 
@@ -111,6 +112,7 @@ position state variables,
    \Omega_{xy} = \Omega_{yx} = \\frac{\partial^2 \Omega}{\partial x \partial y} &= \\frac{3(1 - \mu)(x + \mu)y}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)y}{r_{23}^5}\\\\
    \Omega_{xz} = \Omega_{zx} = \\frac{\partial^2 \Omega}{\partial x \partial z} &= \\frac{3(1 - \mu)(x + \mu)z}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)z}{r_{23}^5}\\\\
    \Omega_{yz} = \Omega_{zy} = \\frac{\partial^2 \Omega}{\partial y \partial z} &= \\frac{3(1 - \mu)yz}{r_{13}^5} + \\frac{3\mu yz}{r_{23}^5}
+
 
 Reference
 ===========
@@ -201,14 +203,75 @@ class DynamicsModel(AbstractDynamicsModel):
         else:
             return super().varNames(varGroup)  # defaults are fine for the rest
 
-    # TODO njit?
-    # TODO cache?
     def equilibria(self, tol: float = 1e-12) -> NDArray[np.double]:
         """
-        Get equilibrium points
+        Compute the locations of the equilibrium solutions for this model.
 
-        TODO document in module docs
+        The CR3BP has five equilibrium solutions, also named "Lagrange Points"
+        and numbered L1, L2, L3, L4, and L5. The first three points exist
+        on the rotating x-axis and are sometimes called the "colinear points."
+        The L4 and L5 solutions are located at the tips of equilateral triangles
+        with vertices at the two primaries.
+
+        Args:
+            tol: tolerance for the Newton-Raphson scheme
+
+        Returns:
+            a 5x3 array locating the equilibrium solutions in space.
+
+        **Algorithm**
+
+        The triangular points are easily computed analytically,
+
+        .. math::
+           \\vec{r}_{L4} &= \\begin{Bmatrix} 1/2 - \mu & \sqrt{3}/2 & 0 \\end{Bmatrix}\\\\
+           \\vec{r}_{L5} &= \\begin{Bmatrix} 1/2 - \mu & -\sqrt{3}/2 & 0 \\end{Bmatrix}
+
+        The colinear points cannot be located analytically and are instead located
+        via a numerical Newton-Raphson scheme. All three solutions satisfy the
+        equation,
+
+        .. math::
+           x - (1-\mu)\\frac{x + \mu}{A(x+\mu)^3} - \mu\\frac{x - 1 + \mu}{B(x-1+\mu)^3} = 0
+
+        where :math:`A = \mathrm{sgn}(x+\mu)` and :math:`B = \mathrm{sgn}(x - 1 + \mu)`.
+        To quickly solve for the location of each point, a coordinate :math:`\gamma`
+        is defined for each case and substituted into the equation above, along
+        with the appropriate signs for :math:`A` and :math:`B`. The iterative
+        algorithm,
+
+        .. math::
+           \gamma_{n+1} = \gamma_n - \\frac{f(\gamma)}{f'(\gamma)}
+
+        is then used to solve for :math:`\gamma` in each case. The iterations
+        stop when :math:`\gamma_{n+1} - \gamma_n \leq \epsilon` where
+        :math:`\epsilon` is the ``tol`` value provided.
+
+        .. list-table::
+           :header-rows: 1
+
+           * - Solution
+             - Location
+             - A
+             - B
+             - Substitution
+           * - L1
+             - :math:`-\mu < x \leq 1 - \mu`
+             - 1
+             - -1
+             - :math:`x = 1 - \mu - \gamma`
+           * - L2
+             - :math:`1 - \mu < x < \infty`
+             - 1
+             - 1
+             - :math:`x = 1 - \mu + \gamma`
+           * - L3
+             - :math:`-\infty < x < -\mu`
+             - -1
+             - -1
+             - :math:`x = -\mu - \gamma`
         """
+        # TODO document in module docs
         mu = self._properties["mu"]
 
         pts = np.asarray(
@@ -253,13 +316,21 @@ class DynamicsModel(AbstractDynamicsModel):
 
         return pts
 
-    # TODO njit?
     def pseudopotential(self, w: FloatArray) -> float:
         """
         Compute the pseudopotential
 
-        TODO document in module docs
+        .. math::
+           \Omega = \\frac{1-\mu}{r_{13}} + \\frac{\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2)
+
+        Args:
+            w: a state vector that includes at least the three position variables
+
+        Returns:
+            the value of the pseudopotential at the provided position
         """
+        # TODO document in module docs
+
         mu = self._properties["mu"]
         r13 = np.sqrt((w[0] + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
         r23 = np.sqrt((w[0] - 1 + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
@@ -269,6 +340,14 @@ class DynamicsModel(AbstractDynamicsModel):
         """
         Compute the partial derivatives of the pseudo potential with respect to
         the position states
+
+        Args:
+            w: a state vector that includes at least the three position variables
+
+        Returns:
+            The partial derivative of the pseudopotential with respect to the
+            position variables. The partial derivatives with respect to the
+            velocity variables are zero.
         """
         mu = self._properties["mu"]
         r13 = np.sqrt((w[0] + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
@@ -288,16 +367,23 @@ class DynamicsModel(AbstractDynamicsModel):
             ]
         )
 
-    # TODO njit?
     def jacobi(self, w: FloatArray) -> float:
         """
         Compute the Jacobi constant
 
-        TODO document in module docs
+        .. math::
+           E &= 2\Omega - v^2\\\\
+             &= 2\\frac{1-\mu}{r_{13}} + 2\\frac{\mu}{r_{23}} + x^2 + y^2 - \dot{x}^2 - \dot{y}^2 - \dot{z}^2
+
+        Args:
+            w: a state vector that includes at least the core state (position and
+                velocity) coordinates
+
+        Returns:
+            the value of the Jacobi constant at the provided state
         """
-        # TODO unit test
         U = self.pseudopotential(w)
-        return 2 * U - (w[3] ** 2 + w[4] ** 2 + w[5] ** 2)
+        return float(2 * U - (w[3] ** 2 + w[4] ** 2 + w[5] ** 2))
 
     # To work with numba.njit, primitive types are enforced for most arguments
     @staticmethod
