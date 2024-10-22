@@ -188,6 +188,7 @@ from numpy.typing import ArrayLike, NDArray
 from medusa import util
 from medusa.data import Body
 from medusa.typing import FloatArray
+from medusa.units import Quant
 
 logger = logging.getLogger(__name__)
 
@@ -273,9 +274,9 @@ class AbstractDynamicsModel(ABC):
         self._properties = {**properties}
 
         # Define default characteristic quantities as unity
-        self._charL = 1.0  # km
-        self._charT = 1.0  # sec
-        self._charM = 1.0  # kg
+        self._charL = Quant(1.0, "km")
+        self._charT = Quant(1.0, "sec")
+        self._charM = Quant(1.0, "kg")
 
     def __eq__(self, other: object) -> bool:
         """
@@ -307,18 +308,18 @@ class AbstractDynamicsModel(ABC):
         return copy(self._properties)
 
     @property
-    def charL(self) -> float:
-        """A characteristic length (km) used to nondimensionalize lengths"""
+    def charL(self) -> Quant:
+        """A characteristic length used to nondimensionalize lengths"""
         return self._charL
 
     @property
-    def charT(self) -> float:
-        """A characteristic time (sec) used to nondimensionalize times"""
+    def charT(self) -> Quant:
+        """A characteristic time used to nondimensionalize times"""
         return self._charT
 
     @property
-    def charM(self) -> float:
-        """A characteristic mass (kg) used to nondimensionalize masses"""
+    def charM(self) -> Quant:
+        """A characteristic mass used to nondimensionalize masses"""
         return self._charM
 
     @property

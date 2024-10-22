@@ -154,7 +154,7 @@ class DynamicsModel(AbstractDynamicsModel):
         secondary = body2 if body1.gm > body2.gm else body1
         totalGM = primary.gm + secondary.gm
 
-        super().__init__(primary, secondary, mu=secondary.gm / totalGM)
+        super().__init__(primary, secondary, mu=(secondary.gm / totalGM).magnitude)
 
         self._charL = secondary.sma
         self._charM = totalGM / GRAV_PARAM

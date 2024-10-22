@@ -29,16 +29,19 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from typing import Union
 
+from pint import Quantity
+
+from .units import deg, kg, km, sec
 from .util import float_eq
 
 # ------------------------------------------------------------------------------
 # Constants
 
-GRAV_PARAM = 6.67384e-20
-""": Universal gravitational constant (km**3/kg-s**2)"""
+GRAV_PARAM = 6.67384e-20 * km**3 / (kg * sec**2)
+""": Universal gravitational constant"""
 
-G_MEAN_EARTH = 9.80665e-3
-""": Mean Earth gravity (km/s**2)"""
+G_MEAN_EARTH = 9.80665e-3 * km / (sec**2)
+""": Mean Earth gravity"""
 
 
 class Body:
@@ -47,12 +50,12 @@ class Body:
 
     Args:
         name: Body name
-        gm: gravitational parameter (km**2/sec**3)
-        sma: orbital semimajor axis (km)
+        gm: gravitational parameter
+        sma: orbital semimajor axis
         ecc: orbital eccentricity
-        inc: orbital inclination w.r.t. Earth Equatorial J2000 (deg)
+        inc: orbital inclination w.r.t. Earth Equatorial J2000
         raan: right ascenscion of the ascending node w.r.t.
-            Earth Equatorial J2000 (deg)
+            Earth Equatorial J2000
         spiceId: SPICE ID for this body
         parentId: SPICE ID for the body this body orbits. Set to
             ``None`` if there is no parent body
@@ -61,34 +64,34 @@ class Body:
     def __init__(
         self,
         name: str,
-        gm: float,
-        sma: float = 0.0,
-        ecc: float = 0.0,
-        inc: float = 0.0,
-        raan: float = 0.0,
+        gm: Quantity,
+        sma: Quantity = 0.0 * km,
+        ecc: Quantity = Quantity(0.0),
+        inc: Quantity = 0.0 * deg,
+        raan: Quantity = 0.0 * deg,
         spiceId: int = 0,
         parentId: Union[int, None] = None,
     ) -> None:
         #: Body name
-        self.name = name
+        self.name: str = name
 
         #: Gravitational parameter (km**2/sec**3)
-        self.gm = float(gm)
+        self.gm: Quantity = gm
 
         #: orbital semimajor axis (km)
-        self.sma = float(sma)
+        self.sma: Quantity = sma
 
         #: orbital eccentricity
-        self.ecc = float(ecc)
+        self.ecc: Quantity = ecc
 
         #: orbital inclination w.r.t. Earth equatorial J2000 (deg)
-        self.inc = float(inc)
+        self.inc: Quantity = inc
 
         #: right ascension of the ascending node w.r.t. Earth equatorial J2000 (deg)
-        self.raan = float(raan)
+        self.raan: Quantity = raan
 
         #: SPICE ID for this body
-        self.id = int(spiceId)
+        self.id: int = spiceId
 
         #: SPICE ID for body this one orbits; set to ``None`` if there is no parent
         self.parentId = parentId
@@ -131,11 +134,11 @@ class Body:
 
                 return Body(
                     name,
-                    float(_expect(data, "gm")),
-                    sma=float(_expect(data, "circ_r")),
-                    ecc=0.0,  # TODO why is this not read from data??
-                    inc=float(_expect(data, "inc")),
-                    raan=float(_expect(data, "raan")),
+                    Quantity(float(_expect(data, "gm")), km**2 / sec**3),
+                    sma=Quantity(float(_expect(data, "circ_r")), km),
+                    ecc=Quantity(0.0),  # TODO why is this not read from data??
+                    inc=Quantity(float(_expect(data, "inc")), deg),
+                    raan=Quantity(float(_expect(data, "raan")), deg),
                     spiceId=int(_expect(data, "id")),
                     parentId=pid,
                 )

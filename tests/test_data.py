@@ -5,6 +5,7 @@ import pytest
 from conftest import BODY_XML
 
 from medusa.data import Body
+from medusa.units import Quant, deg, km, rad, sec
 
 # ------------------------------------------------------------------------------
 # Tests for Body
@@ -12,7 +13,7 @@ from medusa.data import Body
 
 def test_constructor_min():
     name = "Midgard"
-    gm = 5.6e5
+    gm = 5.6e5 * km**2 / sec**3
 
     body = Body(name, gm)
     assert body.name == name
@@ -25,14 +26,14 @@ def test_constructor_min():
 
 def test_constructor_opts():
     opts = {
-        "sma": 1.0e5,
+        "sma": 1.0e5 * km,
         "ecc": 0.3,
-        "inc": 0.1,
-        "raan": 0.6,
+        "inc": 0.1 * rad,
+        "raan": 0.6 * rad,
         "spiceId": 3,
         "parentId": 10,
     }
-    body = Body("Test", 3.2e5, **opts)
+    body = Body("Test", 3.2e5 * km**2 / sec**3, **opts)
 
     for opt, val in opts.items():
         attr = "id" if opt == "spiceId" else opt
@@ -46,7 +47,7 @@ def test_readXML(name):
     assert body.name == name
 
     for attr in ("gm", "sma", "ecc", "inc", "raan"):
-        assert isinstance(getattr(body, attr), float)
+        assert isinstance(getattr(body, attr), Quant)
 
     assert isinstance(body.id, int)
     assert isinstance(body.parentId, int) or body.parentId is None
@@ -66,13 +67,14 @@ ssb = Body.fromXML(BODY_XML, "Solar System Barycenter")
 @pytest.mark.parametrize(
     "b1, b2, tf",
     [
-        (earth, earth, True),
-        (earth, moon, False),
-        (sun, sun, True),
-        (ssb, ssb, True),
-        (sun, ssb, False),
-        (earth, "Earth", False),
+        ("Earth", "Earth", True),
+        ("Earth", "Moon", False),
+        ("Sun", "Sun", True),
+        ("Solar System Barycenter", "Solar System Barycenter", True),
+        ("Sun", "Solar System Barycenter", False),
     ],
 )
 def test_equal(b1, b2, tf):
+    b1 = Body.fromXML(BODY_XML, b1)
+    b2 = Body.fromXML(BODY_XML, b2)
     assert (b1 == b2) == tf

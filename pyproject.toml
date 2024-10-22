@@ -29,6 +29,7 @@ dependencies = [
     "numba",
     "scipy",
     "rich",
+    "pint",
     "overrides; python_version < '3.12'",
 ]
 
