@@ -310,14 +310,21 @@ class DynamicsModel(AbstractDynamicsModel):
         # Pre-compute some values; multiplication is faster than exponents
         omm = 1 - mu
         r13 = np.sqrt((q[0] + mu) * (q[0] + mu) + q[1] * q[1] + q[2] * q[2])
-        r23 = np.sqrt((q[0] - omm) * (q[0] - omm) + q[1] * q[1] + q[2] * q[2])
-        r23_3 = r23 * r23 * r23
         r13_3 = r13 * r13 * r13
 
+        r23 = np.sqrt((q[0] - omm) * (q[0] - omm) + q[1] * q[1] + q[2] * q[2])
+        r23_3 = r23 * r23 * r23
+
+        # -----------------------------
         # State variable derivatives
+        # -----------------------------
+
+        # position derivative = velocity state
         qdot[:3] = q[3:6]
+
+        # velocity derivative
         qdot[3] = (
-            2 * q[4] + q[0] - omm * (q[0] + mu) / r13_3 - mu * (q[0] - omm) / r23_3
+            q[0] + 2 * q[4] - omm * (q[0] + mu) / r13_3 - mu * (q[0] - omm) / r23_3
         )
         qdot[4] = q[1] - 2 * q[3] - omm * q[1] / r13_3 - mu * q[1] / r23_3
         qdot[5] = -omm * q[2] / r13_3 - mu * q[2] / r23_3
@@ -328,66 +335,51 @@ class DynamicsModel(AbstractDynamicsModel):
             r23_5 = r23_3 * r23 * r23
 
             # Compute the pseudopotential Jacobian
-            #   U = [Uxx, Uyy, Uzz, Uxy, Uxz, Uyz]
-            U = np.zeros((6,))
-
-            U[0] = (
+            Uxx = (
                 1
                 - omm / r13_3
                 - mu / r23_3
                 + 3 * omm * (q[0] + mu) * (q[0] + mu) / r13_5
                 + 3 * mu * (q[0] - omm) * (q[0] - omm) / r23_5
             )
-            U[1] = (
+            Uyy = (
                 1
                 - omm / r13_3
                 - mu / r23_3
                 + 3 * omm * q[1] * q[1] / r13_5
                 + 3 * mu * q[1] * q[1] / r23_5
             )
-            U[2] = (
+            Uzz = (
                 -omm / r13_3
                 - mu / r23_3
                 + 3 * omm * q[2] * q[2] / r13_5
                 + 3 * mu * q[2] * q[2] / r23_5
             )
-            U[3] = (
+            Uxy = (
                 3 * omm * (q[0] + mu) * q[1] / r13_5
                 + 3 * mu * (q[0] - omm) * q[1] / r23_5
             )
-            U[4] = (
+            Uxz = (
                 3 * omm * (q[0] + mu) * q[2] / r13_5
                 + 3 * mu * (q[0] - omm) * q[2] / r23_5
             )
-            U[5] = 3 * omm * q[1] * q[2] / r13_5 + 3 * mu * q[1] * q[2] / r23_5
+            Uyz = 3 * omm * q[1] * q[2] / r13_5 + 3 * mu * q[1] * q[2] / r23_5
 
             # Compute STM derivative
             #   PhiDot = A * Phi
             #   q[6] through q[42] represent the STM (Phi) in row-major order
 
             # first three rows of PhiDot are the last three rows of Phi
-            for r in range(3):
-                for c in range(6):
-                    qdot[6 + 6 * r + c] = q[6 + 6 * (r + 3) + c]
+            qdot[6:24] = q[24:42]
 
             for c in range(6):
-                qdot[6 + 6 * 3 + c] = (
-                    U[0] * q[6 + 6 * 0 + c]
-                    + U[3] * q[6 + 6 * 1 + c]
-                    + U[4] * q[6 + 6 * 2 + c]
-                    + 2 * q[6 + 6 * 4 + c]
+                qdot[24 + c] = (
+                    Uxx * q[6 + c] + Uxy * q[12 + c] + Uxz * q[18 + c] + 2 * q[30 + c]
                 )
-                qdot[6 + 6 * 4 + c] = (
-                    U[3] * q[6 + 6 * 0 + c]
-                    + U[1] * q[6 + 6 * 1 + c]
-                    + U[5] * q[6 + 6 * 2 + c]
-                    - 2 * q[6 + 6 * 3 + c]
+                qdot[30 + c] = (
+                    Uxy * q[6 + c] + Uyy * q[12 + c] + Uyz * q[18 + c] - 2 * q[24 + c]
                 )
-                qdot[6 + 6 * 5 + c] = (
-                    U[4] * q[6 + 6 * 0 + c]
-                    + U[5] * q[6 + 6 * 1 + c]
-                    + U[2] * q[6 + 6 * 2 + c]
-                )
+                qdot[36 + c] = Uxz * q[6 + c] + Uyz * q[12 + c] + Uzz * q[18 + c]
 
         # There are no epoch or parameter partials
         return qdot

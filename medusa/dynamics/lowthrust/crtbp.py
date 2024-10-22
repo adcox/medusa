@@ -93,9 +93,9 @@ class DynamicsModel(CrtbpDynamics):
         wdot = np.zeros(w.shape)
 
         # Pre-compute some values; multiplication is faster than exponents
-        r13 = np.sqrt((w[0] + mu) * (w[0] + mu) + w[1] * w[1] + w[2] * w[2])
-        r23 = np.sqrt((w[0] - 1 + mu) * (w[0] - 1 + mu) + w[1] * w[1] + w[2] * w[2])
         omm = 1 - mu
+        r13 = np.sqrt((w[0] + mu) * (w[0] + mu) + w[1] * w[1] + w[2] * w[2])
+        r23 = np.sqrt((w[0] - omm) * (w[0] - omm) + w[1] * w[1] + w[2] * w[2])
         r23_3 = r23 * r23 * r23
         r13_3 = r13 * r13 * r13
 

@@ -1481,6 +1481,9 @@ class DifferentialCorrector:
         #: representing the change in the free variable vector.
         self.updateGenerator = MinimumNormUpdate()
 
+        # TODO document
+        self.log = {}
+
     def _validateArgs(self) -> None:
         """
         Check the types and values of class attributes so that useful errors
@@ -1547,11 +1550,11 @@ class DifferentialCorrector:
         solution = deepcopy(problem)
         # TODO clear all caches in solution
 
-        log = {"status": "", "iterations": []}
+        self.log = {"status": "", "iterations": []}
 
         if solution.numFreeVars == 0 or solution.numConstraints == 0:
-            log["status"] = "empty"
-            return solution, log
+            self.log["status"] = "empty"
+            return solution, copy(self.log)
 
         def costFunc(freeVarVec: NDArray[np.double]) -> float:
             # Function to minimize in line search
@@ -1609,7 +1612,7 @@ class DifferentialCorrector:
 
                     solution.updateFreeVars(newVec)
 
-                log["iterations"].append(  # type: ignore
+                self.log["iterations"].append(  # type: ignore
                     {
                         "free-vars": copy(solution.freeVarVec()),
                         "constraints": copy(solution.constraintVec()),
@@ -1636,13 +1639,13 @@ class DifferentialCorrector:
                 itCount += 1
 
                 if self.convergenceCheck.isConverged(solution):
-                    log["status"] = "converged"
+                    self.log["status"] = "converged"
                     break
                 elif itCount >= self.maxIterations:
-                    log["status"] = "max-iterations"
+                    self.log["status"] = "max-iterations"
                     break
 
-        return solution, log
+        return solution, copy(self.log)
 
 
 class MinimumNormUpdate:
