@@ -152,13 +152,14 @@ class DynamicsModel(AbstractDynamicsModel):
     ):
         primary = body1 if body1.gm > body2.gm else body2
         secondary = body2 if body1.gm > body2.gm else body1
+
         totalGM = primary.gm + secondary.gm
+        mu = (secondary.gm / totalGM).magnitude
+        charL = secondary.sma
+        charM = totalGM / GRAV_PARAM
+        charT = np.sqrt(charL**3 / totalGM)
 
-        super().__init__(primary, secondary, mu=(secondary.gm / totalGM).magnitude)
-
-        self._charL = secondary.sma
-        self._charM = totalGM / GRAV_PARAM
-        self._charT = np.sqrt(self._charL**3 / totalGM)
+        super().__init__([primary, secondary], charL, charT, charM, mu=mu)
 
     @property
     @override

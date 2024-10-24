@@ -2,10 +2,12 @@
 Test basic dynamics
 """
 import numpy as np
+import pint
 import pytest
 from conftest import loadBody
 
 from medusa.dynamics import AbstractDynamicsModel, VarGroup
+from medusa.units import kg, km, sec
 
 earth, moon, sun = loadBody("Earth"), loadBody("Moon"), loadBody("Sun")
 
@@ -38,18 +40,40 @@ class DummyModel(AbstractDynamicsModel):
 class TestAbstractDynamicsModel:
     @pytest.fixture(scope="class")
     def model(self):
-        return DummyModel(sun, earth, moon)
+        return DummyModel([sun, earth, moon])
 
     @pytest.mark.parametrize(
-        "bodies, properties",
+        "bodies, charL, charT, charM, properties",
         [
-            [[earth], {}],
-            [[earth, moon], {"b": 21}],
-            [[earth, moon, sun], {}],
+            [[earth], None, None, None, {}],
+            [[earth], 3 * km, 45 * sec, 125 * kg, {}],
+            [[earth, moon], None, None, None, {"b": 21}],
+            [[earth, moon, sun], None, None, None, {}],
         ],
     )
-    def test_constructor(self, bodies, properties):
-        DummyModel(*bodies, **properties)
+    def test_constructor(self, bodies, charL, charT, charM, properties):
+        quant = {}
+        if charL is not None:
+            quant["charL"] = charL
+        if charT is not None:
+            quant["charT"] = charT
+        if charM is not None:
+            quant["charM"] = charM
+
+        model = DummyModel(bodies, **quant, **properties)
+
+        for b in bodies:
+            assert b in model.bodies
+        if charL is not None:
+            assert model.charL == charL
+        if charT is not None:
+            assert model.charT == charT
+        if charM is not None:
+            assert model.charM == charM
+
+        for key, val in properties.items():
+            assert key in model.properties
+            assert model.properties[key] == val
 
     @pytest.mark.parametrize(
         "bodies",
@@ -58,9 +82,21 @@ class TestAbstractDynamicsModel:
             [301, 302],
         ],
     )
-    def test_constructorErr(self, bodies):
+    def test_constructorBodyTypeErr(self, bodies):
         with pytest.raises(TypeError):
-            DummyModel(*bodies)
+            DummyModel(bodies)
+
+    @pytest.mark.parametrize(
+        "charL, charT, charM",
+        [
+            (1 * sec, 10 * sec, 10 * kg),
+            (1 * km, 1 * km, 10 * kg),
+            (1 * km, 1 * sec, 1 * sec),
+        ],
+    )
+    def test_constructorCharQDimErr(self, charL, charT, charM):
+        with pytest.raises(pint.DimensionalityError):
+            DummyModel(earth, charL, charT, charM)
 
     @pytest.mark.parametrize(
         "varGroups, sz",
@@ -225,8 +261,8 @@ class TestAbstractDynamicsModel:
             model.varNames(grp)
 
     def test_eq(self):
-        model = DummyModel(earth, sun)
-        model2 = DummyModel(earth, sun)
+        model = DummyModel([earth, sun])
+        model2 = DummyModel([earth, sun])
 
         assert model == model2
         assert not model == "abc"

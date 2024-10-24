@@ -85,11 +85,7 @@ def float_eq(f1: float, f2: float) -> bool:
     Returns:
         whether or not the two floats are equal. If both are NaN, True is returned
     """
-    try:
-        if np.isnan(f1) and np.isnan(f2):
-            return True
-        else:
-            return f1 == f2
-    except Exception:
-        breakpoint()
-        print("")
+    if np.isnan(f1) and np.isnan(f2):
+        return True
+    else:
+        return f1 == f2

@@ -10,6 +10,7 @@ from conftest import loadBody
 from medusa.data import Body
 from medusa.dynamics import VarGroup
 from medusa.dynamics.crtbp import DynamicsModel
+from medusa.units import kg, km, sec
 
 earth = loadBody("Earth")
 moon = loadBody("Moon")
@@ -34,9 +35,9 @@ def test_bodyOrder(bodies):
 
     assert "mu" in model._properties
     assert model._properties["mu"] < 0.5
-    assert model.charL > 1.0
-    assert model.charM > 1.0
-    assert model.charT > 1.0
+    assert model.charL > 1e5 * km
+    assert model.charM > 1e5 * kg
+    assert model.charT > 1e5 * sec
 
 
 def test_equals():

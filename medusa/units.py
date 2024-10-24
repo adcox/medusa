@@ -3,6 +3,9 @@ Convenient definitions of common units
 """
 from . import ureg
 
+# TODO define some type aliases?
+# TODO which definition of Quantity to use for types? For construction?
+
 # Meta
 Quant = ureg.Quantity
 

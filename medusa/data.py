@@ -29,9 +29,9 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from typing import Union
 
-from pint import Quantity
+import pint
 
-from .units import deg, kg, km, sec
+from .units import Quant, deg, kg, km, sec
 from .util import float_eq
 
 # ------------------------------------------------------------------------------
@@ -64,11 +64,11 @@ class Body:
     def __init__(
         self,
         name: str,
-        gm: Quantity,
-        sma: Quantity = 0.0 * km,
-        ecc: Quantity = Quantity(0.0),
-        inc: Quantity = 0.0 * deg,
-        raan: Quantity = 0.0 * deg,
+        gm: pint.Quantity,
+        sma: pint.Quantity = 0.0 * km,
+        ecc: pint.Quantity = Quant(0.0),
+        inc: pint.Quantity = 0.0 * deg,
+        raan: pint.Quantity = 0.0 * deg,
         spiceId: int = 0,
         parentId: Union[int, None] = None,
     ) -> None:
@@ -76,19 +76,19 @@ class Body:
         self.name: str = name
 
         #: Gravitational parameter (km**2/sec**3)
-        self.gm: Quantity = gm
+        self.gm: pint.Quantity = gm
 
         #: orbital semimajor axis (km)
-        self.sma: Quantity = sma
+        self.sma: pint.Quantity = sma
 
         #: orbital eccentricity
-        self.ecc: Quantity = ecc
+        self.ecc: pint.Quantity = ecc
 
         #: orbital inclination w.r.t. Earth equatorial J2000 (deg)
-        self.inc: Quantity = inc
+        self.inc: pint.Quantity = inc
 
         #: right ascension of the ascending node w.r.t. Earth equatorial J2000 (deg)
-        self.raan: Quantity = raan
+        self.raan: pint.Quantity = raan
 
         #: SPICE ID for this body
         self.id: int = spiceId
@@ -134,11 +134,11 @@ class Body:
 
                 return Body(
                     name,
-                    Quantity(float(_expect(data, "gm")), km**2 / sec**3),
-                    sma=Quantity(float(_expect(data, "circ_r")), km),
-                    ecc=Quantity(0.0),  # TODO why is this not read from data??
-                    inc=Quantity(float(_expect(data, "inc")), deg),
-                    raan=Quantity(float(_expect(data, "raan")), deg),
+                    Quant(float(_expect(data, "gm")), "km**3 / sec**2"),
+                    sma=Quant(float(_expect(data, "circ_r")), "km"),
+                    ecc=Quant(0.0),  # TODO why is this not read from data??
+                    inc=Quant(float(_expect(data, "inc")), "deg"),
+                    raan=Quant(float(_expect(data, "raan")), "deg"),
                     spiceId=int(_expect(data, "id")),
                     parentId=pid,
                 )

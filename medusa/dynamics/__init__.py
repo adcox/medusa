@@ -183,12 +183,13 @@ from enum import IntEnum
 from typing import Any, Union
 
 import numpy as np
+import pint
 from numpy.typing import ArrayLike, NDArray
 
 from medusa import util
 from medusa.data import Body
 from medusa.typing import FloatArray
-from medusa.units import Quant
+from medusa.units import kg, km, sec, ureg
 
 logger = logging.getLogger(__name__)
 
@@ -255,14 +256,21 @@ class AbstractDynamicsModel(ABC):
 
     Args:
         bodies: one or more primary bodies
+        charL: characteristic length
+        charT: characteristic time
+        charM: characteristic mass
         properties: keyword arguments that define model properties
     """
 
     def __init__(
         self,
-        *bodies: Body,
+        bodies: Sequence[Body],
+        charL: pint.Quantity = 1.0 * km,
+        charT: pint.Quantity = 1.0 * sec,
+        charM: pint.Quantity = 1.0 * kg,
         **properties: Any,
     ) -> None:
+        bodies = util.toList(bodies)
         if any([not isinstance(body, Body) for body in bodies]):
             raise TypeError("Expecting Body objects")
 
@@ -273,10 +281,30 @@ class AbstractDynamicsModel(ABC):
         # Unpack parameters into internal dict
         self._properties = {**properties}
 
-        # Define default characteristic quantities as unity
-        self._charL = Quant(1.0, "km")
-        self._charT = Quant(1.0, "sec")
-        self._charM = Quant(1.0, "kg")
+        if not charL.check("[length]"):
+            raise pint.DimensionalityError(
+                charL.units, "km", str(charL.dimensionality), "[length]"
+            )
+        if not charT.check("[time]"):
+            raise pint.DimensionalityError(
+                charT.units, "sec", str(charT.dimensionality), "[time]"
+            )
+        if not charM.check("[mass]"):
+            raise pint.DimensionalityError(
+                charM.units, "kg", str(charM.dimensionality), "[mass]"
+            )
+
+        # TODO check data independence - do we need to copy?
+        self._charL = charL
+        self._charT = charT
+        self._charM = charM
+
+        # Create a context with LU, TU, and MU defined according to the quantities
+        #   The LU, TU, and MU units are defined in medusa.__init__ and given
+        #   useful values here
+        self.unitContext = pint.Context(
+            defaults={"LU": self._charL, "TU": self._charT, "MU": self._charM}
+        )
 
     def __eq__(self, other: object) -> bool:
         """
@@ -292,7 +320,7 @@ class AbstractDynamicsModel(ABC):
         if not all([b1 == b2 for b1, b2 in zip(self.bodies, other.bodies)]):
             return False
 
-        # TODO need to compare dicts by value??
+        # TODO need to compare property dicts by value??
         return (
             self.properties == other.properties
             and self.charL == other.charL
@@ -308,17 +336,17 @@ class AbstractDynamicsModel(ABC):
         return copy(self._properties)
 
     @property
-    def charL(self) -> Quant:
+    def charL(self) -> pint.Quantity:
         """A characteristic length used to nondimensionalize lengths"""
         return self._charL
 
     @property
-    def charT(self) -> Quant:
+    def charT(self) -> pint.Quantity:
         """A characteristic time used to nondimensionalize times"""
         return self._charT
 
     @property
-    def charM(self) -> Quant:
+    def charM(self) -> pint.Quantity:
         """A characteristic mass used to nondimensionalize masses"""
         return self._charM
 
