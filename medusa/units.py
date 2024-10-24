@@ -28,3 +28,9 @@ week = ureg.week
 # angles
 deg = ureg.deg
 rad = ureg.rad
+
+# nondimensional coordinates
+LU = ureg.LU
+TU = ureg.TU
+MU = ureg.MU
+UU = ureg.Quantity(1, "dimensionless")

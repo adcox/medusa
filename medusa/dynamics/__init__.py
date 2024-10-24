@@ -302,9 +302,10 @@ class AbstractDynamicsModel(ABC):
         # Create a context with LU, TU, and MU defined according to the quantities
         #   The LU, TU, and MU units are defined in medusa.__init__ and given
         #   useful values here
-        self.unitContext = pint.Context(
-            defaults={"LU": self._charL, "TU": self._charT, "MU": self._charM}
-        )
+        self.unitContext = pint.Context()
+        self.unitContext.redefine(f"LU = {self._charL}")
+        self.unitContext.redefine(f"TU = {self._charT}")
+        self.unitContext.redefine(f"MU = {self._charM}")
 
     def __eq__(self, other: object) -> bool:
         """
@@ -412,6 +413,30 @@ class AbstractDynamicsModel(ABC):
             the derivative of the ``w`` vector with respect to ``t``
         """
         pass
+
+    def dimensionalize(
+        self, w: FloatArray, varGroups: Sequence[VarGroup]
+    ) -> NDArray[pint.Quantity]:
+        w = np.array(w, ndmin=2, copy=True)
+        N = self.groupSize(varGroups)
+        if not N in w.shape:
+            raise ValueError(
+                f"Dimension mismatch; 'w' has shape {w.shape}, which does not "
+                f"include variable group size, {N}"
+            )
+
+        if not w.shape[1] == N:
+            w = w.T
+
+        units = np.asarray([self.varUnits(grp) for grp in varGroups]).flatten()
+
+        # Convert to standard units
+        with ureg.context(self.unitContext):
+            scale = np.full((N, N), ureg.Quantity(0.0), dtype=pint.Quantity)
+            for ix in range(N):
+                scale[ix, ix] = ureg.Quantity(1.0, units[ix]).to_base_units()
+
+        return w @ scale
 
     @abstractmethod
     def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
@@ -546,16 +571,16 @@ class AbstractDynamicsModel(ABC):
 
     def varNames(self, varGroup: VarGroup) -> list[str]:
         """
-        Get names for the variables in each group.
+        Get names for the variables in a group.
 
         This implementation provides basic representations of the variables and
-        should be overridden by derived classes to give more descriptive names.
+        can be overridden by derived classes to give more descriptive names.
 
         Args:
-            varGroup (VarGroup): the variable group
+            varGroup: the variable group
 
         Returns:
-            list of str: a list containing the names of the variables in the order
+            a list containing the names of the variables in the order
             they would appear in a variable vector.
         """
         N = self.groupSize(VarGroup.STATE)
@@ -576,6 +601,26 @@ class AbstractDynamicsModel(ABC):
             ]
         else:
             raise ValueError(f"Unrecognized enum: varGroup = {varGroup}")
+
+    @abstractmethod
+    def varUnits(self, varGroup: VarGroup) -> list[pint.Quantity]:
+        """
+        Get the nondimensional units (LU, TU, MU) for the variables in a group.
+
+        For example, the units for a Cartesian state (x, y, z, dx, dy, dz) would
+        be ``[LU, LU, LU, LU/TU, LU/TU, LU/TU]`` to denote length for
+        the positions and length/time for the velocities, where ``LU`` and ``TU``
+        are the nondimensional units imported from :mod:`medusa.units`.
+
+        Args:
+            varGroup: the variable group
+
+        Returns:
+            a list containing the nondimensional units (LU, TU, MU) for the
+            variables in the specified group in the order they would appear
+            in a variable vector
+        """
+        pass
 
     def indexToVarName(self, ix: int, varGroups: Sequence[VarGroup]) -> str:
         # TODO test and document

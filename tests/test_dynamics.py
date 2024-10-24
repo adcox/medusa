@@ -7,7 +7,7 @@ import pytest
 from conftest import loadBody
 
 from medusa.dynamics import AbstractDynamicsModel, VarGroup
-from medusa.units import kg, km, sec
+from medusa.units import LU, MU, TU, UU, kg, km, sec
 
 earth, moon, sun = loadBody("Earth"), loadBody("Moon"), loadBody("Sun")
 
@@ -16,6 +16,9 @@ class DummyModel(AbstractDynamicsModel):
     """
     A dummy model to test base class functionality with
     """
+
+    def __init__(self, bodies, charL=2 * km, charT=3 * sec, charM=4 * kg, **kwargs):
+        super().__init__(bodies, charL, charT, charM, **kwargs)
 
     def bodyState(self, ix, t, params):
         pass
@@ -35,6 +38,18 @@ class DummyModel(AbstractDynamicsModel):
             + 2 * (VarGroup.EPOCH_PARTIALS in varGroups)
             + 6 * (VarGroup.PARAM_PARTIALS in varGroups)
         )
+
+    def varUnits(self, varGroup):
+        if varGroup == VarGroup.STATE:
+            # let's say the state is a position and a velocity
+            return [LU, LU / TU]
+        elif varGroup == VarGroup.STM:
+            # STM units are [1, time, 1/time, 1]
+            return [UU, TU, 1 / TU, UU]
+        elif varGroup == VarGroup.EPOCH_PARTIALS:
+            return [1 / TU, 1 / TU]  # completely fictional
+        elif varGroup == VarGroup.PARAM_PARTIALS:
+            return [MU, MU / TU, MU * LU / TU**2] * 2  # completely fictional
 
 
 class TestAbstractDynamicsModel:
@@ -259,6 +274,30 @@ class TestAbstractDynamicsModel:
     def test_varNames_invalid(self, model, grp):
         with pytest.raises(ValueError):
             model.varNames(grp)
+
+    @pytest.mark.parametrize(
+        "wIn, varGroups, wOut",
+        [
+            ([1, 1], [VarGroup.STATE], [[2 * km, 2 * km / (3 * sec)]]),
+            (
+                [[1, 1], [2, 2]],
+                [VarGroup.STATE],
+                [[2 * km, 2 * km / (3 * sec)], [4 * km, 4 * km / (3 * sec)]],
+            ),
+        ],
+    )
+    def test_dimensionalize(self, model, wIn, varGroups, wOut):
+        # TODO test larger arrays and function's ability to transpose
+        # TODO test multiple variable groups
+        w_dim = model.dimensionalize(wIn, varGroups)
+        wOut = np.array(wOut, dtype=object)
+
+        assert isinstance(w_dim, np.ndarray)
+        assert w_dim.shape[1] == model.groupSize(varGroups)
+        assert all([isinstance(val, pint.Quantity) for val in w_dim.flat])
+        assert all(
+            [v == vOut for v, vOut in zip(w_dim.flatten(), wOut.flatten())]
+        ), w_dim
 
     def test_eq(self):
         model = DummyModel([earth, sun])
