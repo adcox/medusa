@@ -156,17 +156,22 @@ class DynamicsModel(AbstractDynamicsModel):
         secondary = body2 if body1.gm > body2.gm else body1
 
         totalGM = primary.gm + secondary.gm
-        mu = (secondary.gm / totalGM).magnitude
         charL = secondary.sma
         charM = totalGM / GRAV_PARAM
         charT = np.sqrt(charL**3 / totalGM)
 
-        super().__init__([primary, secondary], charL, charT, charM, mu=mu)
+        self.massRatio: float = (secondary.gm / totalGM).magnitude
+        super().__init__([primary, secondary], charL, charT, charM)
 
     @property
     @override
     def epochIndependent(self) -> bool:
         return True
+
+    @property
+    @override
+    def params(self) -> FloatArray:
+        return []
 
     @override
     def diffEqs(
@@ -176,7 +181,7 @@ class DynamicsModel(AbstractDynamicsModel):
         varGroups: tuple[VarGroup, ...],
         params: Union[tuple[float, ...], None] = None,
     ) -> NDArray[np.double]:
-        return DynamicsModel._eoms(t, w, self._properties["mu"], varGroups)
+        return DynamicsModel._eoms(t, w, self.massRatio, varGroups)
 
     @override
     def bodyState(
@@ -188,9 +193,9 @@ class DynamicsModel(AbstractDynamicsModel):
         params: Union[FloatArray, None] = None,
     ) -> NDArray[np.double]:
         if ix == 0:
-            return np.asarray([-self._properties["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
+            return np.asarray([-self.massRatio, 0.0, 0.0, 0.0, 0.0, 0.0])
         elif ix == 1:
-            return np.asarray([1 - self._properties["mu"], 0.0, 0.0, 0.0, 0.0, 0.0])
+            return np.asarray([1 - self.massRatio, 0.0, 0.0, 0.0, 0.0, 0.0])
         else:
             raise IndexError(f"Index {ix} must be zero or one")
 
@@ -293,7 +298,7 @@ class DynamicsModel(AbstractDynamicsModel):
              - :math:`x = -\mu - \gamma`
         """
         # TODO document in module docs
-        mu = self._properties["mu"]
+        mu = self.massRatio
 
         pts = np.asarray(
             [
@@ -352,7 +357,7 @@ class DynamicsModel(AbstractDynamicsModel):
         """
         # TODO document in module docs
 
-        mu = self._properties["mu"]
+        mu = self.massRatio
         r13 = np.sqrt((w[0] + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
         r23 = np.sqrt((w[0] - 1 + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
         return (1 - mu) / r13 + mu / r23 + (w[0] ** 2 + w[1] ** 2) / 2
@@ -370,7 +375,7 @@ class DynamicsModel(AbstractDynamicsModel):
             position variables. The partial derivatives with respect to the
             velocity variables are zero.
         """
-        mu = self._properties["mu"]
+        mu = self.massRatio
         r13 = np.sqrt((w[0] + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
         r23 = np.sqrt((w[0] - 1 + mu) ** 2 + w[1] ** 2 + w[2] ** 2)
         r23_3 = r23 * r23 * r23

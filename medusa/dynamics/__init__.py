@@ -129,11 +129,16 @@ groups:
    ~AbstractDynamicsModel.varNames
    ~AbstractDynamicsModel.validForPropagation
 
-System Properties
------------------
+System Properties and Parameters
+--------------------------------
 
-Additional information about the system of equations are available via properties
-and attributes of the model,
+Additional information about the system of equations are available via **properties**
+and **parameters**. Within the context of this library, a property is a constant
+characteristic of the model that cannot be modified, e.g., during a differential
+corrections process. A parameter, on the other hand, may be modified without
+fundamentally altering the model.
+
+Four properties are available for any dynamical model,
 
 .. autosummary::
    :nosignatures:
@@ -143,9 +148,18 @@ and attributes of the model,
    ~AbstractDynamicsModel.charM
    ~AbstractDynamicsModel.epochIndependent
 
-Conversions between the normalized units, :data:`~medusa.LU`, :data:`~medusa.TU`,
-:data:`~medusa.MU`, and "standard" units (kg, sec, kg, etc.) are accomplished via two
-methods,
+By default, the abstract model class does not define any parameters and relies on
+derived classes to define the :func:`params` function to provide default values of
+any parameters that apply.
+
+Units
+^^^^^
+_See also: :doc:`units`_
+
+For practically all of the encoded calculus, quantities are represented via
+**normalized** length, time, and mass units, :data:`~medusa.LU`, :data:`~medusa.TU`,
+:data:`~medusa.MU`. To convert to and from "standard" units (km, sec, kg, etc.),
+a model provides two methods:
 
 .. autosummary::
    :nosignatures:
@@ -156,6 +170,9 @@ methods,
 These conversions are accomplished within a unit :class:`~pint.Context` stored
 in the model as :attr:`AbstractDynamicsModel.unitContext`; the context records
 the conversion from the ``LU``, ``TU``, and ``MU`` units and the standard units.
+
+Utilities
+---------
 
 Finally, a convenience method to check the partial derivatives included in the
 differential equations is provided. This method is primarily for debugging purposes
@@ -273,7 +290,6 @@ class AbstractDynamicsModel(ABC):
         charL: length of one :data:`medusa.units.LU` in this model
         charT: duration of one :data:`medusa.units.TU` in this model
         charM: mass of one :data:`medusa.units.MU` in this model
-        properties: keyword arguments that define model properties
     """
 
     _registry: dict[int, str] = {}
@@ -284,7 +300,6 @@ class AbstractDynamicsModel(ABC):
         charL: pint.Quantity = 1.0 * km,
         charT: pint.Quantity = 1.0 * sec,
         charM: pint.Quantity = 1.0 * kg,
-        **properties: Any,
     ) -> None:
         bodies = util.toList(bodies)
         if any([not isinstance(body, Body) for body in bodies]):
@@ -293,9 +308,6 @@ class AbstractDynamicsModel(ABC):
         # Copy body objects into tuple
         #: tuple[Body]: the bodies
         self.bodies = tuple(copy(body) for body in bodies)
-
-        # Unpack parameters into internal dict
-        self._properties = {**properties}
 
         if not charL.check("[length]"):
             raise pint.DimensionalityError(
@@ -348,18 +360,10 @@ class AbstractDynamicsModel(ABC):
 
         # TODO need to compare property dicts by value??
         return (
-            self.properties == other.properties
-            and self.charL == other.charL
+            self.charL == other.charL
             and self.charT == other.charT
             and self.charM == other.charM
         )
-
-    @property
-    def properties(self) -> dict:
-        """
-        The model properties. These are constant across all integrations
-        """
-        return copy(self._properties)
 
     @property
     def charL(self) -> pint.Quantity:
@@ -384,6 +388,12 @@ class AbstractDynamicsModel(ABC):
             True if the differetial equations have no dependencies on epoch,
             False otherwise.
         """
+        pass
+
+    @property
+    @abstractmethod
+    def params(self) -> FloatArray:
+        """Default values for the model parameters"""
         pass
 
     @abstractmethod

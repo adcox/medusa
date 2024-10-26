@@ -41,7 +41,7 @@ from medusa import util
 from medusa.data import Body
 from medusa.dynamics import VarGroup
 from medusa.dynamics.crtbp import DynamicsModel as CrtbpDynamics
-from medusa.typing import override
+from medusa.typing import FloatArray, override
 
 from . import ControlLaw
 
@@ -60,6 +60,12 @@ class DynamicsModel(CrtbpDynamics):
     @override
     def epochIndependent(self) -> bool:
         return self.ctrlLaw.epochIndependent
+
+    @property
+    @override
+    def params(self) -> FloatArray:
+        """The default values for the model and control law parameters"""
+        return self.ctrlLaw.params
 
     @override
     def groupSize(self, varGroups) -> int:
@@ -84,7 +90,7 @@ class DynamicsModel(CrtbpDynamics):
 
     @override
     def diffEqs(self, t, w, varGroups, params=None) -> NDArray[np.double]:
-        mu = self._properties["mu"]
+        mu = self.massRatio
 
         P = len(self.ctrlLaw.params)
         if P > 0 and (params is None or not len(params) == P):

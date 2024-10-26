@@ -19,8 +19,11 @@ class DummyModel(AbstractDynamicsModel):
     A dummy model to test base class functionality with
     """
 
-    def __init__(self, bodies, charL=2 * km, charT=3 * sec, charM=4 * kg, **kwargs):
-        super().__init__(bodies, charL, charT, charM, **kwargs)
+    def __init__(self, bodies, charL=2 * km, charT=3 * sec, charM=4 * kg):
+        super().__init__(bodies, charL, charT, charM)
+
+    def params(self):
+        return []
 
     def bodyState(self, ix, t, params):
         pass
@@ -60,15 +63,15 @@ class TestAbstractDynamicsModel:
         return DummyModel([sun, earth, moon])
 
     @pytest.mark.parametrize(
-        "bodies, charL, charT, charM, properties",
+        "bodies, charL, charT, charM",
         [
-            [[earth], None, None, None, {}],
-            [[earth], 3 * km, 45 * sec, 125 * kg, {}],
-            [[earth, moon], None, None, None, {"b": 21}],
-            [[earth, moon, sun], None, None, None, {}],
+            [[earth], None, None, None],
+            [[earth], 3 * km, 45 * sec, 125 * kg],
+            [[earth, moon], None, None, None],
+            [[earth, moon, sun], None, None, None],
         ],
     )
-    def test_constructor(self, bodies, charL, charT, charM, properties):
+    def test_constructor(self, bodies, charL, charT, charM):
         quant = {}
         if charL is not None:
             quant["charL"] = charL
@@ -78,7 +81,7 @@ class TestAbstractDynamicsModel:
             quant["charM"] = charM
 
         preReg = AbstractDynamicsModel._registry.copy()
-        model = DummyModel(bodies, **quant, **properties)
+        model = DummyModel(bodies, **quant)
         assert len(AbstractDynamicsModel._registry) - len(preReg) == 1
 
         for b in bodies:
@@ -89,10 +92,6 @@ class TestAbstractDynamicsModel:
             assert model.charT == charT
         if charM is not None:
             assert model.charM == charM
-
-        for key, val in properties.items():
-            assert key in model.properties
-            assert model.properties[key] == val
 
         # check data independence
         if "charL" in quant:

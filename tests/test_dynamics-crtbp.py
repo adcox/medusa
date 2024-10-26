@@ -21,7 +21,7 @@ sun = loadBody("Sun")
 def model_mu():
     # A fixed mu value for unit tests that rely on output values
     model = DynamicsModel(earth, moon)
-    model._properties["mu"] = 0.012150584269940356
+    model.mu = 0.012150584269940356
     return model
 
 
@@ -38,8 +38,7 @@ def test_bodyOrder(bodies):
     assert len(model.bodies) == 2
     assert model.bodies[0].gm > model.bodies[1].gm
 
-    assert "mu" in model._properties
-    assert model._properties["mu"] < 0.5
+    assert model.massRatio < 0.5
     assert model.charL > 1e5 * km
     assert model.charM > 1e5 * kg
     assert model.charT > 1e5 * sec
@@ -62,10 +61,6 @@ def test_groupSize():
     assert model.groupSize([VarGroup.STATE, VarGroup.STM]) == 42
     assert model.groupSize(VarGroup.EPOCH_PARTIALS) == 0
     assert model.groupSize(VarGroup.PARAM_PARTIALS) == 0
-
-
-# TODO test that modifying a property from properties fcn doesn't affect
-#   stored values
 
 
 @pytest.mark.parametrize(
@@ -213,7 +208,7 @@ def test_equilbria(bodies):
         np.testing.assert_array_almost_equal(grad, zero, decimal=11)
 
     # Order is L1, L2, L3, L4, L5
-    mu = model._properties["mu"]
+    mu = model.massRatio
     assert 0 < eqPts[0, 0] < 1 - mu
     assert 1 - mu < eqPts[1, 0] <= 2
     assert eqPts[2, 0] < 0
