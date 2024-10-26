@@ -125,6 +125,7 @@ from collections.abc import Sequence
 from typing import Union
 
 import numpy as np
+import pint
 from numba import njit  # type: ignore
 from numpy.typing import NDArray
 
@@ -132,6 +133,7 @@ import medusa.util as util
 from medusa.data import GRAV_PARAM, Body
 from medusa.dynamics import AbstractDynamicsModel, VarGroup
 from medusa.typing import FloatArray, override
+from medusa.units import LU, TU, UU
 
 
 class DynamicsModel(AbstractDynamicsModel):
@@ -203,6 +205,24 @@ class DynamicsModel(AbstractDynamicsModel):
             return ["x", "y", "z", "dx", "dy", "dz"]
         else:
             return super().varNames(varGroup)  # defaults are fine for the rest
+
+    @override
+    def varUnits(self, varGroup: VarGroup) -> list[pint.Unit]:
+        if varGroup == VarGroup.STATE:
+            return [LU, LU, LU, LU / TU, LU / TU, LU / TU]  # type: ignore[list-item]
+        elif varGroup == VarGroup.STM:
+            return (
+                np.block(
+                    [
+                        [np.full((3, 3), UU), np.full((3, 3), TU)],
+                        [np.full((3, 3), 1 / TU), np.full((3, 3), UU)],
+                    ]
+                )
+                .flatten()
+                .tolist()
+            )
+        else:
+            return []  # No epoch or parameter partials
 
     def equilibria(self, tol: float = 1e-12) -> NDArray[np.double]:
         """

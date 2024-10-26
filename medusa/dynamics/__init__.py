@@ -143,6 +143,20 @@ and attributes of the model,
    ~AbstractDynamicsModel.charM
    ~AbstractDynamicsModel.epochIndependent
 
+Conversions between the normalized units, :data:`~medusa.LU`, :data:`~medusa.TU`,
+:data:`~medusa.MU`, and "standard" units (kg, sec, kg, etc.) are accomplished via two
+methods,
+
+.. autosummary::
+   :nosignatures:
+
+   ~AbstractDynamicsModel.toBaseUnits
+   ~AbstractDynamicsModel.normalize
+
+These conversions are accomplished within a unit :class:`~pint.Context` stored
+in the model as :attr:`AbstractDynamicsModel.unitContext`; the context records
+the conversion from the ``LU``, ``TU``, and ``MU`` units and the standard units.
+
 Finally, a convenience method to check the partial derivatives included in the
 differential equations is provided. This method is primarily for debugging purposes
 but can save many hours of time when deriving and coding the partial differential
@@ -256,11 +270,13 @@ class AbstractDynamicsModel(ABC):
 
     Args:
         bodies: one or more primary bodies
-        charL: characteristic length
-        charT: characteristic time
-        charM: characteristic mass
+        charL: length of one :data:`medusa.units.LU` in this model
+        charT: duration of one :data:`medusa.units.TU` in this model
+        charM: mass of one :data:`medusa.units.MU` in this model
         properties: keyword arguments that define model properties
     """
+
+    _registry: dict[int, str] = {}
 
     def __init__(
         self,
@@ -294,7 +310,12 @@ class AbstractDynamicsModel(ABC):
                 charM.units, "kg", str(charM.dimensionality), "[mass]"
             )
 
-        # TODO check data independence - do we need to copy?
+        # Register the model so that we can have a unique name for the unit context
+        reg = AbstractDynamicsModel._registry
+        ix = len(reg)
+        clsName = self.__module__ + "." + self.__class__.__name__
+        reg[ix] = clsName
+
         self._charL = charL
         self._charT = charT
         self._charM = charM
@@ -302,7 +323,11 @@ class AbstractDynamicsModel(ABC):
         # Create a context with LU, TU, and MU defined according to the quantities
         #   The LU, TU, and MU units are defined in medusa.__init__ and given
         #   useful values here
-        self.unitContext = pint.Context()
+        #: pint.Context: the unit context defining conversions betwen
+        #: :data:`~medusa.units.LU`, :data:`~medusa.units.TU`,
+        #: :data:`~medusa.units.MU`, and standard units
+        self.unitContext = pint.Context(f"{clsName}.{ix}")
+        ureg.add_context(self.unitContext)
         self.unitContext.redefine(f"LU = {self._charL}")
         self.unitContext.redefine(f"TU = {self._charT}")
         self.unitContext.redefine(f"MU = {self._charM}")
@@ -338,17 +363,17 @@ class AbstractDynamicsModel(ABC):
 
     @property
     def charL(self) -> pint.Quantity:
-        """A characteristic length used to nondimensionalize lengths"""
+        """Defines the length of one :data:`medusa.units.LU` in this model"""
         return self._charL
 
     @property
     def charT(self) -> pint.Quantity:
-        """A characteristic time used to nondimensionalize times"""
+        """Defines the duration of one :data:`medusa.units.TU` in this model"""
         return self._charT
 
     @property
     def charM(self) -> pint.Quantity:
-        """A characteristic mass used to nondimensionalize masses"""
+        """Defines the mass of one :data:`medusa.units.MU` in this model"""
         return self._charM
 
     @property
@@ -414,10 +439,31 @@ class AbstractDynamicsModel(ABC):
         """
         pass
 
-    def dimensionalize(
-        self, w: FloatArray, varGroups: Sequence[VarGroup]
-    ) -> NDArray[pint.Quantity]:
+    def toBaseUnits(
+        self, w: FloatArray, varGroups: Union[VarGroup, Sequence[VarGroup]]
+    ) -> NDArray:
+        """
+        Convert normalized :class:`float` data to units.
+
+        The :attr:`charL`, :attr:`charT`, and :attr:`charM` define the conversion
+        from the normalized ``LU``, ``TU``, and ``MU`` units to "standard" units like
+        km, sec, and kg.
+
+        Args:
+            w: an MxN array of normalized values where N is the number of variables
+                in the ``varGroups``
+            varGroups: the variable groups included in each row of ``w``
+
+        Returns:
+            the data from ``w`` in "standard" units
+        """
         w = np.array(w, ndmin=2, copy=True)
+        if any(isinstance(v, pint.Quantity) for v in w.flat):
+            raise TypeError(
+                "Expecting input data to be numeric (int, float, etc.); did "
+                "you mean to call normalize()?"
+            )
+
         N = self.groupSize(varGroups)
         if not N in w.shape:
             raise ValueError(
@@ -428,15 +474,80 @@ class AbstractDynamicsModel(ABC):
         if not w.shape[1] == N:
             w = w.T
 
-        units = np.asarray([self.varUnits(grp) for grp in varGroups]).flatten()
+        units = []
+        for grp in util.toList(varGroups):
+            units.extend(self.varUnits(grp))
 
         # Convert to standard units
-        with ureg.context(self.unitContext):
+        with ureg.context(self.unitContext.name):  # type: ignore[arg-type]
             scale = np.full((N, N), ureg.Quantity(0.0), dtype=pint.Quantity)
             for ix in range(N):
                 scale[ix, ix] = ureg.Quantity(1.0, units[ix]).to_base_units()
 
         return w @ scale
+
+    def normalize(
+        self,
+        w: Union[Sequence[pint.Quantity], NDArray],
+        varGroups: Union[VarGroup, Sequence[VarGroup]],
+    ) -> NDArray[np.double]:
+        """
+        Convert :class:`~pint.Quantity` data to normalized floats in the unit
+        context of this model.
+
+
+        The :attr:`charL`, :attr:`charT`, and :attr:`charM` define the conversion
+        from the normalized ``LU``, ``TU``, and ``MU`` units to "standard" units like
+        km, sec, and kg.
+
+        Args:
+            w: an MxN array of Quantities where N is the number of variables
+                in the ``varGroups``
+            varGroups: the variable groups included in each row of ``w``
+
+        Returns:
+            the data from ``w`` in normalized units. The data are returned as
+            floats instead of as Quantity objects with ``LU``, ``TU``, and ``MU``
+            units.
+
+        See also:
+            :func:`varUnits`: this function provides the normalized units for each variable
+            in terms of the :data:`~medusa.units.LU`, :data:`~medusa.units.TU`, and
+            :data:`~medusa.units.MU` units.
+        """
+        w = np.array(w, ndmin=2, copy=True, dtype=pint.Quantity)
+        if not all(isinstance(v, pint.Quantity) for v in w.flat):
+            raise TypeError(
+                "Expecting input data to be Quantities; did you mean to call toBaseUnits()?"
+            )
+
+        N = self.groupSize(varGroups)
+        if not N in w.shape:
+            raise ValueError(
+                f"Dimension mismatch; 'w' has shape {w.shape}, which does not "
+                f"include variable group size, {N}"
+            )
+
+        if not w.shape[1] == N:
+            w = w.T
+
+        units = []
+        for grp in util.toList(varGroups):
+            units.extend(self.varUnits(grp))
+
+        # Convert to floats, normalizing by LU, TU, and DU
+        with ureg.context(self.unitContext.name):  # type: ignore[arg-type]
+            scale = np.zeros((N, N))
+            for ix in range(N):
+                scale[ix, ix] = (
+                    1.0 / ureg.Quantity(1.0, units[ix]).to_base_units().magnitude
+                )
+
+            w = np.asarray(
+                [[val.to_base_units().magnitude for val in vals] for vals in w]
+            )
+
+            return w @ scale
 
     @abstractmethod
     def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
@@ -603,7 +714,7 @@ class AbstractDynamicsModel(ABC):
             raise ValueError(f"Unrecognized enum: varGroup = {varGroup}")
 
     @abstractmethod
-    def varUnits(self, varGroup: VarGroup) -> list[pint.Quantity]:
+    def varUnits(self, varGroup: VarGroup) -> list[pint.Unit]:
         """
         Get the nondimensional units (LU, TU, MU) for the variables in a group.
 

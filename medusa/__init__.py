@@ -13,6 +13,8 @@ console = Console()
 from pint import UnitRegistry, set_application_registry
 
 ureg = UnitRegistry()
+""": Unit registry for the medusa package """
+
 ureg.default_preferred_units = [  # type: ignore
     ureg.km,  # length
     ureg.kg,  # mass

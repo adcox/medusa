@@ -25,6 +25,11 @@ def model_mu():
     return model
 
 
+@pytest.fixture
+def model():
+    return DynamicsModel(earth, moon)
+
+
 @pytest.mark.parametrize("bodies", [[earth, moon], [moon, earth]])
 def test_bodyOrder(bodies):
     model = DynamicsModel(*bodies)
@@ -72,8 +77,7 @@ def test_groupSize():
         VarGroup.PARAM_PARTIALS,
     ],
 )
-def test_appendICs(append):
-    model = DynamicsModel(earth, moon)
+def test_appendICs(model, append):
     q0 = np.array([0, 1, 2, 3, 4, 5])
     q0_mod = model.appendICs(q0, append)
 
@@ -81,22 +85,19 @@ def test_appendICs(append):
 
 
 @pytest.mark.parametrize("ix", [0, 1])
-def test_bodyState(ix):
-    model = DynamicsModel(earth, moon)
+def test_bodyState(model, ix):
     state = model.bodyState(ix, 0.0)
     assert isinstance(state, np.ndarray)
     assert state.shape == (6,)
 
 
 @pytest.mark.parametrize("ix", [-1, 2])
-def test_bodyState_invalidIx(ix):
-    model = DynamicsModel(earth, moon)
+def test_bodyState_invalidIx(model, ix):
     with pytest.raises(IndexError):
         model.bodyState(ix, 0.0)
 
 
-def test_varNames():
-    model = DynamicsModel(earth, moon)
+def test_varNames(model):
     stateNames = model.varNames(VarGroup.STATE)
     assert stateNames == ["x", "y", "z", "dx", "dy", "dz"]
 
@@ -110,6 +111,42 @@ def test_varNames():
 
     paramNames = model.varNames(VarGroup.PARAM_PARTIALS)
     assert paramNames == []
+
+
+@pytest.mark.parametrize("N, transpose", [(1, False), (2, False), (2, True)])
+def test_toBaseUnits(model, N, transpose):
+    q0_nd = [0.64260, 0.0, 0.75004, 0.0, 0.35068, 0.0]
+    q0_dim = [q * model.charL for q in q0_nd[:3]] + [
+        q * model.charL / model.charT for q in q0_nd[3:]
+    ]
+
+    qIn = np.asarray([q0_nd for ix in range(N)])
+    qOut = np.array([q0_dim for ix in range(N)], dtype=object)
+    if transpose:
+        qIn = qIn.T
+
+    q_dim = model.toBaseUnits(qIn, VarGroup.STATE)
+    assert q_dim.shape == qOut.shape
+    for out, expect in zip(q_dim.flat, qOut.flat):
+        assert abs((out - expect).to_base_units().magnitude) < 1e-12
+
+
+@pytest.mark.parametrize("N, transpose", [(1, False), (2, False), (2, True)])
+def test_normalize(model, N, transpose):
+    q0_nd = [0.64260, 0.0, 0.75004, 0.0, 0.35068, 0.0]
+    q0_dim = [q * model.charL for q in q0_nd[:3]] + [
+        q * model.charL / model.charT for q in q0_nd[3:]
+    ]
+
+    qIn = np.asarray([q0_dim for ix in range(N)], dtype=object)
+    qOut = np.array([q0_nd for ix in range(N)])
+    if transpose:
+        qIn = qIn.T
+
+    q_nd = model.normalize(qIn, VarGroup.STATE)
+    assert q_nd.shape == qOut.shape
+    for out, expect in zip(q_nd.flat, qOut.flat):
+        assert abs(out - expect) < 1e-12
 
 
 @pytest.mark.parametrize("jit", [True, False])
@@ -127,8 +164,7 @@ def test_checkPartials(jit, mocker):
     assert model.checkPartials(y0, tspan)
 
 
-def test_checkPartials_fails():
-    model = DynamicsModel(earth, moon)
+def test_checkPartials_fails(model):
     y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
     y0 = model.appendICs(
         y0, [VarGroup.STM, VarGroup.EPOCH_PARTIALS, VarGroup.PARAM_PARTIALS]

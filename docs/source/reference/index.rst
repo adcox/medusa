@@ -41,4 +41,5 @@ Utilities
 
    data
    numerics
+   units
    util

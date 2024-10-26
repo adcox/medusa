@@ -1,6 +1,8 @@
 """
 Test basic dynamics
 """
+from copy import copy
+
 import numpy as np
 import pint
 import pytest
@@ -75,7 +77,9 @@ class TestAbstractDynamicsModel:
         if charM is not None:
             quant["charM"] = charM
 
+        preReg = AbstractDynamicsModel._registry.copy()
         model = DummyModel(bodies, **quant, **properties)
+        assert len(AbstractDynamicsModel._registry) - len(preReg) == 1
 
         for b in bodies:
             assert b in model.bodies
@@ -89,6 +93,12 @@ class TestAbstractDynamicsModel:
         for key, val in properties.items():
             assert key in model.properties
             assert model.properties[key] == val
+
+        # check data independence
+        if "charL" in quant:
+            oldVal = copy(charL)
+            charL = 5 * sec
+            assert model.charL == oldVal
 
     @pytest.mark.parametrize(
         "bodies",
@@ -278,26 +288,95 @@ class TestAbstractDynamicsModel:
     @pytest.mark.parametrize(
         "wIn, varGroups, wOut",
         [
+            # Simple case: single vector
             ([1, 1], [VarGroup.STATE], [[2 * km, 2 * km / (3 * sec)]]),
+            # Set of vectors
             (
-                [[1, 1], [2, 2]],
+                [[1, 1], [2, 2], [3, 3]],
                 [VarGroup.STATE],
-                [[2 * km, 2 * km / (3 * sec)], [4 * km, 4 * km / (3 * sec)]],
+                [
+                    [2 * km, 2 * km / (3 * sec)],
+                    [4 * km, 4 * km / (3 * sec)],
+                    [6 * km, 6 * km / (3 * sec)],
+                ],
+            ),
+            # Transposed vectors are auto-corrected
+            (
+                [[1, 2, 3], [1, 2, 3]],
+                [VarGroup.STATE],
+                [
+                    [2 * km, 2 * km / (3 * sec)],
+                    [4 * km, 4 * km / (3 * sec)],
+                    [6 * km, 6 * km / (3 * sec)],
+                ],
+            ),
+            # Multiple variable groups
+            (
+                [1, 2, 3, 4, 5, 6],
+                [VarGroup.STATE, VarGroup.STM],
+                [[2 * km, 4 * km / (3 * sec), 3 * UU, 12 * sec, 5 / (3 * sec), 6 * UU]],
             ),
         ],
     )
-    def test_dimensionalize(self, model, wIn, varGroups, wOut):
-        # TODO test larger arrays and function's ability to transpose
-        # TODO test multiple variable groups
-        w_dim = model.dimensionalize(wIn, varGroups)
-        wOut = np.array(wOut, dtype=object)
+    def test_toBaseUnits(self, model, wIn, varGroups, wOut):
+        w_dim = model.toBaseUnits(wIn, varGroups)
+        wOut = np.array(wOut, ndmin=2, dtype=pint.Quantity)
 
         assert isinstance(w_dim, np.ndarray)
         assert w_dim.shape[1] == model.groupSize(varGroups)
         assert all([isinstance(val, pint.Quantity) for val in w_dim.flat])
         assert all(
-            [v == vOut for v, vOut in zip(w_dim.flatten(), wOut.flatten())]
+            [
+                abs(v - vOut).magnitude < 1e-8
+                for v, vOut in zip(w_dim.flatten(), wOut.flatten())
+            ]
         ), w_dim
+
+    @pytest.mark.parametrize(
+        "wOut, varGroups, wIn",
+        [
+            # Simple case: single vector
+            ([1, 1], [VarGroup.STATE], [2 * km, 2 * km / (3 * sec)]),
+            # Set of vectors
+            (
+                [[1, 1], [2, 2], [3, 3]],
+                [VarGroup.STATE],
+                [
+                    [2 * km, 2 * km / (3 * sec)],
+                    [4 * km, 4 * km / (3 * sec)],
+                    [6 * km, 6 * km / (3 * sec)],
+                ],
+            ),
+            # Transposed vectors are auto-corrected
+            (
+                [[1, 1], [2, 2], [3, 3]],
+                [VarGroup.STATE],
+                [
+                    [2 * km, 4 * km, 6 * km],
+                    [2 * km / (3 * sec), 4 * km / (3 * sec), 6 * km / (3 * sec)],
+                ],
+            ),
+            # Multiple variable groups
+            (
+                [1, 2, 3, 4, 5, 6],
+                [VarGroup.STATE, VarGroup.STM],
+                [2 * km, 4 * km / (3 * sec), 3 * UU, 12 * sec, 5 / (3 * sec), 6 * UU],
+            ),
+        ],
+    )
+    def test_normalize(self, model, wIn, varGroups, wOut):
+        w_nondim = model.normalize(wIn, varGroups)
+        wOut = np.array(wOut, ndmin=2)
+
+        assert isinstance(w_nondim, np.ndarray)
+        assert w_nondim.shape[1] == model.groupSize(varGroups)
+        assert all([isinstance(val, float) for val in w_nondim.flat])
+        assert all(
+            [
+                abs(v - vOut) < 1e-8
+                for v, vOut in zip(w_nondim.flatten(), wOut.flatten())
+            ]
+        ), w_nondim
 
     def test_eq(self):
         model = DummyModel([earth, sun])
