@@ -48,15 +48,13 @@ definitions with a variety of common event types defined.
    DistanceEvent
    VariableValueEvent
 
-Events are added to the propagation by setting or modifying the ``events``
-attribute of the propagator,
+Events are added to the propagation by including them in the call to 
+:func:`Propagator.propgate`,
 
 .. code-block:: python
 
    # Stop the propagation at an apse relative to the first primary
-   prop.events.append(ApseEvent(model, 0, terminal=True))
-
-.. warning:: This event-specification API will change
+   prop.propagate(w0, tspan, events=[ApseEvent(model, 0, terminal=True)])
 
 
 Reference
@@ -81,6 +79,8 @@ Reference
    :members:
 
 """
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -137,7 +137,6 @@ class Propagator(ModelBlockCopyMixin):
         self.dense: bool = dense  #: whether or not to output dense propagation data
         self.atol: float = atol  #: absolute tolerance
         self.rtol: float = rtol  #: relative tolerance
-        self.events: list[AbstractEvent] = []  #: integration events
 
     # TODO need a way to pass events to the propagation dynamically, without
     #   modifying the propagator
@@ -148,6 +147,7 @@ class Propagator(ModelBlockCopyMixin):
         *,
         params: Union[FloatArray, None] = None,
         varGroups: Union[VarGroup, Sequence[VarGroup]] = VarGroup.STATE,
+        events: Sequence[AbstractEvent] = [],
         **kwargs,
     ) -> OptimizeResult:
         """
@@ -159,6 +159,7 @@ class Propagator(ModelBlockCopyMixin):
                 for the propagation
             params: parameters that are passed to the dynamics model
             varGroups: the variable groups that are included in ``w0``.
+            events: events for the propagation
             kwargs: additional arguments passed to :func:`scipy.integrate.solve_ivp`.
                 Note that the ``method`` and ``dense_output`` arguments, defined
                 in the :class:`Propagator` constructor, cannot be overridden.
@@ -183,7 +184,7 @@ class Propagator(ModelBlockCopyMixin):
                 checked via :func:`AbstractDynamicsModel.validForPropagation`
             RuntimeError: if the size of ``w0`` is inconsistent with ``varGroups``
                 as checked via :func:`AbstractDynamicsModel.groupSize`
-            RuntimeError: if any of the objects in :attr:`events` are not derived
+            RuntimeError: if any of the objects in ``events`` are not derived
                 from the :class:`AbstractEvent` base class
         """
         # Checks
@@ -226,12 +227,12 @@ class Propagator(ModelBlockCopyMixin):
         kwargs_in["args"] = (varGroups, tuple(params) if params is not None else params)
 
         # Gather event functions and assign attributes
-        for event in self.events:
+        for event in events:
             if not isinstance(event, AbstractEvent):
                 raise RuntimeError(f"Event is not derived from AbstractEvent:\n{event}")
             event.assignEvalAttr()
 
-        eventFcns = [event.eval for event in self.events]
+        eventFcns = [event.eval for event in events]
         eventFcns.extend(util.toList(kwargs_in.get("events", [])))
         kwargs_in["events"] = eventFcns
 

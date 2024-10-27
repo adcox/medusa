@@ -148,8 +148,7 @@ class TestPropagator:
 
         # Using VariableValueEvent to test core class behavior
         event = VariableValueEvent(*evtArgs)
-        prop.events.append(event)
-        sol = prop.propagate(y0, tspan)
+        sol = prop.propagate(y0, tspan, events=[event])
 
         # Check that events were recorded
         assert isinstance(sol.t_events, list)
@@ -217,8 +216,7 @@ def test_variableValueEvent(emModel, terminal, direction, nEvt):
     tspan = [0, 6.32]
     prop = Propagator(emModel)
     event = VariableValueEvent(1, 0.0, terminal, direction)
-    prop.events.append(event)
-    sol = prop.propagate(y0, tspan)
+    sol = prop.propagate(y0, tspan, events=[event])
 
     assert len(sol.t_events) == 1  # 1 event
     t_events = sol.t_events[0]
@@ -231,8 +229,8 @@ def test_apseEvent(emModel, terminal, direction):
     y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
     tspan = [0, 6.32]
     prop = Propagator(emModel)
-    prop.events.append(ApseEvent(emModel, 0, terminal, direction))
-    sol = prop.propagate(y0, tspan)
+    event = ApseEvent(emModel, 0, terminal, direction)
+    sol = prop.propagate(y0, tspan, events=[event])
 
     assert len(sol.t_events) == 1  # 1 event
     t_events = sol.t_events[0]
@@ -243,8 +241,8 @@ def test_distanceEvent(emModel):
     y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
     tspan = [0, 6.32]
     prop = Propagator(emModel)
-    prop.events.append(DistanceEvent(0.5, [-1.0, 0.0, 0.0]))
-    sol = prop.propagate(y0, tspan)
+    event = DistanceEvent(0.5, [-1.0, 0.0, 0.0])
+    sol = prop.propagate(y0, tspan, events=[event])
 
     assert len(sol.t_events) == 1  # 1 event
     t_events = sol.t_events[0]
@@ -255,8 +253,8 @@ def test_bodyDistanceEvent(emModel):
     y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
     tspan = [0, 6.32]
     prop = Propagator(emModel)
-    prop.events.append(BodyDistanceEvent(emModel, 0, 1.0))
-    sol = prop.propagate(y0, tspan)
+    event = BodyDistanceEvent(emModel, 0, 1.0)
+    sol = prop.propagate(y0, tspan, events=[event])
 
     assert len(sol.t_events) == 1  # 1 event
     t_events = sol.t_events[0]

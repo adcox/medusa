@@ -163,6 +163,12 @@ class DynamicsModel(AbstractDynamicsModel):
         self.massRatio: float = (secondary.gm / totalGM).magnitude
         super().__init__([primary, secondary], charL, charT, charM)
 
+    def __eq__(self, other: object) -> bool:
+        if super().__eq__(other):
+            return self.massRatio == other.massRatio  # type: ignore
+        else:
+            return False
+
     @property
     @override
     def epochIndependent(self) -> bool:

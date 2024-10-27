@@ -48,10 +48,13 @@ def test_equals():
     model1 = DynamicsModel(earth, moon)
     model2 = DynamicsModel(moon, earth)
     model3 = DynamicsModel(earth, sun)
+    model4 = DynamicsModel(earth, moon)
+    model4.massRatio *= 1.0000001
 
     assert model1 == model1
     assert model1 == model2
     assert not model1 == model3
+    assert not model1 == model4
 
 
 def test_groupSize():
