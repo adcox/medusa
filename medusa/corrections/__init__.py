@@ -430,7 +430,8 @@ class Segment:
             ``terminus`` is not used or modified by the Segment.
         prop: the propagator to use. If ``None``, a
             :class:`~medusa.propagate.Propagator` is constructed for the ``origin``
-            model with the ``dense`` flag set to False.
+            model with the ``dense_output`` flag set to False to reduce computational
+            load.
         propParams: parameters to be
             passed to the model's equations of motion. If the input is not a
             :class:`Variable`, a variable is constructed with a name "Params"
@@ -458,7 +459,7 @@ class Segment:
                 logger.warning("Changing propagator model to match origin")
                 prop.model = origin.model
         else:
-            prop = Propagator(origin.model, dense=False)
+            prop = Propagator(origin.model, dense_output=False)
 
         if not isinstance(tof, Variable):
             tof = Variable(tof, name="Time-of-flight")

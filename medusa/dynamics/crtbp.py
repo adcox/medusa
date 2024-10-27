@@ -126,7 +126,7 @@ from typing import Union
 
 import numpy as np
 import pint
-from numba import njit  # type: ignore
+from numba import njit
 from numpy.typing import NDArray
 
 import medusa.util as util

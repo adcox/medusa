@@ -803,7 +803,7 @@ class AbstractDynamicsModel(ABC):
             )
 
         # TODO ensure tolerances are tight enough?
-        prop = Propagator(self, dense=False)
+        prop = Propagator(self, dense_output=False)
         w0 = np.array(w0, copy=True)
         state0 = self.extractGroup(w0, VarGroup.STATE, varGroupsIn=allVars)
 

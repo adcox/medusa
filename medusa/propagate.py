@@ -31,6 +31,7 @@ the propagated solution.
 .. autosummary::
    Propagator
    Propagator.propagate
+   Propagator.denseEval
 
 
 Events
@@ -88,9 +89,9 @@ from copy import copy
 from typing import Union
 
 import numpy as np
-from numba import njit  # type: ignore
-from scipy.integrate import solve_ivp  # type: ignore
-from scipy.optimize import OptimizeResult  # type: ignore
+from numba import njit
+from scipy.integrate import solve_ivp
+from scipy.integrate._ivp.ivp import OdeResult
 
 import medusa.util as util
 from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
@@ -110,14 +111,14 @@ class Propagator(ModelBlockCopyMixin):
 
     Args:
         model: defines the dynamics model in which the propagation occurs
-        method: the integration method to use; passed as the
+        method: default integration method to use; passed as the
             ``method`` argument to :func:`~scipy.integrate.solve_ivp`
-        dense: whether or not to output dense propagation data;
+        dense_output: whether or not to output dense propagation data by default;
             passed as the ``dense_output`` argument to
             :func:`~scipy.integrate.solve_ivp`
-        atol: absolute tolerance for the integrator; see
+        atol: default absolute tolerance for the integrator; see
             :func:`~scipy.integrate.solve_ivp` for more details
-        rtol: relative tolerance for the integrator; see
+        rtol: default relative tolerance for the integrator; see
             :func:`~scipy.integrate.solve_ivp` for more details
     """
 
@@ -125,7 +126,7 @@ class Propagator(ModelBlockCopyMixin):
         self,
         model: AbstractDynamicsModel,
         method: str = "DOP853",
-        dense: bool = True,
+        dense_output: bool = True,
         atol: float = 1e-12,
         rtol: float = 1e-10,
     ) -> None:
@@ -134,12 +135,51 @@ class Propagator(ModelBlockCopyMixin):
 
         self.model: AbstractDynamicsModel = model  #: dynamics model
         self.method: str = method  #: the numerical integration method
-        self.dense: bool = dense  #: whether or not to output dense propagation data
+        self.dense: bool = (
+            dense_output  #: whether or not to output dense propagation data
+        )
         self.atol: float = atol  #: absolute tolerance
         self.rtol: float = rtol  #: relative tolerance
 
-    # TODO need a way to pass events to the propagation dynamically, without
-    #   modifying the propagator
+    def denseEval(self, sol: OdeResult, times: FloatArray) -> OdeResult:
+        """
+        Densely evaluate a propagator solution
+
+        Even when the ``dense_output`` flag is True, the points saved to the
+        output solution are often far from "dense." This method evaluates the
+        dense solution at the prescribed times and saves the updated data to the
+        ``t`` and ``y`` arrays in the solution object.
+
+        .. note::
+           If the ``sol`` was propagated ``dense_output = False``, a new propagation
+           is performed with that flag set to True so that the solution can be
+           evaluated at the prescribed times.
+
+        Args:
+            sol: the solution to evaluate densely
+            times: the times at which to evaluate the solution
+
+        Returns:
+            A copy of the input solution with updated ``t`` and ``y`` attributes.
+        """
+        if sol.sol is None:
+            # Re-propagate with dense_out = True
+            sol = self.propagate(
+                sol.y[:, 0],
+                (sol.t[0], sol.t[-1]),
+                params=sol.params,
+                varGroups=sol.varGroups,
+                events=sol.events,
+                dense_output=True,
+            )
+        else:
+            sol = copy(sol)
+
+        # Evaluate the solution at the specified times
+        sol.t = np.asarray(times)
+        sol.y = np.asarray([sol.sol(t) for t in times]).T
+        return sol
+
     def propagate(
         self,
         w0: FloatArray,
@@ -149,7 +189,7 @@ class Propagator(ModelBlockCopyMixin):
         varGroups: Union[VarGroup, Sequence[VarGroup]] = VarGroup.STATE,
         events: Sequence[AbstractEvent] = [],
         **kwargs,
-    ) -> OptimizeResult:
+    ) -> OdeResult:
         """
         Perform a propagation
 
@@ -161,8 +201,9 @@ class Propagator(ModelBlockCopyMixin):
             varGroups: the variable groups that are included in ``w0``.
             events: events for the propagation
             kwargs: additional arguments passed to :func:`scipy.integrate.solve_ivp`.
-                Note that the ``method`` and ``dense_output`` arguments, defined
-                in the :class:`Propagator` constructor, cannot be overridden.
+                Note that the ``method``, ``dense_output``, ``atol``, and ``rtol``
+                values in the constructor act as defaults but can be overridden
+                here with propagation-specific values.
 
         Returns:
             scipy.optimize.OptimizeResult: the output of the
@@ -178,6 +219,7 @@ class Propagator(ModelBlockCopyMixin):
             - ``params``: a copy of the ``params`` passed into the function
             - ``varGroups`` (:class:`tuple`): the variable groups passed into
               the function.
+            - ``events`` (:class:`tuple`): the events for the propagation
 
         Raises:
             RuntimeError: if ``varGroups`` is not valid for the propagation as
@@ -191,14 +233,13 @@ class Propagator(ModelBlockCopyMixin):
         if not self.model.validForPropagation(varGroups):
             raise RuntimeError(f"VarGroup = {varGroups} is not valid for propagation")
 
+        # defaults from object attributes
         kwargs_in = {
             "method": self.method,
             "dense_output": self.dense,
             "atol": self.atol,
             "rtol": self.rtol,
         }
-        kwargs.pop("method", None)
-        kwargs.pop("dense_output", None)
         kwargs_in.update(**kwargs)
 
         if "args" in kwargs_in:
@@ -243,6 +284,7 @@ class Propagator(ModelBlockCopyMixin):
         sol.model = self.model
         sol.params = copy(params)
         sol.varGroups = varGroups
+        sol.events = tuple(events)
 
         return sol
 

@@ -71,6 +71,7 @@ medusa = ["py.typed"]
 [tool.mypy]
 plugins = ["numpy.typing.mypy_plugin"]
 packages = ["medusa"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = "-ra"

@@ -196,7 +196,7 @@ class TestControlPoint:
 class TestSegment:
     @pytest.fixture(scope="class")
     def prop(self):
-        return Propagator(emModel, dense=False)
+        return Propagator(emModel, dense_output=False)
 
     @pytest.fixture
     def origin(self):
@@ -981,7 +981,7 @@ class TestDifferentialCorrector:
     def test_multipleShooter(self, linesearch):
         q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         period = 6.311
-        prop = Propagator(emModel, dense=False)
+        prop = Propagator(emModel, dense_output=False)
         sol = prop.propagate(
             q0,
             [0, period],

@@ -62,10 +62,10 @@ class TestPropagator:
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         tspan = [0, 6.3111]
 
-        prop = Propagator(emModel, dense=dense)
+        prop = Propagator(emModel, dense_output=dense)
         sol = prop.propagate(y0, tspan, varGroups=groups, atol=1e-12, rtol=1e-10)
 
-        assert isinstance(sol, scipy.optimize.OptimizeResult)
+        assert isinstance(sol, scipy.integrate._ivp.ivp.OdeResult)
         assert sol.status == 0
 
         assert all([tspan[0] <= t <= tspan[1] for t in sol.t])
@@ -97,6 +97,8 @@ class TestPropagator:
 
         if dense:
             assert isinstance(sol.sol, scipy.integrate.OdeSolution)
+        else:
+            assert sol.sol is None
 
         # Check for custom metadata
         assert hasattr(sol, "model")
@@ -151,6 +153,7 @@ class TestPropagator:
         sol = prop.propagate(y0, tspan, events=[event])
 
         # Check that events were recorded
+        assert event in sol.events
         assert isinstance(sol.t_events, list)
         assert len(sol.t_events) == 1  # 1 event in the propagation
         if event.terminal:
@@ -158,6 +161,25 @@ class TestPropagator:
         else:
             assert len(sol.t_events[0]) > 0
         assert sol.status == 0 if not event.terminal else 1
+
+    @pytest.mark.parametrize("dense", [False, True])
+    def test_denseEval(self, emModel, dense):
+        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        tspan = [0, 6.3111]
+        prop = Propagator(emModel)
+
+        # Do the first propagation
+        sol = prop.propagate(y0, tspan, dense_output=dense)
+        N = len(sol.t)
+
+        # Now get dense output
+        times = np.linspace(sol.t[0], sol.t[-1], num=500)
+        sol2 = prop.denseEval(sol, times)
+        np.testing.assert_array_equal(sol2.t, times)
+        assert sol2.y.shape[1] == 500
+        assert sol.y.shape[1] == N  # test independence
+        np.testing.assert_array_equal(sol2.y[:, 0], sol.y[:, 0])
+        np.testing.assert_array_equal(sol2.y[:, -1], sol.y[:, -1])
 
 
 class TestAbstractEvent:
