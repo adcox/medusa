@@ -35,7 +35,7 @@ T = 3.42088
 
 # ------------------------------------------------------------------------------
 # Get periodic CR3BP orbit
-prop = Propagator(crtbpModel, dense=False)
+prop = Propagator(crtbpModel, dense_output=False)
 sol = prop.propagate(q0, [0, T], t_eval=[0.0, T / 2, T])
 points = [cor.ControlPoint.fromProp(sol, ix) for ix in range(len(sol.t))]
 # Make planar
@@ -73,6 +73,11 @@ fig, ax = plt.subplots()
 convert = plots.ToCoordVals(["x", "y"])
 
 it0 = cor.ShootingProblem.fromIteration(solution, log, it=0)
+for seg in it0.segments:
+    seg.denseEval()
+for seg in solution.segments:
+    seg.denseEval()
+
 sol0 = convert.segments(it0.segments)
 solf = convert.segments(solution.segments)
 
@@ -102,19 +107,22 @@ for point in points:
 
 params = cor.Variable(control.params, mask=True)
 segments = [
-    cor.Segment(points[ix], fv[4], points[ix + 1 % 2], propParams=params)
-    for ix in range(len(points) - 1)
+    cor.Segment(points[ix], fv[4], points[(ix + 1) % 2], propParams=params)
+    for ix in range(len(points))
 ]
 
 ltproblem = cor.ShootingProblem()
 ltproblem.addSegments(segments)
 for seg in segments:
-    ltproblem.addConstraints(cons.StateContinuity(seg))  # , indices=[0,3,4,5]))
+    ltproblem.addConstraints(cons.StateContinuity(seg, indices=[0, 1, 3, 4, 5]))
 
 ltproblem.build()
+ltproblem.printJacobian()
 # assert ltproblem.checkJacobian(tol=1e-4)
 ltsolution, ltlog = corrector.solve(ltproblem)
 ltsolution.printJacobian()
+for seg in ltsolution.segments:
+    seg.denseEval()
 
 sol_lt = convert.segments(ltsolution.segments)
 ax.plot(sol_lt[0], sol_lt[1], lw=2, label="Low-Thrust")

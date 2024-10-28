@@ -288,27 +288,32 @@ class TestSegment:
         assert not id(seg.propParams) == id(seg2.propParams)
 
     @pytest.mark.parametrize(
-        "varGroups",
+        "varGroups, kwargs",
         [
-            [VarGroup.STATE],
-            [VarGroup.STATE, VarGroup.STM],
-            [VarGroup.STATE, VarGroup.STM, VarGroup.EPOCH_PARTIALS],
-            [
-                VarGroup.STATE,
-                VarGroup.STM,
-                VarGroup.EPOCH_PARTIALS,
-                VarGroup.PARAM_PARTIALS,
-            ],
+            ([VarGroup.STATE], {}),
+            ([VarGroup.STATE], {"dense_output": True}),
+            ([VarGroup.STATE, VarGroup.STM], {}),
+            ([VarGroup.STATE, VarGroup.STM, VarGroup.EPOCH_PARTIALS], {}),
+            (
+                [
+                    VarGroup.STATE,
+                    VarGroup.STM,
+                    VarGroup.EPOCH_PARTIALS,
+                    VarGroup.PARAM_PARTIALS,
+                ],
+                {},
+            ),
         ],
     )
-    def test_propagate(self, origin, varGroups):
+    def test_propagate(self, origin, varGroups, kwargs):
         seg = Segment(origin, 1.0)
         assert seg.propSol is None
-        seg.propagate(varGroups)
+        seg.propagate(varGroups, **kwargs)
         assert seg.propSol is not None
         assert seg.propSol.y[:, 0].size == origin.model.groupSize(varGroups)
         assert seg.propSol.t[0] == origin.epoch.allVals[0]
         assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
+        assert (seg.propSol.sol is None) != kwargs.get("dense_output", False)
 
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize(

@@ -40,7 +40,7 @@ period = 3.00
 q0Full = model.appendICs(q0, [VarGroup.STM])
 model.checkPartials(q0Full, [0, period])
 
-prop = Propagator(model, dense=False)
+prop = Propagator(model, dense_output=False)
 sol = prop.propagate(q0, [0, period], t_eval=[0.0, period / 2, period])
 points = [ControlPoint.fromProp(sol, ix) for ix in range(len(sol.t))]
 segments = [
@@ -75,6 +75,9 @@ assert log["status"] == "converged"
 import matplotlib.pyplot as plt
 
 import medusa.plots as plots
+
+for seg in solution.segments:
+    seg.denseEval()
 
 convert = plots.ToCoordVals(["x", "y", "z"])
 segs = convert.segments(solution.segments)

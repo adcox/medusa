@@ -120,11 +120,12 @@ from typing import Union
 
 import numpy as np
 import numpy.ma as ma
-import scipy  # type: ignore
+import scipy
 from numpy.typing import NDArray
 from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
+from scipy.integrate._ivp.ivp import OdeResult
 
 from medusa import console, numerics, util
 from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
@@ -380,7 +381,7 @@ class ControlPoint(ModelBlockCopyMixin):
 
     @staticmethod
     def fromProp(
-        solution: scipy.integrate.OptimizeResult, ix: int = 0, autoMask: bool = True
+        solution: OdeResult, ix: int = 0, autoMask: bool = True
     ) -> ControlPoint:
         """
         Construct a control point from a propagated arc
@@ -400,8 +401,8 @@ class ControlPoint(ModelBlockCopyMixin):
         Raises:
             ValueError: if ``ix`` is out of bounds with respect to the ``solution`` indices
         """
-        if not isinstance(solution, scipy.optimize.OptimizeResult):
-            raise TypeError("Expecting OptimizeResult from scipy solve_ivp")
+        if not isinstance(solution, OdeResult):
+            raise TypeError("Expecting OdeResult from scipy solve_ivp")
 
         if ix > len(solution.t):
             raise ValueError(f"ix = {ix} is out of bounds (max = {len(solution.t)})")
@@ -487,7 +488,7 @@ class Segment:
         #: Variable: propagation parameters
         self.propParams = propParams
 
-        #: Union[None, scipy.optimize.OptimizeResult]: the propagation output, if
+        #: Union[None, OdeResult]: the propagation output, if
         #: :func:`propagate` has been called, otherwise ``None``.
         self.propSol = None
 
@@ -605,8 +606,11 @@ class Segment:
         return partials
 
     def propagate(
-        self, varGroups: Union[VarGroup, Sequence[VarGroup]], lazy: bool = True
-    ) -> scipy.optimize.OptimizeResult:
+        self,
+        varGroups: Union[VarGroup, Sequence[VarGroup]],
+        lazy: bool = True,
+        **kwargs,
+    ) -> OdeResult:
         """
         Propagate from the :attr:`origin` for the specified :attr:`tof`. Results
         are stored in :attr:`propSol`.
@@ -618,6 +622,12 @@ class Segment:
                 trajectory. If True, the :attr:`prop` ``propagate()`` function is
                 called if :attr:`propSol` is ``None`` or if the previous propagation
                 did not include one or more of the ``varGroups``.
+            kwargs: additional arguments passed to the
+                :func:`medusa.propagate.Propagator.propagate` function. These
+                arguments do not affect the lazy evaluation. For instance, if the
+                propagation has previously run with ``dense_output = False``,
+                the propagation is *not* rerun when ``dense_output = True`` is
+                an input; set ``lazy = False`` to force a new propagation.
 
         Returns:
             the propagation result. This is also stored in :attr:`propSol`.
@@ -635,8 +645,38 @@ class Segment:
             tspan,
             params=self.propParams.allVals,
             varGroups=varGroups,
+            **kwargs,
         )
 
+        return self.propSol
+
+    def denseEval(self, num: int = 100) -> OdeResult:
+        """
+        Evaluate the propagated solution with a dense grid of times.
+
+        This is often useful before plotting the solution.
+
+        .. note::
+           If the segment has not been propagated at all (:attr:`propSol` is ``None``),
+           the origin state will be propagated via :func:`propagate` with the
+           :data:`~medusa.dynamics.VarGroup.STATE` variable group.
+
+        Args:
+            num: the number of points between the :attr:`origin` Epoch and that
+                epoch plus the :attr:`tof`. Times are spaced linearly.
+
+        Returns:
+            The densely evaluated solution with updated ``t`` and ``y`` attributes.
+        """
+        times = np.linspace(
+            self.origin.epoch.allVals[0],
+            self.origin.epoch.allVals[0] + self.tof.allVals[0],
+            num=num,
+        )
+        if self.propSol is None:
+            self.propSol = self.propagate(VarGroup.STATE, dense_output=True)
+
+        self.propSol = self.prop.denseEval(self.propSol, times)
         return self.propSol
 
 

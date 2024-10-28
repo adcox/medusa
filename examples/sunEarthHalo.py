@@ -40,7 +40,7 @@ q0 = [
 ]
 period = 3.06
 
-prop = Propagator(model, dense=False)
+prop = Propagator(model)
 solForward = prop.propagate(q0, [0, period / 2], t_eval=[0.0, period / 4, period / 2])
 solReverse = prop.propagate(
     q0, [0, -period / 2], t_eval=[0.0, -period / 4, -period / 2]
@@ -93,6 +93,11 @@ ax = fig.add_subplot(projection="3d")
 convert = plots.ToCoordVals(["x", "y", "z"])
 
 it0 = ShootingProblem.fromIteration(solution, log, it=0)
+for seg in it0.segments:
+    seg.denseEval()
+for seg in solution.segments:
+    seg.denseEval()
+
 segs0 = convert.segments(it0.segments)
 pts0 = convert.controlPoints(it0.controlPoints)
 
