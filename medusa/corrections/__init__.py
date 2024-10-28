@@ -5,74 +5,224 @@ Differential Corrections
 This module provides objects to define the differential corrections problem,
 its constraints, and solver objects.
 
+Overview
+------------------
+
+At the simplest level, a differential corrections problem is composed of **variables**
+and **constraints**. The goal of the corrections process is to adjust the variables
+until all of the constraints are satisfied. Variables, a.k.a.., "free variables"
+"design variables" can include quantities like a state vector, a time-of-flight,
+an epoch, or a parameter.
+
+.. autosummary::
+   :nosignatures:
+
+   Variable
+   AbstractConstraint
+
+Mathematically, these free variables are collected into a single free variable vector,
+:math:`\\vec{X}`. Similarly, the constraints are collected into a constraint
+vector that is a function of the free variables, :math:`\\vec{F}(\\vec{X})`. 
+The problem is solved when :math:`\\vec{F}(\\vec{X}_f) = \\vec{0}`, with the solution
+represented by the :math:`\\vec{X}_f` variables.
+
+.. autosummary::
+   :nosignatures:
+
+   CorrectionsProblem.freeVarVec
+   CorrectionsProblem.constraintVec
+
+An iterative Newton method is used to solve corrections problems. Given an initial
+set of variables, :math:`\\vec{X}_*`, the constraint function can be expanded 
+about :math:`\\vec{X}_*` in a Taylor Series expansion:
+
+.. math::
+   \\vec{F}(\\vec{X}_f) = \\vec{F}(\\vec{X}_*) + \mathbf{J} (\\vec{X}_f - \\vec{X}_*) + \mathrm{h.o.t.s}
+
+where :math:`\mathbf{J}` is the **Jacobian** matrix with elements
+:math:`\mathbf{J}_{i,j} = \partial \\vec{F}_i / \partial \\vec{X}_j`, evaluated
+at :math:`\\vec{X}_*`. 
+
+.. autosummary:: CorrectionsProblem.jacobian
+   :nosignatures:
+
+Ignoring the higher-order terms (h.o.t.s) and recognizing
+that :math:`\\vec{F}(\\vec{X}_f)` evaluates to zero, the expansion is reduced to
+
+.. math::
+   \\vec{F}(\\vec{X}_*) + \mathbf{J}(\\vec{X}_f - \\vec{X}_*) = \\vec{0}.
+
+In practice, because the higher order terms have been ignored, this gradient-based
+method requires multiple iterations to locate :math:`\\vec{X}_f`. The iterative
+**update equation** is written as
+
+.. math::
+   -\\vec{F}(\\vec{X}_n) = \mathbf{J}(\\vec{X}_{n+1} - \\vec{X}_n).
+
+
 Defining a Problem
 ------------------
 
-At the simplest level, a differential corrections problem is composed of "variables",
-sometimes termed "free variable" or "design variables." These are values that can
-be adjusted to change the solution. Typical variables include state vectors and
-propagation times.
+Variables
+^^^^^^^^^
 
-.. autosummary:: Variable
+Variables within a corrections problem are managed via a few functions:
 
+.. autosummary::
+   :nosignatures:
+
+   CorrectionsProblem.addVariables
+   CorrectionsProblem.rmVariables
+   CorrectionsProblem.clearVariables
+
+Variables can be added and removed from a problem in any order, including intermixed
+operations with the methods to add/remove constraints.
+
+
+Constraints
+^^^^^^^^^^^
+
+Constraints within a corrections problem are managed via a few functions:
+
+.. autosummary::
+   :nosignatures:
+
+   CorrectionsProblem.addConstraints
+   CorrectionsProblem.rmConstraints
+   CorrectionsProblem.clearConstraints
+
+Like variables, constraints can be added and removed from a problem in any order.
+
+Trajectory-Aware Corrections
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Within the context of multi-body dynamics, variables are usually grouped together
+to describe epoch-states and propagated arcs.
 Control point and segment objects provide a way to group related variables together.
-In this context, a "control point" groups a state vector and an epoch together.
+A **control point** groups a state vector and an epoch together.
 The control point also defines a dynamical model in which the state and epoch
 are defined (with implications for the central body, frame, and units).
 
-Similarly, a "segment" stores variables about a propagation between to points:
+Similarly, a **segment** stores variables about a propagation between two points:
 the time-of-flight and propagation parameters. Each segment is linked to an
 "origin" node that represents the initial epoch-state and defines the dynamical
 model for the propagation.
 
 .. autosummary::
+   :nosignatures:
+
    ControlPoint
    Segment
 
-However they are grouped and stored, variables must be added to a "problem." A
-basic version that defines most of the algorithms and properties in defined in
-the ``CorrectionsProblem`` class.
-
-When working with control points and segments, a more specific problem type --
-the ``ShootingProblem`` -- offers convenience methods to add segments without
+However they are grouped and stored, variables must be added to a corrections problem.
+The :class:`ShootingProblem` offers convenience methods to incorporate segments without
 explicitly adding all of the stored variables (states, epochs, times-of-flight, 
 etc.). This problem type also performs checks to ensure the segments combine 
 into a valid graph.
+Constraints are added to the problem via the same interface as in the more general
+:class:`CorrectionsProblem`.
 
 .. autosummary::
-   CorrectionsProblem
-   ShootingProblem
+   :nosignatures:
+
+   ShootingProblem.addSegments
+   ShootingProblem.rmSegments
+   ShootingProblem.checkValidGraph
+
+The ``ShootingProblem`` requires a post-processing step after all of the
+segments and constraints have been added. The :func:`ShootingProblem.build` 
+function performs the operations to import variables from the ``Segment`` and
+``ControlPoint`` objects.
+
+.. autosummary:: ShootingProblem.build
+   :nosignatures:
+
+Debugging
+^^^^^^^^^^
+
+Maintaining a mental map of the variables and constraints and their relationships
+to each other can be difficult to do. A few methods provide helpful information:
+
+.. autosummary::
+   :nosignatures:
+
+   CorrectionsProblem.printFreeVars
+   CorrectionsProblem.printConstraints
+   CorrectionsProblem.printJacobian
+   CorrectionsProblem.checkJacobian
+
 
 Constraints
 -----------
 
-Constraints are added to the differential corrections problem. An abstract
-class is defined within this module to provide the framework for other constraints.
-See the :doc:`corrections.constraints` documentation for a list of the provided 
-constraints.
-
-.. autosummary:: AbstractConstraint
+A library of constraints is included in the ``corrections.constraints`` submodule,
 
 .. toctree::
    :maxdepth: 1
 
    corrections.constraints
 
+While these constraints cover many common needs for differential corrections, 
+new types and formulations of constraints are always a necessity. To facilitate
+user-defined constraints, the :class:`AbstractConstraint` interface is provided.
+Derived objects must define the constraint function and provide partial derivatives
+of the constraint function with respect to relevant variables. The ``CorrectionsProblem``
+object provides a function to compare analytical and numerical derivatives from 
+constraints, a helpful tool when debugging the derivation of a new constraint.
+
+.. autosummary:: CorrectionsProblem.checkJacobian
+   :nosignatures:
+
 Solving Problems
 ----------------
 
 An iterative differential corrections process is used to update the variables
-until the constraints are satisfied. A :class:`DifferentialCorrector` performs
-this iterative process with configurable options for the state update and the
-convergence check.
+until the constraints are satisfied, i.e., :math:`\\vec{F}(\\vec{X}) = \\vec{0}`.
+A :class:`DifferentialCorrector` performs this iterative process with 
+configurable options for the state update and the convergence check.
+
+.. autosummary:: DifferentialCorrector.solve
+   :nosignatures:
+
+State Update
+^^^^^^^^^^^^
+
+The **state update** is the process of solving the equation
+
+.. math::
+   -\\vec{F}(\\vec{X}_n) = \mathbf{J}(\\vec{X}_{n+1} - \\vec{X}_n) = \mathbf{J}\\delta \\vec{X}_n
+
+for the update, or "step", :math:`\delta \\vec{X}_n`. When the the number of free
+variables is greater than or equal to the number of constraints, :math:`\mathbf{J}`
+is square (equal) or wide (greater than) and the update equation can be solved
+via a minimum norm update. When the number of constraints is greater than the 
+number of variables, a least squares update can be applied. It is up to the user
+to specify which update to apply; this is accomplished by setting the
+:attr:`DifferentialCorrector.updateGenerator` attribute. Two options are currently
+available,
 
 .. autosummary::
    :nosignatures:
 
-   DifferentialCorrector
    MinimumNormUpdate
    LeastSquaresUpdate
-   L2NormConvergence
+
+.. warning:: The update generator API is rough and likely to be updated in the future.
+
+Convergence Check
+^^^^^^^^^^^^^^^^^
+
+Mathematically, the corrections problem is solved when :math:`\\vec{F}(\\vec{X}) = \\vec{0}`.
+Of course, in practice the vector will never evaluate *exactly* to zero, so some
+numerical tolerance is required. There are also several ways to quantify how close
+the vector is to zero, including several types of vector norms. One option is 
+currently available, and can be set via the 
+:attr:`DifferentialCorrector.convergeCheck` attribute.
+
+.. autosummary:: L2NormConvergence
+   :nosignatures:
+
+.. warning:: The convergence check API is rough and likely to be updated in the future.
 
 Reference
 ==============
@@ -1694,9 +1844,23 @@ class DifferentialCorrector:
 
 class MinimumNormUpdate:
     """
-    Computes the minimum-norm update to the problem J @ dX + FX = 0
+    Computes the minimum-norm update.
 
-    TODO link to math spec
+    The update equation,
+
+    .. math::
+       -\\vec{F}(\\vec{X}_n) = \mathbf{J}\\delta \\vec{X}_n
+
+    can be solved via the minimum norm method when :math:`\mathbf{J}` is square
+    or when the number of columns (free variables) is greater than the number of
+    rows (constraints).
+
+    When :math:`\mathbf{J}` is not square, an infinite number of solutions to this
+    equation exist. As the name suggests, the "minimum norm" solution minimizes
+    the L2 norm of the step. The resulting update equation is
+
+    .. math::
+       \delta \\vec{X}_n = -\mathbf{J}^T (\mathbf{JJ}^T)^{-1} \\vec{F}(\\vec{X}_n)
     """
 
     def update(self, problem: CorrectionsProblem) -> NDArray[np.double]:
