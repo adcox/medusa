@@ -335,16 +335,10 @@ class Variable(ma.MaskedArray):
        tof = Variable(1.23, mask=True, name="time-of-flight")
     """
 
-    # SEE https://numpy.org/doc/stable/user/basics.subclassing.html
-
     def __new__(cls, data, mask=False, name="", **kwargs):
-        # Create the MaskedArray instance of our type, given the usual input args.
-        # This will call the standard constructor but return an object of our type.
-        # It also triggers a call to __array_finalize__
-
         # Create the masked array; force scalar data into an array
-        # obj = ma.MaskedArray(np.array(data, ndmin=1), mask=mask, **kwargs).view(cls)
         obj = super().__new__(cls, np.array(data, ndmin=1), mask=mask, **kwargs)
+        # Add name attribute
         obj.name = name
         return obj
 
@@ -355,32 +349,9 @@ class Variable(ma.MaskedArray):
         name: str = "",
         **kwargs,
     ):
-        # Called after __new__ and __array_finalize__. Because those functions
-        #   have done all of the initialization, this one exists mostly for
-        #   documentation purposes
         super().__init__()
 
         self.name = name  #: the variable name
-
-    def __array_finalize__(self, obj) -> None:
-        # self is a new object resulting from the
-        #   MaskedArray.__new__(Variable, ...) call, therefore it
-        #   only has attributes that the MaskedArray.__new__() call gave it.
-        super().__array_finalize__(obj)
-
-        # We could have gotten to the MaskedArray.__new__ call in 3 ways:
-        #
-        # 1) from an explicit constructor, e.g., Variable()
-        #       In this case, ``obj`` is None because we're in the middle of the
-        #       Variable.__new__ constructor
-        if obj is None:
-            return
-
-        # 2) from view casting, e.g., arr.view(Variable)
-        #       In this case, ``obj`` is arr and type(obj) may be Variable
-        # 3) from new-from-template, e.g., variable[:3]
-        #       In this case, type(obj) is Variable
-        self.name = getattr(obj, "name", "")
 
     def __eq__(var1, var2):
         # Redefine equality to return a scalar boolean so we can search for

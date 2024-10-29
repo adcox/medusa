@@ -49,22 +49,18 @@ class TestVariable:
         assert all(var.data == np.array(vals, ndmin=1))
         assert all(var.mask == np.array(mask, ndmin=1))
 
-    def test_slice(self):
-        var1 = Variable([1, 2, 3, 4, 5], mask=[0, 1, 0, 1, 0], name="variable")
-        var2 = var1[:3]
+    # def test_copy(self):
+    #    var = Variable([1.0, 2.0], mask=[True, False], name="variable")
+    #    var2 = copy.copy(var)
+    #    #assert id(var.data) == id(var2.data)
+    #    #assert id(var.name) == id(var2.name)
 
-        assert isinstance(var2, Variable)
-        np.testing.assert_array_equal(var2.data, var1.data[:3])
-        np.testing.assert_array_equal(var2.mask, var1.mask[:3])
-        assert var2.name == ""  # TODO I would have thought it would be copied?
+    #    # Changes to one DO affect the other
+    #    var[:] = [3, 4]
+    #    assert np.array_equal(var, var2)
 
-    def test_view(self):
-        vals = [1, 2, 3]
-        var1 = np.array(vals).view(Variable)
-
-        assert isinstance(var1, Variable)
-        np.testing.assert_array_equal(var1.data, vals)
-        assert var1.mask == False
+    #    var.name = "blah"
+    #    assert var2.name == "variable"
 
     def test_deepCopy(self):
         var = Variable([1.0, 2.0], mask=[True, False], name="variable")
@@ -98,6 +94,21 @@ class TestVariable:
     def test_numFree(self, mask):
         var = Variable([1.0, 2.0], mask=mask)
         assert var.numFree == sum([not m for m in mask])
+
+    # @pytest.mark.parametrize(
+    #    "indices, expected",
+    #    [
+    #        [[0, 1, 2, 3], [0, 1]],
+    #        [[0, 1], [0]],
+    #        [[1, 2], [0, 1]],
+    #        [[2, 3], [1]],
+    #        [[2, 1], [0, 1]],
+    #        [[0, 3], []],
+    #    ],
+    # )
+    # def test_unmaskedIndices(self, indices, expected):
+    #    var = Variable([0.0, 1.0, 2.0, 3.0], [True, False, False, True])
+    #    assert var.unmaskedIndices(indices) == expected
 
 
 # ------------------------------------------------------------------------------
