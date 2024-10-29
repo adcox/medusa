@@ -79,7 +79,7 @@ class Angle(AbstractConstraint):
             raise ValueError("center must have same number of elements as stateIx")
 
         # Try evaluating state and indices to raise index error
-        self.state.data[self.stateIx]
+        self.state.allVals[self.stateIx]
 
     @property
     @override
@@ -90,7 +90,7 @@ class Angle(AbstractConstraint):
     def evaluate(self) -> NDArray[np.double]:
         # TODO note about no sign distinction due to cosine?
         # Use dot product to compute angle between vectors
-        stateVec = self.state.data[self.stateIx] - self.center
+        stateVec = self.state.allVals[self.stateIx] - self.center
         evalAngle = float(self.refDir.T @ stateVec)
         return np.asarray(evalAngle - self.angleVal)
 
@@ -99,7 +99,7 @@ class Angle(AbstractConstraint):
         self, freeVarIndexMap: dict[Variable, int]
     ) -> dict[Variable, NDArray[np.double]]:
         if self.state in freeVarIndexMap:
-            dFdq = np.zeros((1, self.state.size))
+            dFdq = np.zeros((1, self.state.values.size))
             dFdq[0, self.stateIx] = self.refDir
             return {self.state: dFdq}
         else:
@@ -121,7 +121,7 @@ class StateContinuity(AbstractConstraint):
 
         if indices is None:
             # default to constraining all state variables
-            indices = np.arange(len(segment.terminus.state.data))
+            indices = np.arange(len(segment.terminus.state.allVals))
 
         if not len(indices) == len(np.unique(indices)):
             raise RuntimeError("Indices cannot have repeated values")
@@ -144,7 +144,7 @@ class StateContinuity(AbstractConstraint):
         # Already asserted that segment.terminus is not None
         termVar = self.segment.terminus.state  # type: ignore
         propState = self.segment.state(-1)[self.constrainedIx]
-        termState = termVar.data[self.constrainedIx]
+        termState = termVar.allVals[self.constrainedIx]
         return propState - termState
 
     @override
@@ -160,7 +160,7 @@ class StateContinuity(AbstractConstraint):
         partials = {}
         if termVar in freeVarIndexMap:
             # Partials for terminal state are all -1
-            dF_dqf = np.zeros((self.size, termVar.size))
+            dF_dqf = np.zeros((self.size, termVar.values.size))
             for count, ix in enumerate(self.constrainedIx):
                 dF_dqf[count, ix] = -1
 
@@ -206,10 +206,10 @@ class VariableValue(AbstractConstraint):
             raise ValueError("variable must be a Variable object")
 
         values = np.array(values, ndmin=1, copy=True)
-        if not values.size == variable.size:
+        if not values.size == variable.values.size:
             raise ValueError(
                 f"Values has {values.size} elements, but must have same number "
-                f"as variable ({variable.size})"
+                f"as variable ({variable.values.size})"
             )
 
         self.variable = variable
@@ -222,14 +222,14 @@ class VariableValue(AbstractConstraint):
 
     @override
     def evaluate(self) -> NDArray[np.double]:
-        return self.variable.data[~self.values.mask] - self.values[~self.values.mask]
+        return self.variable.allVals[~self.values.mask] - self.values[~self.values.mask]
 
     @override
     def partials(
         self, freeVarIndexMap: dict[Variable, int]
     ) -> dict[Variable, NDArray[np.double]]:
         # Partial is 1 for each constrained variable, zero otherwise
-        deriv = np.zeros((self.size, self.variable.size))
+        deriv = np.zeros((self.size, self.variable.values.size))
         count = 0
         for ix, val in enumerate(self.values):
             if not self.values.mask[ix]:
@@ -309,7 +309,7 @@ class Inequality(AbstractConstraint):
         return np.asarray(
             [
                 val - float(self.mode) * slack * slack
-                for val, slack in zip(vals, self.slack)
+                for val, slack in zip(vals, self.slack.values)
             ]
         )
 
@@ -321,9 +321,9 @@ class Inequality(AbstractConstraint):
         partials = self.equalCon.partials(freeVarIndexMap)
 
         # Append partials specific to inequality: the slack variable(s)
-        deriv = np.zeros((self.size, self.slack.size))
+        deriv = np.zeros((self.size, self.slack.values.size))
         count = 0
-        for ix, val in enumerate(self.slack.data):
+        for ix, val in enumerate(self.slack.allVals):
             if not self.slack.mask[ix]:
                 deriv[count, ix] = -2.0 * self.mode * val
                 count += 1

@@ -308,82 +308,85 @@ __all__ = [
 # ------------------------------------------------------------------------------
 
 
-class Variable(ma.MaskedArray):
+class Variable:
     """
-    Contains a variable vector with an optional mask to flag non-variable values.
-
-    This class is derived from :class:`~numpy.ma.MaskedArray`, adding a ``name``
-    attribute and a few convenience methods. Data elements that are unmasked
-    (mask = False) are termed "free variables."
+    Contains a variable vector with an optional mask to flag non-variable values
 
     Args:
-        data: scalar or array of variable values
+        values: scalar or array of variable values
         mask: ``True`` flags values as excluded from the free variable vector;
             ``False`` flags values as included. If a single value is provided,
             all ``values`` will have that mask applied.
-        name: a name for the variable
-
-    Like regular numpy masked arrays, variables can be constructed a variety of
-    ways.
-
-    .. code-block:: python
-
-       # Only the final three values are "free"
-       state = Variable([1,2,3,4,5,6], mask=[1,1,1,0,0,0])
-
-       # A time-of-flight value that is not free
-       tof = Variable(1.23, mask=True, name="time-of-flight")
     """
-
-    def __new__(cls, data, mask=False, name="", **kwargs):
-        # Create the masked array; force scalar data into an array
-        obj = super().__new__(cls, np.array(data, ndmin=1), mask=mask, **kwargs)
-        # Add name attribute
-        obj.name = name
-        return obj
 
     def __init__(
         self,
-        data: Union[float, FloatArray],
+        values: Union[float, FloatArray],
         mask: Union[bool, Sequence[bool]] = False,
         name: str = "",
-        **kwargs,
-    ):
-        super().__init__()
+    ) -> None:
+        #: ma.array: the masked values
+        self.values = ma.array(values, mask=mask, ndmin=1, copy=True)
 
-        self.name = name  #: the variable name
-
-    def __eq__(var1, var2):
-        # Redefine equality to return a scalar boolean so we can search for
-        # a variable object in a list, for example.
-        return (
-            type(var1) == type(var2)
-            and var1.data.shape == var2.data.shape
-            and all(var1.data == var2.data)
-            and var1.mask.shape == var2.mask.shape
-            and all(var1.mask == var2.mask)
-            and var1.name == var2.name
-        )
-
-    def __hash__(self):
-        # Define hash so Variables can be used as keys in dicts. Do NOT use
-        #  data or mask in hash because they are mutable
-        return hash(id(self))
+        #: str: the variable name
+        self.name = name
 
     def __repr__(self):
-        return "<Variable {!r}, data={!r}, mask={!r}>".format(
-            self.name, self.data, self.mask
-        )
+        return "<Variable {!r}, values={!r}>".format(self.name, self.values)
+
+    @property
+    def allVals(self) -> NDArray[np.double]:
+        """All values regardless of mass"""
+        return self.values.data
 
     @property
     def freeVals(self) -> NDArray[np.double]:
-        """Only free, i.e., unmasked, values"""
-        return self.data[~self.mask]
+        """Only unmasked values"""
+        return self.values[~self.values.mask]
+
+    @property
+    def mask(self) -> NDArray[np.bool_]:
+        """
+        The variable mask; ``True`` masks the value from the free variable
+        vector while ``False`` includes the value in the vector
+        """
+        return self.values.mask
 
     @property
     def numFree(self) -> int:
-        """The number of free, i.e., unmasked, values"""
-        return int(sum(~self.mask))
+        """
+        Get the number of un-masked values, i.e., the number of free variables
+        within the vector
+
+        Returns:
+            the number of un-masked values
+        """
+        return int(sum(~self.values.mask))
+
+    def unmaskedIndices(self, indices: Sequence[int]) -> list[int]:
+        """
+        Get the indices of the
+
+        Args:
+            indices: the indices of the Variable value regardless of masking
+
+        Returns:
+            the indices of the requested Variable values within the unmasked array.
+
+        Examples:
+            >>> Variable([0, 1], [True, False]).unmaskedIndices([1])
+            ... [0]
+            >>> Variable([0, 1], [True, False]).unmaskedIndices([0])
+            ... []
+        """
+        count = 0
+        out = []
+        for ix, mask in enumerate(self.values.mask):
+            if ix in indices and not mask:
+                out.append(count)
+            count += not mask
+
+        return out
 
 
 class AbstractConstraint(ModelBlockCopyMixin, ABC):
@@ -501,15 +504,15 @@ class ControlPoint(ModelBlockCopyMixin):
         if not isinstance(state, Variable):
             state = Variable(state, name="State")
 
-        if not epoch.size == 1:
+        if not epoch.values.size == 1:
             raise RuntimeError("Epoch can only have one value")
 
         sz = model.groupSize(VarGroup.STATE)
-        if not state.size == sz:
+        if not state.values.size == sz:
             raise RuntimeError("State must have {sz} values")
 
         if autoMask:
-            epoch.mask = model.epochIndependent
+            epoch.values.mask = model.epochIndependent
 
         self.model = model  #: AbstractDynamicsModel: the associated model
         self.epoch = epoch  #: Variable: the epoch
@@ -612,7 +615,7 @@ class Segment:
         if not isinstance(tof, Variable):
             tof = Variable(tof, name="Time-of-flight")
         else:
-            if not tof.size == 1:
+            if not tof.values.size == 1:
                 raise RuntimeError("Time-of-flight variable must define only one value")
 
         if not isinstance(propParams, Variable):
@@ -684,7 +687,7 @@ class Segment:
         """
         sol = self.propagate(VarGroup.STATE)
         dy_dt = self.origin.model.diffEqs(
-            sol.t[ix], sol.y[:, ix], (VarGroup.STATE,), tuple(self.propParams.data)
+            sol.t[ix], sol.y[:, ix], (VarGroup.STATE,), tuple(self.propParams.allVals)
         )
         return self.origin.model.extractGroup(dy_dt, VarGroup.STATE)
 
@@ -786,11 +789,11 @@ class Segment:
                 return self.propSol
 
         # Propagate from the origin for TOF, set self.propSol
-        tspan = [0, self.tof.data[0]] + self.origin.epoch.data[0]
+        tspan = [0, self.tof.allVals[0]] + self.origin.epoch.allVals[0]
         self.propSol = self.prop.propagate(
-            self.origin.state.data,
+            self.origin.state.allVals,
             tspan,
-            params=self.propParams.data,
+            params=self.propParams.allVals,
             varGroups=varGroups,
             **kwargs,
         )
@@ -816,8 +819,8 @@ class Segment:
             The densely evaluated solution with updated ``t`` and ``y`` attributes.
         """
         times = np.linspace(
-            self.origin.epoch.data[0],
-            self.origin.epoch.data[0] + self.tof.data[0],
+            self.origin.epoch.allVals[0],
+            self.origin.epoch.allVals[0] + self.tof.allVals[0],
             num=num,
         )
         if self.propSol is None:
@@ -893,9 +896,6 @@ class CorrectionsProblem:
         Raises:
             ValueError: if any of the inputs are not :class:`Variable` objects
         """
-        if isinstance(variable, Variable):
-            variable = [variable]
-
         for var in util.toList(variable):
             if not isinstance(var, Variable):
                 raise ValueError("Can only add Variable objects")
@@ -923,7 +923,7 @@ class CorrectionsProblem:
         Args:
             obj: an object that defines an ``importableVars`` attribute.
         """
-        self.addVariables(getattr(obj, "importableVars", []))
+        self.addVariables(util.toList(getattr(obj, "importableVars", [])))
 
     def rmVariables(self, variable: Union[Variable, Sequence[Variable]]) -> None:
         """
@@ -936,9 +936,6 @@ class CorrectionsProblem:
             variable: the variable(s) to remove. If the
                 variable is not part of the problem, no action is taken.
         """
-        if isinstance(variable, Variable):
-            variable = [variable]
-
         for var in util.toList(variable):
             try:
                 self._freeVars.remove(var)
@@ -971,7 +968,7 @@ class CorrectionsProblem:
         if self._freeVarVec is None:
             self._freeVarVec = np.zeros((self.numFreeVars,))
             for var, ix in self.freeVarIndexMap().items():
-                self._freeVarVec[ix : ix + var.numFree] = var.freeVals
+                self._freeVarVec[ix : ix + var.numFree] = var.values[~var.values.mask]
 
         return self._freeVarVec
 
@@ -1029,7 +1026,7 @@ class CorrectionsProblem:
             )
 
         for var, ix0 in self.freeVarIndexMap().items():
-            var.data[~var.mask] = newVec[ix0 : ix0 + var.numFree]
+            var.values[~var.mask] = newVec[ix0 : ix0 + var.numFree]
 
         self._freeVarVec = None
         self._constraintVec = None
@@ -1104,7 +1101,7 @@ class CorrectionsProblem:
         for con in util.toList(constraint):
             try:
                 self._constraints.remove(con)
-                self.rmVariables(getattr(con, "importableVars", []))
+                self.rmVariables(util.toList(getattr(con, "importableVars", [])))
                 self._constraintIndexMap = None
                 self._constraintVec = None
                 self._jacobian = None
@@ -1230,7 +1227,7 @@ class CorrectionsProblem:
                         continue
                     # Mask the partials to remove columns associated with variables
                     #   that are not free variables
-                    if any(~partialVar.mask):
+                    if any(~partialVar.values.mask):
                         cols = self.freeVarIndexMap()[partialVar] + np.arange(
                             partialVar.numFree
                         )
@@ -1238,8 +1235,10 @@ class CorrectionsProblem:
                             cix + np.arange(constraint.size), partialMat
                         ):
                             if len(partialMat.shape) > 1:
-                                self._jacobian[rix, cols] = partials[~partialVar.mask]
-                            elif not partialVar.mask[0]:
+                                self._jacobian[rix, cols] = partials[
+                                    ~partialVar.values.mask
+                                ]
+                            elif not partialVar.values.mask[0]:
                                 self._jacobian[rix, cols] = partials
 
         return self._jacobian
@@ -1610,7 +1609,7 @@ class ShootingProblem(CorrectionsProblem):
                 if adjMat[r, c] is not None:
                     segCount += 1
                     tof = self._segments[adjMat[r, c]].tof
-                    tofSignSum += int(np.sign(tof.data)[0])
+                    tofSignSum += int(np.sign(tof.allVals)[0])
                     pointIsLinked[r] = True
 
                     # A segment cannot link a point to itself!

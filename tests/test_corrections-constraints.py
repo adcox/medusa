@@ -195,12 +195,12 @@ class TestStateContinuity:
         assert segment.origin.state in partials
         dF_dq0 = partials[segment.origin.state]
         assert isinstance(dF_dq0, np.ndarray)
-        assert dF_dq0.shape == (con.size, segment.origin.state.size)
+        assert dF_dq0.shape == (con.size, segment.origin.state.values.size)
 
         assert segment.terminus.state in partials
         dF_dqf = partials[segment.terminus.state]
         assert isinstance(dF_dqf, np.ndarray)
-        assert dF_dqf.shape == (con.size, segment.terminus.state.size)
+        assert dF_dqf.shape == (con.size, segment.terminus.state.values.size)
 
         assert segment.tof in partials
         dF_dtof = partials[segment.tof]
@@ -364,7 +364,7 @@ class TestVariableValue:
         count = 0
         for ix in range(len(con.values)):
             if not con.values.mask[ix]:
-                assert conEval[count] == var.data[ix] - con.values[ix]
+                assert conEval[count] == var.allVals[ix] - con.values[ix]
                 count += 1
 
     @pytest.mark.parametrize(
@@ -391,7 +391,7 @@ class TestVariableValue:
         assert isinstance(partials, dict)
         assert var in partials
         assert len(partials) == 1
-        assert partials[var].shape == (con.size, var.size)
+        assert partials[var].shape == (con.size, var.values.size)
         assert problem.checkJacobian()
 
     def test_varsAreRefs(self):
@@ -402,7 +402,7 @@ class TestVariableValue:
         assert np.array_equal(conEval, [1.0, 1.0])
 
         # Update variable
-        var[:] = [0.0, 1.0]
+        var.values[:] = [0.0, 1.0]
         conEval2 = con.evaluate()
         assert np.array_equal(conEval2, [0.0, 0.0])
 
@@ -422,15 +422,15 @@ class TestInequalityConstraint:
         assert isinstance(ineqCon.importableVars, list)
         assert len(ineqCon.importableVars) == 1
         assert ineqCon.importableVars[0] == ineqCon.slack
-        assert ineqCon.slack.size == len(values)
+        assert ineqCon.slack.values.size == len(values)
 
         # Check that slack values have been intelligently selected
         if mode < 0:  # less than
-            assert ineqCon.slack[0] == pytest.approx(np.sqrt(0.1), 1e-6)
-            assert ineqCon.slack[1] == 1e-3  # default value
+            assert ineqCon.slack.values[0] == pytest.approx(np.sqrt(0.1), 1e-6)
+            assert ineqCon.slack.values[1] == 1e-3  # default value
         else:
-            assert ineqCon.slack[0] == 1e-3  # default value
-            assert ineqCon.slack[1] == pytest.approx(np.sqrt(0.2), 1e-6)
+            assert ineqCon.slack.values[0] == 1e-3  # default value
+            assert ineqCon.slack.values[1] == pytest.approx(np.sqrt(0.2), 1e-6)
 
     @pytest.mark.parametrize(
         "mode", [pcons.Inequality.Mode.LESS, pcons.Inequality.Mode.GREATER]
@@ -476,7 +476,7 @@ class TestInequalityConstraint:
 
         assert log["status"] == "converged"
 
-        tof = solution._segments[0].tof[0]
+        tof = solution._segments[0].tof.values[0]
         if mode > 0:  # greater-than
             assert len(log["iterations"]) > 1
             assert tof > eqCon.values[0]
