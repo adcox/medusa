@@ -36,42 +36,46 @@ class TestVariable:
         ],
     )
     def test_constructor(self, vals, mask, name):
-        var = Variable(vals, mask, name)
+        var = Variable(vals, mask=mask, name=name)
 
-        assert isinstance(var.values, np.ma.MaskedArray)
-        assert len(var.values.shape) == 1
+        assert isinstance(var, np.ma.MaskedArray)
+        assert len(var.shape) == 1
 
-        assert all(var.values.data == np.array(vals, ndmin=1))
-        assert all(var.values.mask == np.array(mask, ndmin=1))
+        assert all(var.data == np.array(vals, ndmin=1))
+        assert all(var.mask == np.array(mask, ndmin=1))
         assert var.name == name
 
         # simple properties
-        assert all(var.allVals == np.array(vals, ndmin=1))
+        assert all(var.data == np.array(vals, ndmin=1))
         assert all(var.mask == np.array(mask, ndmin=1))
 
-    def test_copy(self):
-        var = Variable([1.0, 2.0], [True, False], "variable")
-        var2 = copy.copy(var)
-        assert id(var.values) == id(var2.values)
-        assert id(var.name) == id(var2.name)
+    def test_slice(self):
+        var1 = Variable([1, 2, 3, 4, 5], mask=[0, 1, 0, 1, 0], name="variable")
+        var2 = var1[:3]
 
-        # Changes to one DO affect the other
-        var.values[:] = [3, 4]
-        assert np.array_equal(var.values, var2.values)
+        assert isinstance(var2, Variable)
+        np.testing.assert_array_equal(var2.data, var1.data[:3])
+        np.testing.assert_array_equal(var2.mask, var1.mask[:3])
+        assert var2.name == ""  # TODO I would have thought it would be copied?
 
-        var.name = "blah"
-        assert var2.name == "variable"
+    def test_view(self):
+        vals = [1, 2, 3]
+        var1 = np.array(vals).view(Variable)
+
+        assert isinstance(var1, Variable)
+        np.testing.assert_array_equal(var1.data, vals)
+        assert var1.mask == False
 
     def test_deepCopy(self):
-        var = Variable([1.0, 2.0], [True, False], "variable")
+        var = Variable([1.0, 2.0], mask=[True, False], name="variable")
         var2 = copy.deepcopy(var)
 
-        assert np.array_equal(var.values, var2.values)
+        assert np.array_equal(var, var2)
         assert var.name == var2.name
 
         # Changes to one do NOT affect the other
-        var.values[:] = [3, 4]
-        assert np.array_equal(var2.values, [1, 2])
+        var[:] = [3, 4]
+        assert np.array_equal(var2, [1, 2])
 
         var.name = "blah"
         assert var2.name == "variable"
@@ -85,30 +89,15 @@ class TestVariable:
         ],
     )
     def test_freeVals(self, vals, mask):
-        var = Variable(vals, mask)
+        var = Variable(vals, mask=mask)
         assert np.array_equal(
             var.freeVals, [v for ix, v in enumerate(vals) if not mask[ix]]
         )
 
     @pytest.mark.parametrize("mask", [[True, True], [True, False], [False, False]])
     def test_numFree(self, mask):
-        var = Variable([1.0, 2.0], mask)
+        var = Variable([1.0, 2.0], mask=mask)
         assert var.numFree == sum([not m for m in mask])
-
-    @pytest.mark.parametrize(
-        "indices, expected",
-        [
-            [[0, 1, 2, 3], [0, 1]],
-            [[0, 1], [0]],
-            [[1, 2], [0, 1]],
-            [[2, 3], [1]],
-            [[2, 1], [0, 1]],
-            [[0, 3], []],
-        ],
-    )
-    def test_unmaskedIndices(self, indices, expected):
-        var = Variable([0.0, 1.0, 2.0, 3.0], [True, False, False, True])
-        assert var.unmaskedIndices(indices) == expected
 
 
 # ------------------------------------------------------------------------------
@@ -154,8 +143,8 @@ class TestControlPoint:
         cp = ControlPoint.fromProp(sol)
 
         assert cp.model == emModel
-        assert cp.epoch.allVals[0] == t0
-        assert np.array_equal(cp.state.allVals, y0)
+        assert cp.epoch.data[0] == t0
+        assert np.array_equal(cp.state.data, y0)
 
     def test_copy(self):
         state = Variable(np.arange(6))
@@ -168,11 +157,11 @@ class TestControlPoint:
         assert id(cp.state) == id(cp2.state) == id(state)
 
         # Changes to variables affect both objects
-        state.values[:] = np.arange(6, 12)
-        assert np.array_equal(cp.state.values, cp2.state.values)
+        state[:] = np.arange(6, 12)
+        assert np.array_equal(cp.state, cp2.state)
 
-        epoch.values[:] = 3
-        assert np.array_equal(cp.epoch.values, cp2.epoch.values)
+        epoch[:] = 3
+        assert np.array_equal(cp.epoch, cp2.epoch)
 
     def test_deepcopy(self):
         state = Variable(np.arange(6))
@@ -185,11 +174,11 @@ class TestControlPoint:
         assert not id(cp.state) == id(cp2.state)
 
         # Changes to variables do NOT affect both objects
-        state.values[:] = np.arange(6, 12)
-        assert np.array_equal(cp2.state.values, np.arange(6))
+        state[:] = np.arange(6, 12)
+        assert np.array_equal(cp2.state, np.arange(6))
 
-        epoch.values[:] = 3
-        assert np.array_equal(cp2.epoch.values, [0])
+        epoch[:] = 3
+        assert np.array_equal(cp2.epoch, [0])
 
 
 # ------------------------------------------------------------------------------
@@ -232,8 +221,8 @@ class TestSegment:
             assert id(seg.terminus.epoch) == id(term.epoch)
 
         assert isinstance(seg.tof, Variable)
-        assert seg.tof.values.size == 1
-        assert seg.tof.allVals[0] == 1.0
+        assert seg.tof.size == 1
+        assert seg.tof.data[0] == 1.0
         if isinstance(tof, Variable):
             assert id(seg.tof) == id(tof)
 
@@ -242,7 +231,7 @@ class TestSegment:
         assert id(seg.prop.model) == id(origin.model)
 
         assert isinstance(seg.propParams, Variable)
-        assert seg.propParams.values.size == 0
+        assert seg.propParams.size == 0
         if isinstance(params, Variable):
             assert id(seg.propParams) == id(params)
 
@@ -311,8 +300,8 @@ class TestSegment:
         seg.propagate(varGroups, **kwargs)
         assert seg.propSol is not None
         assert seg.propSol.y[:, 0].size == origin.model.groupSize(varGroups)
-        assert seg.propSol.t[0] == origin.epoch.allVals[0]
-        assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
+        assert seg.propSol.t[0] == origin.epoch.data[0]
+        assert seg.propSol.t[-1] == origin.epoch.data[0] + 1.0
         assert (seg.propSol.sol is None) != kwargs.get("dense_output", False)
 
     @pytest.mark.parametrize("lazy", [True, False])
@@ -334,8 +323,8 @@ class TestSegment:
         assert spy.call_count == 1 if lazy else 2
         assert seg.propSol is not None
         assert seg.propSol.y[:, 0].size >= origin.model.groupSize(varGroups2)
-        assert seg.propSol.t[0] == origin.epoch.allVals[0]
-        assert seg.propSol.t[-1] == origin.epoch.allVals[0] + 1.0
+        assert seg.propSol.t[0] == origin.epoch.data[0]
+        assert seg.propSol.t[-1] == origin.epoch.data[0] + 1.0
 
     @pytest.mark.parametrize(
         "fcn, shapeOut",
@@ -425,7 +414,7 @@ class TestCorrectionsProblem:
         assert not variables[0] in prob._freeVars
 
         # check that original object is not affected
-        assert all(variables[0].values.data)
+        assert all(variables[0].data)
 
     def test_rmVariables_multi(self):
         prob = CorrectionsProblem()
@@ -461,7 +450,7 @@ class TestCorrectionsProblem:
 
         # Check that original objects are not affected
         for var in variables:
-            assert all(var.values.data)
+            assert all(var.data)
 
     @pytest.mark.parametrize(
         "variables",
@@ -525,7 +514,7 @@ class TestCorrectionsProblem:
         # Check that variable objects were updated
         for var, ix0 in prob.freeVarIndexMap().items():
             assert np.array_equal(
-                var.values[~var.mask], prob._freeVarVec[ix0 : ix0 + var.numFree]
+                var.freeVals, prob._freeVarVec[ix0 : ix0 + var.numFree]
             )
             # TODO check that masked elements were NOT changed
 
