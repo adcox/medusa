@@ -39,8 +39,8 @@ prop = Propagator(crtbpModel, dense_output=False)
 sol = prop.propagate(q0, [0, T], t_eval=[0.0, T / 2, T])
 points = [cor.ControlPoint.fromProp(sol, ix) for ix in range(len(sol.t))]
 # Make planar
-points[1].state.values[1:4] = 0
-points[1].state.values[5] = 0
+points[1].state.data[1:4] = 0
+points[1].state.data[5] = 0
 for point in points:
     point.state.mask[1:4] = True  # y0, z0, dx0 are fixed
     point.state.mask[5] = True  # dz0 is fixed

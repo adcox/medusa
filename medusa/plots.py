@@ -79,9 +79,7 @@ class ToCoordVals:
         # TODO check input types
         vals = None
         for point in points:
-            _vals = self.data(
-                point.model, [point.epoch.allVals[0]], point.state.allVals
-            )
+            _vals = self.data(point.model, [point.epoch.data[0]], point.state.data)
             if vals is None:
                 vals = _vals
             else:
