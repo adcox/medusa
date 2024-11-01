@@ -26,6 +26,7 @@ used units in the registry. Others can be accessed via :data:`~medusa.ureg`.
 **Length**
 
 .. autosummary::
+   mm
    m
    km
    au
@@ -109,6 +110,7 @@ Reference
 ---------
 
 .. autodata:: medusa.ureg
+.. autodata:: mm
 .. autodata:: m
 .. autodata:: km
 .. autodata:: au
@@ -135,6 +137,7 @@ Quant = ureg.Quantity
 
 # ------------------------------------------------------------------------------
 # Length
+mm = ureg.mm  #: one milimeter
 m = ureg.meter  #: one meter
 km = ureg.km  #: one kilometer
 au = ureg.au  #: one astronomical unit

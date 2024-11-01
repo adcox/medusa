@@ -396,9 +396,11 @@ class Variable(ma.MaskedArray):
         return hash(id(self))
 
     def __repr__(self):
-        return "<Variable {!r}, data={!r}, mask={!r}>".format(
-            self.name, self.data, self.mask
-        )
+        out = "<Variable"
+        if self.name:
+            out += " {!r}".format(self.name)
+        out += ": {!s}>".format(super().__str__())
+        return out
 
     @property
     def freeVals(self) -> NDArray[np.double]:
@@ -416,9 +418,12 @@ class AbstractConstraint(ModelBlockCopyMixin, ABC):
     Defines the interface for a constraint object
     """
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
         """Default to-string implementation"""
-        return f"<{type(self).__name__}>"
+        return f"<{self.__class__.__name__}>"
 
     @property
     @abstractmethod
@@ -539,6 +544,14 @@ class ControlPoint(ModelBlockCopyMixin):
         self.model = model  #: AbstractDynamicsModel: the associated model
         self.epoch = epoch  #: Variable: the epoch
         self.state = state  #: Variable: the state
+
+    def __repr__(self) -> str:
+        out = "<ControlPoint:"
+        out += f"\n  model=<{self.model.__class__.__module__}.{self.model.__class__.__name__}>,"
+        for attr in ("epoch", "state"):
+            out += "\n  {!s}={!r}".format(attr, getattr(self, attr))
+        out += "\n>"
+        return out
 
     @property
     def importableVars(self) -> tuple[Variable, ...]:
@@ -663,6 +676,13 @@ class Segment:
         #: Union[None, OdeResult]: the propagation output, if
         #: :func:`propagate` has been called, otherwise ``None``.
         self.propSol = None
+
+    def __repr__(self) -> str:
+        out = "<Segment:"
+        for attr in ("origin", "terminus", "tof"):
+            out += "\n  {!s}={!r},".format(attr, getattr(self, attr))
+        out += "\n>"
+        return out
 
     @property
     def importableVars(self) -> tuple[Variable, ...]:
@@ -875,6 +895,42 @@ class CorrectionsProblem:
         self._constraintVec: Union[None, NDArray[np.double]] = None
         self._jacobian: Union[None, NDArray[np.double]] = None
 
+    def __repr__(self) -> str:
+        out = f"<{self.__class__.__name__}:"
+
+        out += "\n  {!s} free variables".format(len(self._freeVars))
+        if self._freeVarIndexMap is not None:
+            out += ":"
+            for var, ix in self._freeVarIndexMap.items():
+                out += "\n    [{!s}, {!s}): {!s},".format(
+                    ix, ix + var.numFree, var.name or "(unnamed)"
+                )
+        else:
+            out += ","
+
+        out += "\n  {!s} constraints".format(len(self._constraints))
+        if self._constraintIndexMap is not None:
+            out += ":"
+            for con, ix in self._constraintIndexMap.items():
+                out += "\n    [{!s}, {!s}): {!s},".format(
+                    ix, ix + con.size, con.__class__.__name__
+                )
+        else:
+            out += ","
+
+        for attr in (
+            "freeVarIndexMap",
+            "constraintIndexMap",
+            "freeVarVec",
+            "constraintVec",
+            "jacobian",
+        ):
+            val = getattr(self, "_" + attr)
+            out += "\n  {!s} = {!s},".format(attr, "None" if val is None else "Cached")
+
+        out += "\n>"
+        return out
+
     @staticmethod
     def fromIteration(
         problem: CorrectionsProblem, correctorLog: dict, it: int = -1
@@ -1022,6 +1078,7 @@ class CorrectionsProblem:
 
     def freeVarIndexMap_reversed(self) -> dict[int, Variable]:
         # TODO document
+        # TODO could a ChainMap work here?
         varMap = {}
         for var, ix0 in self.freeVarIndexMap().items():
             for k in range(var.numFree):
@@ -1467,8 +1524,6 @@ class ShootingProblem(CorrectionsProblem):
     graph is constructed to ensure the collection of segments make physical sense.
     """
 
-    # TODO need public access to segments
-
     def __init__(self) -> None:
         super().__init__()
 
@@ -1700,6 +1755,13 @@ class DifferentialCorrector:
 
         #: A perisistent log; reset and populated every time :func:`solve` is run.
         self.log: dict[str, object] = {}
+
+    def __repr__(self) -> str:
+        out = f"<{self.__class__.__name__}:"
+        for attr in ("convergenceCheck", "updateGenerator"):
+            out += "\n  {!s} = {!r},".format(attr, getattr(self, attr))
+        out += "\n>"
+        return out
 
     def _validateArgs(self) -> None:
         """

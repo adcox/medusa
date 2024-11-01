@@ -16,6 +16,7 @@ Reference
 .. autofunction:: toList
 .. autofunction:: toArray
 """
+from collections.abc import Sequence
 from typing import Iterable
 
 import numpy as np
@@ -89,3 +90,27 @@ def float_eq(f1: float, f2: float) -> bool:
         return True
     else:
         return f1 == f2
+
+
+def repr(cls: object, *attributes: Sequence[str]) -> str:
+    """
+    Simple repr method for a class with the format
+
+      <ClassName:
+        attr1: repr(attr1),
+        attr2: repr(attr2),
+        ...
+      >
+
+    Args:
+        cls: the object
+        attributes: the names of the attributes to include in the repr
+
+    Returns:
+        The repr
+    """
+    out = f"<{cls.__class__.__name__}:"
+    for attr in attributes:
+        out += "\n  {!s} = {!r},".format(attr, getattr(cls, attr))
+    out += "\n>"
+    return out

@@ -365,6 +365,14 @@ class AbstractDynamicsModel(ABC):
             and self.charM == other.charM
         )
 
+    def __repr__(self) -> str:
+        out = f"<{self.__class__.__module__}.{self.__class__.__name__}: "
+        for attr in ("bodies", "charL", "charT", "charM"):
+            out += "\n  {!s}={!r}".format(attr, getattr(self, attr))
+        out += "\n  unitContext={!r}".format(self.unitContext.name)
+        out += "\n>"
+        return out
+
     @property
     def charL(self) -> pint.Quantity:
         """Defines the length of one :data:`medusa.units.LU` in this model"""

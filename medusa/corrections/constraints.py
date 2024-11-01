@@ -81,6 +81,9 @@ class Angle(AbstractConstraint):
         # Try evaluating state and indices to raise index error
         self.state.data[self.stateIx]
 
+    def __repr__(self) -> str:
+        return util.repr(self, "refDir", "state", "angle", "stateIx", "center")
+
     @property
     @override
     def size(self) -> int:
@@ -127,6 +130,9 @@ class StateContinuity(AbstractConstraint):
             raise RuntimeError("Indices cannot have repeated values")
 
         self.constrainedIx = sorted(indices)
+
+    def __repr__(self) -> str:
+        return util.repr(self, "segment", "constrainedIx")
 
     @property
     @override
@@ -215,6 +221,9 @@ class VariableValue(AbstractConstraint):
         self.variable = variable
         self.values = np.ma.array(values, mask=[v is None for v in values])
 
+    def __repr__(self) -> str:
+        return util.repr(self, "values", "variable")
+
     @property
     @override
     def size(self) -> int:
@@ -279,6 +288,9 @@ class Inequality(AbstractConstraint):
             logger.debug("Could not update initial slack variable values")
 
         self.slack = Variable(slackVals, name="Slack")
+
+    def __repr__(self) -> str:
+        return util.repr(self, "equalCon", "mode", "slack")
 
     @property
     @override

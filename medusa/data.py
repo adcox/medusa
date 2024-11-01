@@ -161,10 +161,8 @@ class Body:
         )
 
     def __repr__(self):
-        vals = ", ".join(
-            [
-                "{!s}={!r}".format(lbl, getattr(self, lbl))
-                for lbl in ("gm", "sma", "ecc", "inc", "raan", "id", "parentId")
-            ]
-        )
-        return "<Body {!s}: {!s}>".format(self.name, vals)
+        out = "<Body {!r}:".format(self.name)
+        for lbl in ("gm", "sma", "ecc", "inc", "raan", "id", "parentId"):
+            out += "\n  {!s}={!r}".format(lbl, getattr(self, lbl))
+        out += "\n>"
+        return out

@@ -141,6 +141,14 @@ class Propagator(ModelBlockCopyMixin):
         self.atol: float = atol  #: absolute tolerance
         self.rtol: float = rtol  #: relative tolerance
 
+    def __repr__(self) -> str:
+        out = "<Propagator:"
+        out += f"\n  model=<{self.model.__class__.__module__}.{self.model.__class__.__name__}>,"
+        for attr in ("method", "dense", "atol", "rtol"):
+            out += "\n  {!s}={!r},".format(attr, getattr(self, attr))
+        out += "\n>"
+        return out
+
     def denseEval(self, sol: OdeResult, times: FloatArray) -> OdeResult:
         """
         Densely evaluate a propagator solution
@@ -341,6 +349,9 @@ class AbstractEvent(ABC):
 
         self.terminal = terminal  #: bool: whether or not to terminate propagation
         self.direction = direction  #: float: event direction
+
+    def __repr__(self) -> str:
+        return util.repr(self, "terminal", "direction")
 
     def assignEvalAttr(self) -> None:
         """

@@ -1038,6 +1038,13 @@ class SeparableControlLaw(ControlLaw):
 
         return out
 
+    def __repr__(self) -> str:
+        out = f"<{self.__class__.__module__}.{self.__class__.__name__}: terms=("
+        for term in self.terms:
+            out += "\n  {!r},".format(term)
+        out += "\n)>"
+        return out
+
     @property
     @override
     def epochIndependent(self) -> bool:
@@ -1190,6 +1197,9 @@ class ConstThrustTerm(ControlTerm):
         super().__init__()
         self.thrust = thrust
 
+    def __repr__(self) -> str:
+        return "<ConstThrustTerm: thrust={!r}>".format(self.thrust)
+
     @property
     @override
     def params(self) -> list[float]:
@@ -1250,6 +1260,9 @@ class ConstMassTerm(ControlTerm):
     def __init__(self, mass: float) -> None:
         super().__init__()
         self.mass = mass
+
+    def __repr__(self) -> str:
+        return "<ConstMassTerm: mass={!r}>".format(self.mass)
 
     @property
     @override
@@ -1316,6 +1329,9 @@ class ConstOrientTerm(ControlTerm):
         super().__init__()
         self.alpha = alpha
         self.beta = beta
+
+    def __repr__(self) -> str:
+        return "<ConstOrientTerm: alpha={!r}, beta={!r}>".format(self.alpha, self.beta)
 
     @property
     @override
