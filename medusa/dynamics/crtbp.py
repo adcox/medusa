@@ -1,25 +1,25 @@
 """
-Circular Restricted Three Body Problem Dynamics
+Circular Restricted Three Body Problem
 ===============================================
 
 This module defines the circular restricted three-body problem (CR3BP or CRTBP)
 dynamics.
 
 Three bodies are modeled in the CR3BP: two massive "primaries," denoted 
-:math:`P_1` and :math:`P_2` with masses :math:`m_1 \geq m_2`, and a third body 
+:math:`P_1` and :math:`P_2` with masses :math:`m_1 \\geq m_2`, and a third body 
 (:math:`P_3`) with negligible mass compared to the other two. The two massive primaries
 orbit their mutual barycenter on circular paths.
 
-A rotating frame, :math:`\{\hat{x}, ~\hat{y}, ~\hat{z}\}`, is defined such that the 
-two massive primaries lie on the :math:`\hat{x}` axis and their angular momentum
-is along :math:`\hat{z}`; the :math:`\hat{y}` axis completes the right-handed set.
+A rotating frame, :math:`\\{\\hat{x}, ~\\hat{y}, ~\\hat{z}\\}`, is defined such that the 
+two massive primaries lie on the :math:`\\hat{x}` axis and their angular momentum
+is along :math:`\\hat{z}`; the :math:`\\hat{y}` axis completes the right-handed set.
 
-The dynamics are characterized by a mass ratio, :math:`\mu = m_2/(m_1 + m_2)`.
+The dynamics are characterized by a mass ratio, :math:`\\mu = m_2/(m_1 + m_2)`.
 Furthermore, a characteristic length, :math:`L_*`, is defined to be the distance
 between :math:`P_1` and :math:`P_2`, and a characteristic mass, 
 :math:`M_* = m_1 + m_2`, is defined as the total system mass (neglecting the 
 third body). A characteristic time is derived from the mean motion of the primaries,
-:math:`T_* = \sqrt{L_*^3 / (G M_*)}` where :math:`G` is the universal gravitational
+:math:`T_* = \\sqrt{L_*^3 / (G M_*)}` where :math:`G` is the universal gravitational
 constant.
 
 .. autosummary::
@@ -33,19 +33,19 @@ constant.
 All quantities in the CR3BP model are nondimensionalized via these characteristic
 quantities. For example, a distance of 1.1 is equal to :math:`1.1 L_*`, or 1.1 
 times the mean distance between the two massive primaries. Similarly, a time
-duration of :math:`2\pi` is the amount of time for :math:`P_2` to complete one
+duration of :math:`2\\pi` is the amount of time for :math:`P_2` to complete one
 revolution of :math:`P_1`.
 
 Within this implementation of the CR3BP, the state vector is defined as the
 6-element vector containing the Cartesian position and velocity of a body relative
 to the system barycenter, evaluated in the rotating frame. 
 The locations of the two massive primaries are fixed in the rotating frame on the
-:math:`\hat{x}` axis, thus their states are simple. Given
+:math:`\\hat{x}` axis, thus their states are simple. Given
 in nondimensional coordinates within the rotating frame,
 
 .. math::
-   \\vec{q}_1 &= \\begin{Bmatrix} -\mu & 0 & 0 & 0 & 0 & 0\\end{Bmatrix}^T, \\\\
-   \\vec{q}_2 &= \\begin{Bmatrix} 1-\mu & 0 & 0 & 0 & 0 & 0\\end{Bmatrix}^T.
+   \\vec{q}_1 &= \\begin{Bmatrix} -\\mu & 0 & 0 & 0 & 0 & 0\\end{Bmatrix}^T, \\\\
+   \\vec{q}_2 &= \\begin{Bmatrix} 1-\\mu & 0 & 0 & 0 & 0 & 0\\end{Bmatrix}^T.
 
 These vectors are available from the model via :func:`~DynamicsModel.bodyState`.
 
@@ -53,7 +53,7 @@ The position and velocity of the third primary are represented by the
 :data:`~medusa.dynamics.VarGroup.STATE` variables,
 
 .. math::
-    \\vec{q} = \\begin{Bmatrix} x & y & z & \dot{x} & \dot{y} & \dot{z} \\end{Bmatrix}^T.
+    \\vec{q} = \\begin{Bmatrix} x & y & z & \\dot{x} & \\dot{y} & \\dot{z} \\end{Bmatrix}^T.
 
 where the dot notation represents the derivative of the coordinate with respect to
 the nondimensionalized time variable, :math:`\\tau`.
@@ -63,11 +63,11 @@ computed via :func:`~DynamicsModel.diffEqs`. The ``STATE`` variable differential
 equations are
 
 .. math::
-   \dot{\\vec{q}} = \\begin{Bmatrix}
-     \dot{x} \\\\ \dot{y} \\\\ \dot{z} \\\\
-     2\dot{y} + x - (1-\mu)(x+\mu)/r_{13}^3 - \mu(x - 1 + \mu)/r_{23}^3 \\\\
-     -2\dot{x} + y - (1-\mu) y / r_{13}^3 - \mu y / r_{23}^3 \\\\
-     - (1-\mu) z / r_{13}^3 - \mu z / r_{23}^3
+   \\dot{\\vec{q}} = \\begin{Bmatrix}
+     \\dot{x} \\\\ \\dot{y} \\\\ \\dot{z} \\\\
+     2\\dot{y} + x - (1-\\mu)(x+\\mu)/r_{13}^3 - \\mu(x - 1 + \\mu)/r_{23}^3 \\\\
+     -2\\dot{x} + y - (1-\\mu) y / r_{13}^3 - \\mu y / r_{23}^3 \\\\
+     - (1-\\mu) z / r_{13}^3 - \\mu z / r_{23}^3
    \\end{Bmatrix}
 
 where :math:`\\vec{r}_{13} = \\vec{r}_3 - \\vec{r}_1` is the location of the
@@ -79,39 +79,39 @@ Partial derivatives of the state derivative with respect to the initial state ca
 also be propagated via the :data:`~medusa.dynamics.VarGroup.STM` group.
 
 .. math::
-   \dot{\mathbf{\Phi}} = \mathbf{A} \mathbf{\Phi}
+   \\dot{\\mathbf{\\Phi}} = \\mathbf{A} \\mathbf{\\Phi}
 
-where :math:`\mathbf{\Phi}` is initialized to the 6x6 identity matrix and 
-:math:`\mathbf{A}` is the partial derivative of the state differential equations
+where :math:`\\mathbf{\\Phi}` is initialized to the 6x6 identity matrix and 
+:math:`\\mathbf{A}` is the partial derivative of the state differential equations
 with respect to the state vector,
 
 .. math::
-   \mathbf{A} = \\frac{\partial \dot{\\vec{q}}}{\partial \\vec{q}}
+   \\mathbf{A} = \\frac{\\partial \\dot{\\vec{q}}}{\\partial \\vec{q}}
    = \\begin{bmatrix}
      0 & 0 & 0 & 1 & 0 & 0 \\\\
      0 & 0 & 0 & 0 & 1 & 0 \\\\
      0 & 0 & 0 & 0 & 0 & 1 \\\\
-     \Omega_{xx} & \Omega_{xy} & \Omega_{xz} & 0 & 2 & 0 \\\\
-     \Omega_{xy} & \Omega_{yy} & \Omega_{yz} & -2 & 2 & 0 \\\\
-     \Omega_{xz} & \Omega_{yz} & \Omega_{zz} & 0 & 0 & 0
+     \\Omega_{xx} & \\Omega_{xy} & \\Omega_{xz} & 0 & 2 & 0 \\\\
+     \\Omega_{xy} & \\Omega_{yy} & \\Omega_{yz} & -2 & 2 & 0 \\\\
+     \\Omega_{xz} & \\Omega_{yz} & \\Omega_{zz} & 0 & 0 & 0
    \\end{bmatrix}.
 
-In this notation, :math:`\Omega` is the "pseudo-potential" function,
+In this notation, :math:`\\Omega` is the "pseudo-potential" function,
 
 .. math::
-   \Omega = \\frac{1-\mu}{r_{13}} + \\frac{\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2),
+   \\Omega = \\frac{1-\\mu}{r_{13}} + \\frac{\\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2),
 
 available via :func:`~DynamicsModel.pseudopotential`,
 and the subscripts denote second-order partial derivatives with respect to the
 position state variables,
 
 .. math::
-   \Omega_{xx} = \\frac{\partial^2 \Omega}{\partial x^2} &= 1 - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)(x + \mu)^2}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)^2}{r_{23}^5}\\\\
-   \Omega_{yy} = \\frac{\partial^2 \Omega}{\partial y^2} &= 1 - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)y^2}{r_{13}^5} + \\frac{3\mu y^2}{r_{23}^5}\\\\
-   \Omega_{zz} = \\frac{\partial^2 \Omega}{\partial z^2} &=  - \\frac{1 - \mu}{r_{13}^3} - \\frac{\mu}{r_{23}^3} + \\frac{3(1 - \mu)z^2}{r_{13}^5} + \\frac{3\mu z^2}{r_{23}^5}\\\\
-   \Omega_{xy} = \Omega_{yx} = \\frac{\partial^2 \Omega}{\partial x \partial y} &= \\frac{3(1 - \mu)(x + \mu)y}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)y}{r_{23}^5}\\\\
-   \Omega_{xz} = \Omega_{zx} = \\frac{\partial^2 \Omega}{\partial x \partial z} &= \\frac{3(1 - \mu)(x + \mu)z}{r_{13}^5} + \\frac{3\mu(x + \mu - 1)z}{r_{23}^5}\\\\
-   \Omega_{yz} = \Omega_{zy} = \\frac{\partial^2 \Omega}{\partial y \partial z} &= \\frac{3(1 - \mu)yz}{r_{13}^5} + \\frac{3\mu yz}{r_{23}^5}
+   \\Omega_{xx} = \\frac{\\partial^2 \\Omega}{\\partial x^2} &= 1 - \\frac{1 - \\mu}{r_{13}^3} - \\frac{\\mu}{r_{23}^3} + \\frac{3(1 - \\mu)(x + \\mu)^2}{r_{13}^5} + \\frac{3\\mu(x + \\mu - 1)^2}{r_{23}^5}\\\\
+   \\Omega_{yy} = \\frac{\\partial^2 \\Omega}{\\partial y^2} &= 1 - \\frac{1 - \\mu}{r_{13}^3} - \\frac{\\mu}{r_{23}^3} + \\frac{3(1 - \\mu)y^2}{r_{13}^5} + \\frac{3\\mu y^2}{r_{23}^5}\\\\
+   \\Omega_{zz} = \\frac{\\partial^2 \\Omega}{\\partial z^2} &=  - \\frac{1 - \\mu}{r_{13}^3} - \\frac{\\mu}{r_{23}^3} + \\frac{3(1 - \\mu)z^2}{r_{13}^5} + \\frac{3\\mu z^2}{r_{23}^5}\\\\
+   \\Omega_{xy} = \\Omega_{yx} = \\frac{\\partial^2 \\Omega}{\\partial x \\partial y} &= \\frac{3(1 - \\mu)(x + \\mu)y}{r_{13}^5} + \\frac{3\\mu(x + \\mu - 1)y}{r_{23}^5}\\\\
+   \\Omega_{xz} = \\Omega_{zx} = \\frac{\\partial^2 \\Omega}{\\partial x \\partial z} &= \\frac{3(1 - \\mu)(x + \\mu)z}{r_{13}^5} + \\frac{3\\mu(x + \\mu - 1)z}{r_{23}^5}\\\\
+   \\Omega_{yz} = \\Omega_{zy} = \\frac{\\partial^2 \\Omega}{\\partial y \\partial z} &= \\frac{3(1 - \\mu)yz}{r_{13}^5} + \\frac{3\\mu yz}{r_{23}^5}
 
 
 Reference
@@ -256,28 +256,28 @@ class DynamicsModel(AbstractDynamicsModel):
         The triangular points are easily computed analytically,
 
         .. math::
-           \\vec{r}_{L4} &= \\begin{Bmatrix} 1/2 - \mu & \sqrt{3}/2 & 0 \\end{Bmatrix}\\\\
-           \\vec{r}_{L5} &= \\begin{Bmatrix} 1/2 - \mu & -\sqrt{3}/2 & 0 \\end{Bmatrix}
+           \\vec{r}_{L4} &= \\begin{Bmatrix} 1/2 - \\mu & \\sqrt{3}/2 & 0 \\end{Bmatrix}\\\\
+           \\vec{r}_{L5} &= \\begin{Bmatrix} 1/2 - \\mu & -\\sqrt{3}/2 & 0 \\end{Bmatrix}
 
         The colinear points cannot be located analytically and are instead located
         via a numerical Newton-Raphson scheme. All three solutions satisfy the
         equation,
 
         .. math::
-           x - (1-\mu)\\frac{x + \mu}{A(x+\mu)^3} - \mu\\frac{x - 1 + \mu}{B(x-1+\mu)^3} = 0
+           x - (1-\\mu)\\frac{x + \\mu}{A(x+\\mu)^3} - \\mu\\frac{x - 1 + \\mu}{B(x-1+\\mu)^3} = 0
 
-        where :math:`A = \mathrm{sgn}(x+\mu)` and :math:`B = \mathrm{sgn}(x - 1 + \mu)`.
-        To quickly solve for the location of each point, a coordinate :math:`\gamma`
+        where :math:`A = \\mathrm{sgn}(x+\\mu)` and :math:`B = \\mathrm{sgn}(x - 1 + \\mu)`.
+        To quickly solve for the location of each point, a coordinate :math:`\\gamma`
         is defined for each case and substituted into the equation above, along
         with the appropriate signs for :math:`A` and :math:`B`. The iterative
         algorithm,
 
         .. math::
-           \gamma_{n+1} = \gamma_n - \\frac{f(\gamma)}{f'(\gamma)}
+           \\gamma_{n+1} = \\gamma_n - \\frac{f(\\gamma)}{f'(\\gamma)}
 
-        is then used to solve for :math:`\gamma` in each case. The iterations
-        stop when :math:`\gamma_{n+1} - \gamma_n \leq \epsilon` where
-        :math:`\epsilon` is the ``tol`` value provided.
+        is then used to solve for :math:`\\gamma` in each case. The iterations
+        stop when :math:`\\gamma_{n+1} - \\gamma_n \\leq \\epsilon` where
+        :math:`\\epsilon` is the ``tol`` value provided.
 
         .. list-table::
            :header-rows: 1
@@ -288,20 +288,20 @@ class DynamicsModel(AbstractDynamicsModel):
              - B
              - Substitution
            * - L1
-             - :math:`-\mu < x \leq 1 - \mu`
+             - :math:`-\\mu < x \\leq 1 - \\mu`
              - 1
              - -1
-             - :math:`x = 1 - \mu - \gamma`
+             - :math:`x = 1 - \\mu - \\gamma`
            * - L2
-             - :math:`1 - \mu < x < \infty`
+             - :math:`1 - \\mu < x < \\infty`
              - 1
              - 1
-             - :math:`x = 1 - \mu + \gamma`
+             - :math:`x = 1 - \\mu + \\gamma`
            * - L3
-             - :math:`-\infty < x < -\mu`
+             - :math:`-\\infty < x < -\\mu`
              - -1
              - -1
-             - :math:`x = -\mu - \gamma`
+             - :math:`x = -\\mu - \\gamma`
         """
         # TODO document in module docs
         mu = self.massRatio
@@ -353,7 +353,7 @@ class DynamicsModel(AbstractDynamicsModel):
         Compute the pseudopotential
 
         .. math::
-           \Omega = \\frac{1-\mu}{r_{13}} + \\frac{\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2)
+           \\Omega = \\frac{1-\\mu}{r_{13}} + \\frac{\\mu}{r_{23}} + \\frac{1}{2}(x^2 + y^2)
 
         Args:
             w: a state vector that includes at least the three position variables
@@ -404,8 +404,8 @@ class DynamicsModel(AbstractDynamicsModel):
         Compute the Jacobi constant
 
         .. math::
-           E &= 2\Omega - v^2\\\\
-             &= 2\\frac{1-\mu}{r_{13}} + 2\\frac{\mu}{r_{23}} + x^2 + y^2 - \dot{x}^2 - \dot{y}^2 - \dot{z}^2
+           E &= 2\\Omega - v^2\\\\
+             &= 2\\frac{1-\\mu}{r_{13}} + 2\\frac{\\mu}{r_{23}} + x^2 + y^2 - \\dot{x}^2 - \\dot{y}^2 - \\dot{z}^2
 
         Args:
             w: a state vector that includes at least the core state (position and

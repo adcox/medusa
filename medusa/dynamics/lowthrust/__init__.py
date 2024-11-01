@@ -25,12 +25,12 @@ defined as
 .. math::
    \\vec{w} = \\begin{Bmatrix}
      \\vec{q} & 
-     \\mathbf{\Phi} &
-     \\frac{\partial \\vec{q}}{\partial T} &
-     \\frac{\partial \\vec{q}}{\partial \\vec{p}}
+     \\mathbf{\\Phi} &
+     \\frac{\\partial \\vec{q}}{\\partial T} &
+     \\frac{\\partial \\vec{q}}{\\partial \\vec{p}}
    \\end{Bmatrix},
 
-where :math:`\\vec{q}` is the **state vector**, :math:`\\mathbf{\Phi}` is the
+where :math:`\\vec{q}` is the **state vector**, :math:`\\mathbf{\\Phi}` is the
 state transition matrix, and the final two terms are the partial derivatives of
 the state vector with respect to the epoch, :math:`T`, and the parameters,
 :math:`\\vec{p}`. The :class:`~medusa.dynamics.AbstractDynamicsModel` computes 
@@ -56,7 +56,7 @@ the Cartesian position and velocity coordinates, as in
 
 .. math::
     \\vec{q}_c(\\tau, T, \\vec{p}) =
-    \\begin{Bmatrix} x & y & z & \dot{x} & \dot{y} & \dot{z} & \ldots \end{Bmatrix}^T.
+    \\begin{Bmatrix} x & y & z & \\dot{x} & \\dot{y} & \\dot{z} & \\ldots \\end{Bmatrix}^T.
 
 The core state may also include other variables, but it is assumed that they occur
 *after* the Cartesian coordinates.
@@ -105,7 +105,7 @@ Derivatives
 ^^^^^^^^^^^
 
 To provide the differential equations for a dynamical model, i.e., 
-:math:`\dot{\\vec{w}}`, a number of derivatives must be supplied by the control
+:math:`\\dot{\\vec{w}}`, a number of derivatives must be supplied by the control
 law.
 
 .. note::
@@ -121,16 +121,16 @@ The control law affects the state derivative by adding an acceleration to the
 system as well as its own control state derivatives,
 
 .. math::
-   \dot{\\vec{q}} = \\begin{Bmatrix}
+   \\dot{\\vec{q}} = \\begin{Bmatrix}
        \\vec{v} \\\\
        \\vec{a}_c + \\vec{a}_u \\\\
        \\vdots \\\\
-       \dot{\\vec{u}}
+       \\dot{\\vec{u}}
    \\end{Bmatrix}
 
 where :math:`\\vec{v}` is the velocity vector, :math:`\\vec{a}_c` is the acceleration
 due to gravity and other forces, :math:`\\vec{a}_u` is the acceleration delivered
-by the low-thrust force, and :math:`\dot{\\vec{u}}` is the derivative of the 
+by the low-thrust force, and :math:`\\dot{\\vec{u}}` is the derivative of the 
 control state vector. The :math:`\\vec{v}` and :math:`\\vec{a}_c` terms are computed
 by the dynamical model, but the control law supplies the other two terms:
 
@@ -141,7 +141,7 @@ by the dynamical model, but the control law supplies the other two terms:
      - Method
    * - :math:`\\vec{a}_u`
      - :func:`ControlLaw.accelVec`
-   * - :math:`\dot{\\vec{u}}`
+   * - :math:`\\dot{\\vec{u}}`
      - :func:`ControlLaw.stateDiffEqs`
 
 State Partials
@@ -151,40 +151,40 @@ Recall from the :doc:`dynamics` documentation that the state transition matrix i
 described by the differential equation,
 
 .. math::
-   \dot{\mathbf{\Phi}}(\\tau_2, \\tau_1) = \mathbf{A}(\\tau_2) \mathbf{\Phi}(\\tau_2, \\tau_1)
+   \\dot{\\mathbf{\\Phi}}(\\tau_2, \\tau_1) = \\mathbf{A}(\\tau_2) \\mathbf{\\Phi}(\\tau_2, \\tau_1)
 
-where :math:`\mathbf{A}` is the linearization of the dynamics,
+where :math:`\\mathbf{A}` is the linearization of the dynamics,
 
 .. math::
-   \mathbf{A} = \\frac{ \partial \dot{\\vec{q}} }{ \partial \\vec{q} }.
+   \\mathbf{A} = \\frac{ \\partial \\dot{\\vec{q}} }{ \\partial \\vec{q} }.
 
-Separating the core and control state variables, the :math:`\mathbf{A}` matrix 
+Separating the core and control state variables, the :math:`\\mathbf{A}` matrix 
 can be written as four submatrices,
 
 .. math::
-   \mathbf{A} = \\begin{bmatrix}
-     \partial \dot{\\vec{q}}_c / \partial \\vec{q}_c & \partial \dot{\\vec{q}}_c / \partial \\vec{u} \\\\
-     \partial \dot{\\vec{u}} / \partial \\vec{q}_c & \partial \dot{\\vec{u}} / \partial \\vec{u}
+   \\mathbf{A} = \\begin{bmatrix}
+     \\partial \\dot{\\vec{q}}_c / \\partial \\vec{q}_c & \\partial \\dot{\\vec{q}}_c / \\partial \\vec{u} \\\\
+     \\partial \\dot{\\vec{u}} / \\partial \\vec{q}_c & \\partial \\dot{\\vec{u}} / \\partial \\vec{u}
    \\end{bmatrix}
 
 The terms in the top row of this block matrix can be further decomposed, leveraging
-the definition of :math:`\dot{\\vec{q}}` above,
+the definition of :math:`\\dot{\\vec{q}}` above,
 
 .. math::
-   \partial \dot{\\vec{q}}_c / \partial \\vec{q}_c &=
-     (\partial \dot{\\vec{q}}_c / \partial \\vec{a}_u)
-     (\partial \\vec{a}_u / \partial \\vec{q}_c) \\\\
-   \partial \dot{\\vec{q}}_c / \partial \\vec{u} &=
-     (\partial \dot{\\vec{q}}_c / \partial \\vec{a}_u)
-     (\partial \\vec{a}_u / \partial \\vec{u}) \\\\
+   \\partial \\dot{\\vec{q}}_c / \\partial \\vec{q}_c &=
+     (\\partial \\dot{\\vec{q}}_c / \\partial \\vec{a}_u)
+     (\\partial \\vec{a}_u / \\partial \\vec{q}_c) \\\\
+   \\partial \\dot{\\vec{q}}_c / \\partial \\vec{u} &=
+     (\\partial \\dot{\\vec{q}}_c / \\partial \\vec{a}_u)
+     (\\partial \\vec{a}_u / \\partial \\vec{u}) \\\\
 
 where
 
 .. math::
-   \partial \dot{\\vec{q}}_c / \partial \\vec{a}_u = \\begin{bmatrix}
-     \mathbf{0}_{3 \\times 3} \\\\
-     \mathbf{I}_3 \\\\
-     \mathbf{0}_{ n \\times 3}
+   \\partial \\dot{\\vec{q}}_c / \\partial \\vec{a}_u = \\begin{bmatrix}
+     \\mathbf{0}_{3 \\times 3} \\\\
+     \\mathbf{I}_3 \\\\
+     \\mathbf{0}_{ n \\times 3}
    \\end{bmatrix}.
 
 This expansion yields four terms that must be supplied by the control law:
@@ -194,13 +194,13 @@ This expansion yields four terms that must be supplied by the control law:
 
    * - Term
      - Method
-   * - :math:`\partial \\vec{a}_u / \partial \\vec{q}_c`
+   * - :math:`\\partial \\vec{a}_u / \\partial \\vec{q}_c`
      - :func:`ControlLaw.partials_accel_wrt_coreState`
-   * - :math:`\partial \\vec{a}_u / \partial \\vec{u}`
+   * - :math:`\\partial \\vec{a}_u / \\partial \\vec{u}`
      - :func:`ControlLaw.partials_accel_wrt_ctrlState`
-   * - :math:`\partial \dot{\\vec{u}} / \partial \\vec{q}_c`
+   * - :math:`\\partial \\dot{\\vec{u}} / \\partial \\vec{q}_c`
      - :func:`ControlLaw.partials_ctrlStateDEQs_wrt_coreState`
-   * - :math:`\partial \dot{\\vec{u}} / \partial \\vec{u}`
+   * - :math:`\\partial \\dot{\\vec{u}} / \\partial \\vec{u}`
      - :func:`ControlLaw.partials_ctrlStateDEQs_wrt_ctrlState`
 
 Epoch Partials
@@ -210,14 +210,14 @@ Similar to the state partials, the epoch partials are modified by the control la
 The dynamical model differential equations quantify the derivative,
 
 .. math::
-   \\frac{\partial \dot{\\vec{q}}}{\partial T} = \\begin{Bmatrix}
-     \partial \dot{\\vec{q}}_c / \partial T +
-       (\partial \dot{\\vec{q}}_c / \partial \\vec{a}_u)
-       (\partial \\vec{a}_u / \partial T) \\\\
-     \partial \dot{\\vec{u}} / \partial T
-   \end{Bmatrix}
+   \\frac{\\partial \\dot{\\vec{q}}}{\\partial T} = \\begin{Bmatrix}
+     \\partial \\dot{\\vec{q}}_c / \\partial T +
+       (\\partial \\dot{\\vec{q}}_c / \\partial \\vec{a}_u)
+       (\\partial \\vec{a}_u / \\partial T) \\\\
+     \\partial \\dot{\\vec{u}} / \\partial T
+   \\end{Bmatrix}
 
-The partial derivative of :math:`\dot{\\vec{q}}_c` with respect to the epoch is
+The partial derivative of :math:`\\dot{\\vec{q}}_c` with respect to the epoch is
 provided by the dynamical model.
 The partial derivatives of the acceleration vector and the control state
 differential equations with respect to the epoch are provided by the control law:
@@ -227,9 +227,9 @@ differential equations with respect to the epoch are provided by the control law
 
    * - Term
      - Method
-   * - :math:`\partial \\vec{a}_u / \partial T`
+   * - :math:`\\partial \\vec{a}_u / \\partial T`
      - :func:`ControlLaw.partials_accel_wrt_epoch`
-   * - :math:`\partial \dot{\\vec{u}} / \partial T`
+   * - :math:`\\partial \\dot{\\vec{u}} / \\partial T`
      - :func:`ControlLaw.partials_ctrlStateDEQs_wrt_epoch`
 
 Parameter Partials
@@ -238,23 +238,23 @@ Parameter Partials
 The parameter partials are computed in the same way as the epoch partials,
 
 .. math::
-   \\frac{\partial \dot{\\vec{q}}}{\partial \\vec{p}} = \\begin{Bmatrix}
-     \partial \dot{\\vec{q}}_c / \partial \\vec{p} +
-       (\partial \dot{\\vec{q}}_c / \partial \\vec{a}_u)
-       (\partial \\vec{a}_u / \partial \\vec{p}) \\\\
-     \partial \dot{\\vec{u}} / \partial \\vec{p}
-   \end{Bmatrix}
+   \\frac{\\partial \\dot{\\vec{q}}}{\\partial \\vec{p}} = \\begin{Bmatrix}
+     \\partial \\dot{\\vec{q}}_c / \\partial \\vec{p} +
+       (\\partial \\dot{\\vec{q}}_c / \\partial \\vec{a}_u)
+       (\\partial \\vec{a}_u / \\partial \\vec{p}) \\\\
+     \\partial \\dot{\\vec{u}} / \\partial \\vec{p}
+   \\end{Bmatrix}
 
 
-The partial derivative of :math:`\dot{\\vec{q}}_c` with respect to the full 
+The partial derivative of :math:`\\dot{\\vec{q}}_c` with respect to the full 
 parameter is provided by the dynamical model.
 
 .. note::
    Because the "ballistic" (no thrust applied) dynamics described by 
-   :math:`\dot{\\vec{q}}_c` are independent of the control parameters,
+   :math:`\\dot{\\vec{q}}_c` are independent of the control parameters,
    :math:`\\vec{p}_u`, the partial derivatives defined in the dynamics model
    will likely need to incorporate zeros for 
-   :math:`\partial \dot{\\vec{q}}_c / \partial \\vec{p}`.
+   :math:`\\partial \\dot{\\vec{q}}_c / \\partial \\vec{p}`.
 
 The partial derivatives of the acceleration vector and the control state
 differential equations with respect to the parameters are provided by the control 
@@ -265,9 +265,9 @@ law:
 
    * - Term
      - Method
-   * - :math:`\partial \\vec{a}_u / \partial \\vec{p}`
+   * - :math:`\\partial \\vec{a}_u / \\partial \\vec{p}`
      - :func:`ControlLaw.partials_accel_wrt_params`
-   * - :math:`\partial \dot{\\vec{u}} / \partial \\vec{p}`
+   * - :math:`\\partial \\dot{\\vec{u}} / \\partial \\vec{p}`
      - :func:`ControlLaw.partials_ctrlStateDEQs_wrt_params`
 
 

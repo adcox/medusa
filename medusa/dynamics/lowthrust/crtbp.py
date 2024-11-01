@@ -8,20 +8,20 @@ in the :doc:`dynamics.lowthrust` documentation, the low-thrust acceleration is
 added to the ballistic acceleration, yielding the governing equations,
 
 .. math::
-   \dot{\\vec{q}} = \\begin{Bmatrix}
-     \dot{x} \\\\ \dot{y} \\\\ \dot{z} \\\\
-     2\dot{y} + x - (1-\mu)(x+\mu)/r_{13}^3 - \mu(x - 1 + \mu)/r_{23}^3
-         \\textcolor{orange}{+ \\vec{a}_u \cdot \hat{x}} \\\\
-     -2\dot{x} + y - (1-\mu) y / r_{13}^3 - \mu y / r_{23}^3
-         \\textcolor{orange}{+ \\vec{a}_u \cdot \hat{y}} \\\\
-     - (1-\mu) z / r_{13}^3 - \mu z / r_{23}^3 
-         \\textcolor{orange}{+ \\vec{a}_u \cdot \hat{z}}
+   \\dot{\\vec{q}} = \\begin{Bmatrix}
+     \\dot{x} \\\\ \\dot{y} \\\\ \\dot{z} \\\\
+     2\\dot{y} + x - (1-\\mu)(x+\\mu)/r_{13}^3 - \\mu(x - 1 + \\mu)/r_{23}^3
+         \\textcolor{orange}{+ \\vec{a}_u \\cdot \\hat{x}} \\\\
+     -2\\dot{x} + y - (1-\\mu) y / r_{13}^3 - \\mu y / r_{23}^3
+         \\textcolor{orange}{+ \\vec{a}_u \\cdot \\hat{y}} \\\\
+     - (1-\\mu) z / r_{13}^3 - \\mu z / r_{23}^3 
+         \\textcolor{orange}{+ \\vec{a}_u \\cdot \\hat{z}}
    \\end{Bmatrix}
 
 The ballistic CR3BP does not define any parameters, so the only parameters that
 are part of the model are those defined by the control law. Similarly, the CR3BP
 is an epoch-independent model, so the
-:math:`\partial \dot{\\vec{q}}_c / \partial T` term in the epoch partials
+:math:`\\partial \\dot{\\vec{q}}_c / \\partial T` term in the epoch partials
 expansion is zero; the only epoch 
 dependencies that exist are those defined by the control law.
 

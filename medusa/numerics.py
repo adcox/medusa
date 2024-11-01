@@ -71,7 +71,7 @@ def derivative(func, x, step, nIter=10, maxRelChange=2.0, meta={}):
     Compute the derivative of a function at ``x``.
 
     Given a function, :math:`\\vec{y} = \\vec{f}(\\vec{z})`, this method numerically
-    computes the scalar derivative :math:`\mathrm{d}f / \mathrm{d}\zeta` evaluated
+    computes the scalar derivative :math:`\\mathrm{d}f / \\mathrm{d}\\zeta` evaluated
     at the ``x`` value. Because the function argument, :math:`\\vec{z}`, is only
     perturbed along one direction (``step``), the derivative only reflects variations
     along that vector.
@@ -193,7 +193,7 @@ def derivative_multivar(
     Iteratively perturbs each element of ``x`` to compute the multivariate derivative.
 
     Given a function, :math:`\\vec{y} = \\vec{f}(\\vec{z})`, this method numerically
-    computes the derivative :math:`\mathrm{d}\\vec{f} / \mathrm{d} \\vec{z}`,
+    computes the derivative :math:`\\mathrm{d}\\vec{f} / \\mathrm{d} \\vec{z}`,
     evaluated at the ``x`` value. Note that the function must multivariate
     (accepts a vector input) but can return a scalar or a vector.
 
@@ -257,88 +257,88 @@ def linesearch(
     This algorithm and its derivation are transcribed from section 9.7 of 
     [NumRecipes]_ .
 
-    The goal is to find an **attenuation factor**, :math:`\lambda`, that yields
+    The goal is to find an **attenuation factor**, :math:`\\lambda`, that yields
     a new variable vector along the direction of the full step (but not necessarily
     all the way),
 
     .. math::
-       \\vec{X}^* = \\vec{X}_0 + \lambda \delta \\vec{X}, \qquad 0 < \lambda \leq 1
+       \\vec{X}^* = \\vec{X}_0 + \\lambda \\delta \\vec{X}, \\qquad 0 < \\lambda \\leq 1
 
     such that :math:`f(\\vec{X}_1)` has decreased sufficiently relative to 
     :math:`f(\\vec{X}_0)`. The algorithm proceeds as follows:
 
-    1. First try :math:`\lambda = 1`, the full step. When :math:`\delta \\vec{X}`
+    1. First try :math:`\\lambda = 1`, the full step. When :math:`\\delta \\vec{X}`
        is the Newton step, this will lead to quadratic convergence when 
        :math:`\\vec{X}` is sufficiently close to the solution.
     2. If :math:`f(\\vec{X}_1)` does not meet acceptance criteria, *backtrack*
-       along the step direction, trying a smaller value of :math:`\lambda` until
+       along the step direction, trying a smaller value of :math:`\\lambda` until
        a suitable point is found.
 
     To avoid constructing a sequence of steps that decrease :math:`f` too slowly
     relative to the step lengths,
     the average rate of decrease of :math:`f` is required to be at least some 
     fraction :math:`\\alpha` of the *initial* rate of decrease, 
-    :math:`\\nabla f \cdot \delta \\vec{X}`:
+    :math:`\\nabla f \\cdot \\delta \\vec{X}`:
 
     .. math::
-       f(\\vec{X}^*) \leq f(\\vec{X}_0) + \\alpha \\nabla f \cdot (\\vec{X}^* - \\vec{X}_0)
+       f(\\vec{X}^*) \\leq f(\\vec{X}_0) + \\alpha \\nabla f \\cdot (\\vec{X}^* - \\vec{X}_0)
 
     where :math:`0 < \\alpha < 1`. A small value, e.g., 1e-4, works well.
 
     To understand the backtracking routine, define
 
     .. math::
-       g(\lambda) = f(\\vec{X}_0 + \lambda \delta \\vec{X})
+       g(\\lambda) = f(\\vec{X}_0 + \\lambda \\delta \\vec{X})
 
     so that
 
     .. math::
-       g'(\lambda) = \\nabla f \cdot \delta \\vec{X}
+       g'(\\lambda) = \\nabla f \\cdot \\delta \\vec{X}
 
     If backtracking is needed, :math:`g` is modeled with the most current information
-    available and :math:`\lambda` is selected to minimize the model. Initially,
+    available and :math:`\\lambda` is selected to minimize the model. Initially,
     :math:`g(0) = \\vec{X}_0` and :math:`g'(0)` are available, as is 
-    :math:`g(1) = \\vec{X} + \delta \\vec{X}`. A quadratic model can be defined,
+    :math:`g(1) = \\vec{X} + \\delta \\vec{X}`. A quadratic model can be defined,
 
     .. math::
-       g(\lambda) \\approx [g(1) - g(0) - g'(0)]\lambda^2 + g'(0)\lambda + g(0)
+       g(\\lambda) \\approx [g(1) - g(0) - g'(0)]\\lambda^2 + g'(0)\\lambda + g(0)
 
     The derivative of the quadratic is zero (and, thus, the quadratic is minimized)
     when
 
     .. math::
-       \lambda = -\\frac{ g'(0) }{2[g(1) - g(0) - g'(0)]}
+       \\lambda = -\\frac{ g'(0) }{2[g(1) - g(0) - g'(0)]}
 
     On the second and subsequent backtracks, :math:`g` is modeled as a cubic in
-    :math:`\lambda`, using the previous value :math:`g(\lambda_1)` and second
-    most recent value :math:`g(\lambda_2)`:
+    :math:`\\lambda`, using the previous value :math:`g(\\lambda_1)` and second
+    most recent value :math:`g(\\lambda_2)`:
 
     .. math::
-       g(\lambda) \\approx a \lambda^3 + b \lambda^2 + g'(0)\lambda + g(0)
+       g(\\lambda) \\approx a \\lambda^3 + b \\lambda^2 + g'(0)\\lambda + g(0)
 
     Requiring this expression to give the correct values of :math:`g` at 
-    :math:`\lambda_1` and :math:`\lambda_2` gives two equations that can be solved
+    :math:`\\lambda_1` and :math:`\\lambda_2` gives two equations that can be solved
     for :math:`a` and :math:`b`:
 
     .. math::
-       \\begin{bmatrix}a \\\\ b\end{bmatrix} =
-       \\frac{1}{\lambda_1 - \lambda_2}
+       \\begin{bmatrix}a \\\\ b\\end{bmatrix} =
+       \\frac{1}{\\lambda_1 - \\lambda_2}
        \\begin{bmatrix}
-         1/\lambda_1^2 & -1/\lambda_2^2\\\\
-         -\lambda_2/\lambda_1^2 & \lambda_1/\lambda_2^2
-       \end{bmatrix}
+         1/\\lambda_1^2 & -1/\\lambda_2^2\\\\
+         -\\lambda_2/\\lambda_1^2 & \\lambda_1/\\lambda_2^2
+       \\end{bmatrix}
        \\begin{bmatrix}
-         g(\lambda_1) - g'(0)\lambda_1 - g(0)\\\\
-         g(\lambda_2) - g'(0)\lambda_2 - g(0)
-       \end{bmatrix}
+         g(\\lambda_1) - g'(0)\\lambda_1 - g(0)\\\\
+         g(\\lambda_2) - g'(0)\\lambda_2 - g(0)
+       \\end{bmatrix}
 
     The minimum of the cubic is at
 
     .. math::
-       \lambda = \\frac{-b + \sqrt{b^2 - 3ag'(0)}}{3a}
+       \\lambda = \\frac{-b + \\sqrt{b^2 - 3ag'(0)}}{3a}
 
-    The computed :math:`\lambda` is enforced to remain between :math:`0.5\lambda_1`
-    and :math:`0.1\lambda_1`.
+    The computed :math:`\\lambda` is enforced to remain between :math:`0.5\\lambda_1`
+    and :math:`0.1\\lambda_1`.
     """
     tolX = 1e-7  # convergence criterion on x. TODO user input
     maxIt = 10  # TODO user input

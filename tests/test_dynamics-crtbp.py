@@ -123,6 +123,8 @@ def test_toBaseUnits(model, N, transpose):
     if transpose:
         qIn = qIn.T
 
+    breakpoint()
+
     q_dim = model.toBaseUnits(qIn, VarGroup.STATE)
     assert q_dim.shape == qOut.shape
     for out, expect in zip(q_dim.flat, qOut.flat):

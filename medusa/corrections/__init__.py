@@ -37,10 +37,10 @@ set of variables, :math:`\\vec{X}_*`, the constraint function can be expanded
 about :math:`\\vec{X}_*` in a Taylor Series expansion:
 
 .. math::
-   \\vec{F}(\\vec{X}_f) = \\vec{F}(\\vec{X}_*) + \mathbf{J} (\\vec{X}_f - \\vec{X}_*) + \mathrm{h.o.t.s}
+   \\vec{F}(\\vec{X}_f) = \\vec{F}(\\vec{X}_*) + \\mathbf{J} (\\vec{X}_f - \\vec{X}_*) + \\mathrm{h.o.t.s}
 
-where :math:`\mathbf{J}` is the **Jacobian** matrix with elements
-:math:`\mathbf{J}_{i,j} = \partial \\vec{F}_i / \partial \\vec{X}_j`, evaluated
+where :math:`\\mathbf{J}` is the **Jacobian** matrix with elements
+:math:`\\mathbf{J}_{i,j} = \\partial \\vec{F}_i / \\partial \\vec{X}_j`, evaluated
 at :math:`\\vec{X}_*`. 
 
 .. autosummary:: CorrectionsProblem.jacobian
@@ -50,14 +50,14 @@ Ignoring the higher-order terms (h.o.t.s) and recognizing
 that :math:`\\vec{F}(\\vec{X}_f)` evaluates to zero, the expansion is reduced to
 
 .. math::
-   \\vec{F}(\\vec{X}_*) + \mathbf{J}(\\vec{X}_f - \\vec{X}_*) = \\vec{0}.
+   \\vec{F}(\\vec{X}_*) + \\mathbf{J}(\\vec{X}_f - \\vec{X}_*) = \\vec{0}.
 
 In practice, because the higher order terms have been ignored, this gradient-based
 method requires multiple iterations to locate :math:`\\vec{X}_f`. The iterative
 **update equation** is written as
 
 .. math::
-   -\\vec{F}(\\vec{X}_n) = \mathbf{J}(\\vec{X}_{n+1} - \\vec{X}_n).
+   -\\vec{F}(\\vec{X}_n) = \\mathbf{J}(\\vec{X}_{n+1} - \\vec{X}_n).
 
 
 Defining a Problem
@@ -190,10 +190,10 @@ State Update
 The **state update** is the process of solving the equation
 
 .. math::
-   -\\vec{F}(\\vec{X}_n) = \mathbf{J}(\\vec{X}_{n+1} - \\vec{X}_n) = \mathbf{J}\\delta \\vec{X}_n
+   -\\vec{F}(\\vec{X}_n) = \\mathbf{J}(\\vec{X}_{n+1} - \\vec{X}_n) = \\mathbf{J}\\delta \\vec{X}_n
 
-for the update, or "step", :math:`\delta \\vec{X}_n`. When the the number of free
-variables is greater than or equal to the number of constraints, :math:`\mathbf{J}`
+for the update, or "step", :math:`\\delta \\vec{X}_n`. When the the number of free
+variables is greater than or equal to the number of constraints, :math:`\\mathbf{J}`
 is square (equal) or wide (greater than) and the update equation can be solved
 via a minimum norm update. When the number of constraints is greater than the 
 number of variables, a least squares update can be applied. It is up to the user
@@ -1875,18 +1875,18 @@ class MinimumNormUpdate:
     The update equation,
 
     .. math::
-       -\\vec{F}(\\vec{X}_n) = \mathbf{J}\\delta \\vec{X}_n
+       -\\vec{F}(\\vec{X}_n) = \\mathbf{J}\\delta \\vec{X}_n
 
-    can be solved via the minimum norm method when :math:`\mathbf{J}` is square
+    can be solved via the minimum norm method when :math:`\\mathbf{J}` is square
     or when the number of columns (free variables) is greater than the number of
     rows (constraints).
 
-    When :math:`\mathbf{J}` is not square, an infinite number of solutions to this
+    When :math:`\\mathbf{J}` is not square, an infinite number of solutions to this
     equation exist. As the name suggests, the "minimum norm" solution minimizes
     the L2 norm of the step. The resulting update equation is
 
     .. math::
-       \delta \\vec{X}_n = -\mathbf{J}^T (\mathbf{JJ}^T)^{-1} \\vec{F}(\\vec{X}_n)
+       \\delta \\vec{X}_n = -\\mathbf{J}^T (\\mathbf{JJ}^T)^{-1} \\vec{F}(\\vec{X}_n)
     """
 
     def update(self, problem: CorrectionsProblem) -> NDArray[np.double]:

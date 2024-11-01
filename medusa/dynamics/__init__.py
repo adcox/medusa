@@ -9,7 +9,7 @@ the object's **state** is described by its Cartesian position and velocity coord
 
 .. math::
     \\vec{q}(\\tau, T, \\vec{p}) =
-    \\begin{Bmatrix} x & y & z & \dot{x} & \dot{y} & \dot{z} \end{Bmatrix}^T,
+    \\begin{Bmatrix} x & y & z & \\dot{x} & \\dot{y} & \\dot{z} \\end{Bmatrix}^T,
 
 where :math:`\\vec{q}` is the state vector, :math:`\\tau` is the independent variable
 (usually time), :math:`T` is an absolute epoch corresponding to :math:`\\tau = 0`, 
@@ -29,7 +29,7 @@ used in differential corrections and optimization processes:
 State Partials
 ^^^^^^^^^^^^^^
 
-The state transition matrix (STM), :math:`\mathbf{\Phi}`, is identified via the 
+The state transition matrix (STM), :math:`\\mathbf{\\Phi}`, is identified via the 
 :data:`VarGroup.STM` type.
 
 This matrix relates changes 
@@ -37,7 +37,7 @@ in :math:`\\vec{q}` at one value of :math:`\\tau` to changes in :math:`\\vec{q}`
 at a different value, i.e.,
 
 .. math::
-   \delta \\vec{q}(\\tau_2) = \mathbf{\Phi}(\\tau_1, \\tau_2) \delta \\vec{q}(\\tau_1)
+   \\delta \\vec{q}(\\tau_2) = \\mathbf{\\Phi}(\\tau_1, \\tau_2) \\delta \\vec{q}(\\tau_1)
 
 Deriving an analytical expression for this matrix is difficult, but its derivative
 is straightforward to define. Accordingly, the matrix is propagated along with the
@@ -45,12 +45,12 @@ state vector to yield an STM that relates the end of an arc to its beginning.
 The differential equation that describes this evolution is
 
 .. math::
-   \dot{\mathbf{\Phi}}(\\tau_2, \\tau_1) = \mathbf{A}(\\tau_2) \mathbf{\Phi}(\\tau_2, \\tau_1)
+   \\dot{\\mathbf{\\Phi}}(\\tau_2, \\tau_1) = \\mathbf{A}(\\tau_2) \\mathbf{\\Phi}(\\tau_2, \\tau_1)
 
-where :math:`\mathbf{A}` is the linearization of the dynamics,
+where :math:`\\mathbf{A}` is the linearization of the dynamics,
 
 .. math::
-   \mathbf{A} = \\frac{ \partial \dot{\\vec{q}} }{ \partial \\vec{q} }.
+   \\mathbf{A} = \\frac{ \\partial \\dot{\\vec{q}} }{ \\partial \\vec{q} }.
 
 When :math:`\\tau_2 = \\tau_1`, the state transition matrix is identity; this 
 serves as the initial condition for the :data:`~VarGroup.STM` type.
@@ -58,7 +58,7 @@ serves as the initial condition for the :data:`~VarGroup.STM` type.
 Epoch Partials
 ^^^^^^^^^^^^^^^
 
-The epoch partials, :math:`\partial \\vec{q} / \partial T`, are identified via
+The epoch partials, :math:`\\partial \\vec{q} / \\partial T`, are identified via
 the :data:`VarGroup.EPOCH_PARTIALS` type.
 
 Similar to the STM, the epoch partials are numerically integrated. Because the
@@ -66,9 +66,9 @@ time along a propagated arc, :math:`\\tau`, is independent of the epoch, :math:`
 the order of differentiation can be switched,
 
 .. math::
-   \\frac{\mathrm{d}}{\mathrm{d} \\tau} \left( \\frac{ \partial \\vec{q} }{ \partial T } \\right) =
-   \\frac{\partial}{\partial T} \left( \\frac{ \mathrm{d} \\vec{q} }{ \mathrm{d} \\tau } \\right) =
-   \\frac{\partial \dot{\\vec{q}}}{\partial T}
+   \\frac{\\mathrm{d}}{\\mathrm{d} \\tau} \\left( \\frac{ \\partial \\vec{q} }{ \\partial T } \\right) =
+   \\frac{\\partial}{\\partial T} \\left( \\frac{ \\mathrm{d} \\vec{q} }{ \\mathrm{d} \\tau } \\right) =
+   \\frac{\\partial \\dot{\\vec{q}}}{\\partial T}
 
 The right side of the equation can be derived analytically from the differential 
 equations that govern the core state. The initial condition for this term is the
@@ -78,7 +78,7 @@ zero vector.
 Parameter Partials
 ^^^^^^^^^^^^^^^^^^
 
-The parameter partials, :math:`\partial \\vec{q} / \partial \\vec{q}`, are identified
+The parameter partials, :math:`\\partial \\vec{q} / \\partial \\vec{q}`, are identified
 via the :data:`VarGroup.PARAM_PARTIALS`, type.
 
 Similar to the STM and epoch partials, the parameter partials are numerically 
@@ -87,9 +87,9 @@ variable, :math:`t`, the same differentiation "trick" as the epoch partials is
 applied to yield an expression for the derivative of the parameter partials:
 
 .. math::
-   \\frac{\mathrm{d}}{\mathrm{d} \\tau} \left( \\frac{ \partial \\vec{q} }{ \partial \\vec{p} } \\right) =
-   \\frac{\partial}{\partial \\vec{p}} \left( \\frac{ \mathrm{d} \\vec{q} }{ \mathrm{d} \\tau } \\right) =
-   \\frac{\partial \dot{\\vec{q}}}{\partial \\vec{p}}
+   \\frac{\\mathrm{d}}{\\mathrm{d} \\tau} \\left( \\frac{ \\partial \\vec{q} }{ \\partial \\vec{p} } \\right) =
+   \\frac{\\partial}{\\partial \\vec{p}} \\left( \\frac{ \\mathrm{d} \\vec{q} }{ \\mathrm{d} \\tau } \\right) =
+   \\frac{\\partial \\dot{\\vec{q}}}{\\partial \\vec{p}}
 
 The right side of the equation can be derived analytically from the differential 
 equations that govern the core state. The initial condition for this term is the
@@ -104,9 +104,9 @@ are collected into a **variable vector**, denoted by
 
 .. math::
    \\vec{w} = \\begin{Bmatrix} 
-     \\vec{q} & \\mathbf{\Phi} & 
-     \\frac{\partial \\vec{q}}{\partial T} & 
-     \\frac{\partial \\vec{q}}{\partial \\vec{p}}
+     \\vec{q} & \\mathbf{\\Phi} & 
+     \\frac{\\partial \\vec{q}}{\\partial T} & 
+     \\frac{\\partial \\vec{q}}{\\partial \\vec{p}}
    \\end{Bmatrix}.
 
 The :class:`AbstractDynamicsModel` defines the evolution of this vector
@@ -114,7 +114,7 @@ via the :func:`~AbstractDynamicsModel.diffEqs` function, which returns the
 deriative of the variable vector with respect to the independent variable,
 
 .. math::
-   \dot{\\vec{w}} = \\frac{\mathrm{d} \\vec{w}}{\mathrm{d} \\tau}(\\tau, T, \\vec{p})
+   \\dot{\\vec{w}} = \\frac{\\mathrm{d} \\vec{w}}{\\mathrm{d} \\tau}(\\tau, T, \\vec{p})
 
 Several other methods are supplied to initialize, extract, and append variable
 groups:
@@ -211,7 +211,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from copy import copy, deepcopy
 from enum import IntEnum
-from typing import Any, Union
+from typing import Union
 
 import numpy as np
 import pint
