@@ -33,6 +33,10 @@ class TestPropagator:
         prop = Propagator(emModel)
         assert prop.model == emModel
 
+    def test_repr(self, emModel):
+        prop = Propagator(emModel)
+        assert repr(prop)  # check for failure
+
     def test_deepcopy(self, emModel):
         prop = Propagator(emModel)
         prop2 = copy.deepcopy(prop)
@@ -192,6 +196,10 @@ class TestAbstractEvent:
         assert event.terminal == terminal
         assert event.direction == direction
 
+    def test_repr(self):
+        event = VariableValueEvent(0, 1.2, True, -1)
+        assert repr(event)
+
     @pytest.mark.parametrize(
         "terminal, direction",
         [
@@ -244,6 +252,8 @@ def test_variableValueEvent(emModel, terminal, direction, nEvt):
     t_events = sol.t_events[0]
     assert len(t_events) == nEvt
     assert sol.status == int(terminal)
+    for t, y in zip(sol.t_events[0], sol.y_events[0]):
+        assert event.eval(t, y, [VarGroup.STATE], []) == pytest.approx(0.0, abs=1e-12)
 
 
 @pytest.mark.parametrize("terminal, direction", [[False, 0.0]])
@@ -257,6 +267,8 @@ def test_apseEvent(emModel, terminal, direction):
     assert len(sol.t_events) == 1  # 1 event
     t_events = sol.t_events[0]
     assert len(t_events) > 0
+    for t, y in zip(sol.t_events[0], sol.y_events[0]):
+        assert event.eval(t, y, [VarGroup.STATE], []) == pytest.approx(0.0, abs=1e-12)
 
 
 def test_distanceEvent(emModel):
@@ -269,6 +281,8 @@ def test_distanceEvent(emModel):
     assert len(sol.t_events) == 1  # 1 event
     t_events = sol.t_events[0]
     assert len(t_events) > 0
+    for t, y in zip(sol.t_events[0], sol.y_events[0]):
+        assert event.eval(t, y, [VarGroup.STATE], []) == pytest.approx(0.0, abs=1e-12)
 
 
 def test_bodyDistanceEvent(emModel):
@@ -281,3 +295,5 @@ def test_bodyDistanceEvent(emModel):
     assert len(sol.t_events) == 1  # 1 event
     t_events = sol.t_events[0]
     assert len(t_events) > 0
+    for t, y in zip(sol.t_events[0], sol.y_events[0]):
+        assert event.eval(t, y, [VarGroup.STATE], []) == pytest.approx(0.0, abs=1e-12)

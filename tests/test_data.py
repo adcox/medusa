@@ -11,6 +11,11 @@ from medusa.units import Quant, deg, km, rad, sec
 # Tests for Body
 
 
+def test_repr():
+    body = Body("Vega", gm=3e55 * km**2 / sec**3)
+    assert isinstance(repr(body), str)
+
+
 def test_constructor_min():
     name = "Midgard"
     gm = 5.6e5 * km**2 / sec**3

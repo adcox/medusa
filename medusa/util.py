@@ -92,7 +92,7 @@ def float_eq(f1: float, f2: float) -> bool:
         return f1 == f2
 
 
-def repr(cls: object, *attributes: Sequence[str]) -> str:
+def repr(cls: object, *attributes: str) -> str:
     """
     Simple repr method for a class with the format
 

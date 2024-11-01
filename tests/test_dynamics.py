@@ -122,6 +122,9 @@ class TestAbstractDynamicsModel:
         with pytest.raises(pint.DimensionalityError):
             DummyModel(earth, charL, charT, charM)
 
+    def test_repr(self, model):
+        assert isinstance(repr(model), str)
+
     @pytest.mark.parametrize(
         "varGroups, sz",
         [

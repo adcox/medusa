@@ -49,6 +49,11 @@ class TestVariable:
         assert all(var.data == np.array(vals, ndmin=1))
         assert all(var.mask == np.array(mask, ndmin=1))
 
+    @pytest.mark.parametrize("name", ["abc", ""])
+    def test_repr(self, name):
+        var = Variable(1.0, mask=True, name=name)
+        assert isinstance(repr(var), str)
+
     def test_slice(self):
         var1 = Variable([1, 2, 3, 4, 5], mask=[0, 1, 0, 1, 0], name="variable")
         var2 = var1[:3]
@@ -134,6 +139,10 @@ class TestControlPoint:
     def test_constructor_errs(self, epoch, state):
         with pytest.raises(RuntimeError):
             ControlPoint(emModel, epoch, state)
+
+    def test_repr(self):
+        cp = ControlPoint(emModel, 0.0, [1, 2, 3, 4, 5, 6])
+        assert isinstance(repr(cp), str)
 
     def test_fromProp(self):
         prop = Propagator(emModel)
@@ -248,6 +257,10 @@ class TestSegment:
         assert seg.prop.model == origin.model
         assert not seg.prop.model == model
 
+    def test_repr(self, origin):
+        seg = Segment(origin, 1.1)
+        assert isinstance(repr(seg), str)
+
     def test_copy(self, origin, prop):
         tof = Variable([2.1])
         terminus = ControlPoint(origin.model, 0.1, [0.0] * 6)
@@ -356,6 +369,14 @@ class TestSegment:
 
 # ------------------------------------------------------------------------------
 class TestCorrectionsProblem:
+    def test_repr(self):
+        prob = CorrectionsProblem()
+        assert isinstance(repr(prob), str)
+
+    def test_repr2(self):
+        prob = self.jacProb([0, 0, 0], [None, 2.0, 3.0])  # has more data to display
+        assert isinstance(repr(prob), str)
+
     # -------------------------------------------
     # Variables
 
@@ -940,6 +961,9 @@ class TestShootingProblem:
 
 # ------------------------------------------------------------------------------
 class TestDifferentialCorrector:
+    def test_repr(self):
+        assert isinstance(repr(DifferentialCorrector()), str)
+
     @pytest.mark.parametrize("linesearch", [True, False])
     def test_simpleCorrections(self, linesearch):
         # Create an initial state with velocity states free
