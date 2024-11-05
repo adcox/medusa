@@ -168,6 +168,4 @@ TU = ureg.TU  #: time unit for dynamical models
 
 MU = ureg.MU  #: mass unit for dynamical models
 
-UU = ureg.Quantity(
-    1, "dimensionless"
-)  #: shorthand notation for a dimensionless quantity
+UU = ureg.Unit("dimensionless")  #: shorthand for a dimensionless quantity

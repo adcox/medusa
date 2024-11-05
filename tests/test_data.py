@@ -83,3 +83,8 @@ def test_equal(b1, b2, tf):
     b1 = Body.fromXML(BODY_XML, b1)
     b2 = Body.fromXML(BODY_XML, b2)
     assert (b1 == b2) == tf
+
+
+def test_equal_other():
+    body = Body.fromXML(BODY_XML, "Europa")
+    assert not body == "Europa"

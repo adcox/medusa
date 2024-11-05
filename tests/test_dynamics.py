@@ -150,17 +150,19 @@ class TestAbstractDynamicsModel:
 
     @pytest.mark.parametrize("varIn", [None, [0, 1, 2, 3]])
     @pytest.mark.parametrize(
-        "varGroup, shape, out",
+        "varGroup, shape, out, ndmin",
         [
-            [VarGroup.STATE, (2,), [0, 1]],
-            [VarGroup.STM, (2, 2), [[2, 3], [4, 5]]],
-            [VarGroup.EPOCH_PARTIALS, (2,), [6, 7]],
-            [VarGroup.PARAM_PARTIALS, (2, 3), [[8, 9, 10], [11, 12, 13]]],
+            (VarGroup.STATE, (2,), [0, 1], 1),
+            (VarGroup.STATE, (2,), [0, 1], 2),
+            (VarGroup.STM, (2, 2), [[2, 3], [4, 5]], 1),
+            (VarGroup.EPOCH_PARTIALS, (2,), [6, 7], 1),
+            (VarGroup.PARAM_PARTIALS, (2, 3), [[8, 9, 10], [11, 12, 13]], 1),
         ],
     )
-    def test_extractGroup(self, model, varGroup, shape, out, varIn):
+    def test_extractGroup(self, model, varGroup, shape, out, varIn, ndmin):
         # standard use case: y has all the variable groups, we want subset out
         y = np.arange(14)
+        y = np.array(y, ndmin=ndmin)
         varOut = model.extractGroup(y, varGroup, varGroupsIn=varIn)
         assert isinstance(varOut, np.ndarray)
         assert varOut.shape == shape
@@ -335,6 +337,17 @@ class TestAbstractDynamicsModel:
         ), w_dim
 
     @pytest.mark.parametrize(
+        "wIn, varGroups, err",
+        [
+            ([1 * km, 1 * km], [VarGroup.STATE], TypeError),
+            ([1, 2, 3], [VarGroup.STATE], ValueError),
+        ],
+    )
+    def test_toBaseUnits_errs(self, model, wIn, varGroups, err):
+        with pytest.raises(err):
+            model.toBaseUnits(wIn, varGroups)
+
+    @pytest.mark.parametrize(
         "wOut, varGroups, wIn",
         [
             # Simple case: single vector
@@ -379,6 +392,17 @@ class TestAbstractDynamicsModel:
                 for v, vOut in zip(w_nondim.flatten(), wOut.flatten())
             ]
         ), w_nondim
+
+    @pytest.mark.parametrize(
+        "wIn, varGroups, err",
+        [
+            ([1, 1 * km], [VarGroup.STATE], TypeError),
+            ([1 * km, 2 * km, 3 * km], [VarGroup.STATE], ValueError),
+        ],
+    )
+    def test_normalize_errs(self, model, wIn, varGroups, err):
+        with pytest.raises(err):
+            model.normalize(wIn, varGroups)
 
     def test_eq(self):
         model = DummyModel([earth, sun])

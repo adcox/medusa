@@ -57,8 +57,11 @@ def test_equals():
     assert not model1 == model4
 
 
-def test_groupSize():
-    model = DynamicsModel(earth, moon)
+def test_params(model):
+    assert model.params == []
+
+
+def test_groupSize(model):
     assert model.groupSize(VarGroup.STATE) == 6
     assert model.groupSize(VarGroup.STM) == 36
     assert model.groupSize([VarGroup.STATE, VarGroup.STM]) == 42
@@ -127,6 +130,22 @@ def test_toBaseUnits(model, N, transpose):
     assert q_dim.shape == qOut.shape
     for out, expect in zip(q_dim.flat, qOut.flat):
         assert abs((out - expect).to_base_units().magnitude) < 1e-12
+
+
+def test_stmToBaseUnits(model):
+    q0_nd = [0.64260, 0.0, 0.75004, 0.0, 0.35068, 0.0]
+    q0_nd = model.appendICs(q0_nd, VarGroup.STM)
+    q0_dim = model.toBaseUnits(q0_nd, [VarGroup.STATE, VarGroup.STM])
+
+    state = model.extractGroup(q0_dim, VarGroup.STATE)
+    stm = model.extractGroup(q0_dim, VarGroup.STM)
+
+    # Should be able to multiple these...
+    dState0 = state * 0.01
+    dStatef = stm @ dState0
+
+    # STM is Identity, so dStatef == dState0
+    np.testing.assert_equal(dState0, dStatef)
 
 
 @pytest.mark.parametrize("N, transpose", [(1, False), (2, False), (2, True)])

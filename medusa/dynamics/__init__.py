@@ -475,8 +475,9 @@ class AbstractDynamicsModel(ABC):
         Returns:
             the data from ``w`` in "standard" units
         """
-        w = np.array(w, ndmin=2, copy=True)
-        if any(isinstance(v, pint.Quantity) for v in w.flat):
+        try:
+            w = np.array(w, ndmin=2, copy=True)
+        except (ValueError, pint.errors.DimensionalityError):
             raise TypeError(
                 "Expecting input data to be numeric (int, float, etc.); did "
                 "you mean to call normalize()?"
@@ -606,7 +607,6 @@ class AbstractDynamicsModel(ABC):
         """
         if varGroupsIn is None:
             varGroupsIn = [VarGroup(v) for v in range(varGroup + 1)]
-        # varGroupsIn = np.array(varGroupsIn, ndmin=1)
 
         if not varGroup in varGroupsIn:
             raise RuntimeError(
@@ -624,10 +624,11 @@ class AbstractDynamicsModel(ABC):
 
         nState = self.groupSize(VarGroup.STATE)
         nCol = int(sz / nState)
+        _w = w.flatten()
         if nCol > 1:
-            return np.reshape(w[nPre : nPre + sz], (nState, nCol))
+            return np.reshape(_w[nPre : nPre + sz], (nState, nCol))
         else:
-            return np.array(w[nPre : nPre + sz])
+            return np.array(_w[nPre : nPre + sz])
 
     def defaultICs(self, varGroup: VarGroup) -> NDArray[np.double]:
         """

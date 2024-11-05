@@ -131,7 +131,7 @@ class Propagator(ModelBlockCopyMixin):
         rtol: float = 1e-10,
     ) -> None:
         if not isinstance(model, AbstractDynamicsModel):
-            raise ValueError("model must be derived from AbstractDynamicsModel")
+            raise TypeError("model must be derived from AbstractDynamicsModel")
 
         self.model: AbstractDynamicsModel = model  #: dynamics model
         self.method: str = method  #: the numerical integration method
@@ -251,7 +251,9 @@ class Propagator(ModelBlockCopyMixin):
         kwargs_in.update(**kwargs)
 
         if "args" in kwargs_in:
-            logger.warning("Overwriting 'args' passed to propagate()")
+            logger.warning(
+                "The 'args' passed to propagate() will be overridden by internal values"
+            )
 
         # make varGroups an array and then cast to tuple; need simple type for
         #   JIT compilation support
@@ -278,7 +280,7 @@ class Propagator(ModelBlockCopyMixin):
         # Gather event functions and assign attributes
         for event in events:
             if not isinstance(event, AbstractEvent):
-                raise RuntimeError(f"Event is not derived from AbstractEvent:\n{event}")
+                raise TypeError(f"Event is not derived from AbstractEvent:\n{event}")
             event.assignEvalAttr()
 
         eventFcns = [event.eval for event in events]
@@ -412,7 +414,7 @@ class ApseEvent(AbstractEvent):
         direction: float = 0.0,
     ) -> None:
         if not isinstance(model, AbstractDynamicsModel):
-            raise ValueError("model must be derived from AbstractDynamicsModel")
+            raise TypeError("model must be derived from AbstractDynamicsModel")
 
         super().__init__(terminal, direction)
         self._model = model
@@ -471,7 +473,7 @@ class BodyDistanceEvent(AbstractEvent):
         direction: float = 0.0,
     ) -> None:
         if not isinstance(model, AbstractDynamicsModel):
-            raise ValueError("model must be derived from AbstractDynamicsModel")
+            raise TypeError("model must be derived from AbstractDynamicsModel")
 
         super().__init__(terminal, direction)
         self._model = model
@@ -557,7 +559,7 @@ class VariableValueEvent(AbstractEvent):
 
     @override
     def eval(self, t, w, varGroups, params) -> float:
-        return self._eval(w, self._ix, self._val)
+        return VariableValueEvent._eval(w, self._ix, self._val)
 
     @staticmethod
     @njit

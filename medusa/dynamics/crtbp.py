@@ -226,7 +226,7 @@ class DynamicsModel(AbstractDynamicsModel):
                 np.block(
                     [
                         [np.full((3, 3), UU), np.full((3, 3), TU)],
-                        [np.full((3, 3), 1 / TU), np.full((3, 3), UU)],
+                        [np.full((3, 3), UU / TU), np.full((3, 3), UU)],
                     ]
                 )
                 .flatten()

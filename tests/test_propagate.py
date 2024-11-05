@@ -33,6 +33,10 @@ class TestPropagator:
         prop = Propagator(emModel)
         assert prop.model == emModel
 
+    def test_constructor_errs(self):
+        with pytest.raises(TypeError):
+            Propagator("DOP853")
+
     def test_repr(self, emModel):
         prop = Propagator(emModel)
         assert repr(prop)  # check for failure
@@ -166,6 +170,13 @@ class TestPropagator:
             assert len(sol.t_events[0]) > 0
         assert sol.status == 0 if not event.terminal else 1
 
+    def test_propagate_invalidEvents(self, emModel):
+        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        tspan = [0, 6.3111]
+        prop = Propagator(emModel)
+        with pytest.raises(TypeError):
+            prop.propagate(y0, tspan, events=[emModel])
+
     @pytest.mark.parametrize("dense", [False, True])
     def test_denseEval(self, emModel, dense):
         y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
@@ -233,15 +244,22 @@ class TestAbstractEvent:
 
 
 @pytest.mark.parametrize(
-    "terminal, direction, nEvt",
+    "terminal, direction, nEvt, jit",
     [
         # Event y = 0 should occur 5 times, 2 negative, 3 positive
-        [False, 0.0, 5],
-        [False, -1, 2],
-        [False, 1, 3],
+        [False, 0.0, 5, True],
+        [False, 0.0, 5, False],
+        [False, -1, 2, True],
+        [False, 1, 3, True],
     ],
 )
-def test_variableValueEvent(emModel, terminal, direction, nEvt):
+def test_variableValueEvent(emModel, terminal, direction, nEvt, jit, mocker):
+    if not jit:
+        # Test evaluation with and without numba JIT
+        mocker.patch.object(
+            VariableValueEvent, "_eval", VariableValueEvent._eval.py_func
+        )
+
     y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
     tspan = [0, 6.32]
     prop = Propagator(emModel)
