@@ -459,311 +459,9 @@ class AbstractDynamicsModel(ABC):
         """
         pass
 
-    def toBaseUnits(
-        self, w: FloatArray, varGroups: Union[VarGroup, Sequence[VarGroup]]
-    ) -> NDArray:
-        """
-        Convert normalized :class:`float` data to units.
-
-        The :attr:`charL`, :attr:`charT`, and :attr:`charM` define the conversion
-        from the normalized ``LU``, ``TU``, and ``MU`` units to "standard" units like
-        km, sec, and kg.
-
-        Args:
-            w: an MxN array of normalized values where N is the number of variables
-                in the ``varGroups``
-            varGroups: the variable groups included in each row of ``w``
-
-        Returns:
-            the data from ``w`` in "standard" units
-        """
-        try:
-            w = np.array(w, ndmin=2, copy=True)
-        except (ValueError, pint.errors.DimensionalityError):
-            raise TypeError(
-                "Expecting input data to be numeric (int, float, etc.); did "
-                "you mean to call normalize()?"
-            )
-
-        N = self.groupSize(varGroups)
-        if not N in w.shape:
-            raise ValueError(
-                f"Dimension mismatch; 'w' has shape {w.shape}, which does not "
-                f"include variable group size, {N}"
-            )
-
-        if not w.shape[1] == N:
-            w = w.T
-
-        units = []
-        for grp in util.toList(varGroups):
-            units.extend(self.varUnits(grp))
-
-        # Convert to standard units
-        with ureg.context(self.unitContext.name):  # type: ignore[arg-type]
-            scale = np.full((N, N), ureg.Quantity(0.0), dtype=pint.Quantity)
-            for ix in range(N):
-                scale[ix, ix] = ureg.Quantity(1.0, units[ix]).to_base_units()
-
-        return w @ scale
-
-    def normalize(
-        self,
-        w: Union[Sequence[pint.Quantity], NDArray],
-        varGroups: Union[VarGroup, Sequence[VarGroup]],
-    ) -> NDArray[np.double]:
-        """
-        Convert :class:`~pint.Quantity` data to normalized floats in the unit
-        context of this model.
-
-
-        The :attr:`charL`, :attr:`charT`, and :attr:`charM` define the conversion
-        from the normalized ``LU``, ``TU``, and ``MU`` units to "standard" units like
-        km, sec, and kg.
-
-        Args:
-            w: an MxN array of Quantities where N is the number of variables
-                in the ``varGroups``
-            varGroups: the variable groups included in each row of ``w``
-
-        Returns:
-            the data from ``w`` in normalized units. The data are returned as
-            floats instead of as Quantity objects with ``LU``, ``TU``, and ``MU``
-            units.
-
-        See also:
-            :func:`varUnits`: this function provides the normalized units for each variable
-            in terms of the :data:`~medusa.units.LU`, :data:`~medusa.units.TU`, and
-            :data:`~medusa.units.MU` units.
-        """
-        w = np.array(w, ndmin=2, copy=True, dtype=pint.Quantity)
-        if not all(isinstance(v, pint.Quantity) for v in w.flat):
-            raise TypeError(
-                "Expecting input data to be Quantities; did you mean to call toBaseUnits()?"
-            )
-
-        N = self.groupSize(varGroups)
-        if not N in w.shape:
-            raise ValueError(
-                f"Dimension mismatch; 'w' has shape {w.shape}, which does not "
-                f"include variable group size, {N}"
-            )
-
-        if not w.shape[1] == N:
-            w = w.T
-
-        units = []
-        for grp in util.toList(varGroups):
-            units.extend(self.varUnits(grp))
-
-        # Convert to floats, normalizing by LU, TU, and DU
-        with ureg.context(self.unitContext.name):  # type: ignore[arg-type]
-            scale = np.zeros((N, N))
-            for ix in range(N):
-                scale[ix, ix] = (
-                    1.0 / ureg.Quantity(1.0, units[ix]).to_base_units().magnitude
-                )
-
-            w = np.asarray(
-                [[val.to_base_units().magnitude for val in vals] for vals in w]
-            )
-
-            return w @ scale
-
-    @abstractmethod
-    def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
-        """
-        Get the size (i.e., number of elements) for one or more variable groups.
-
-        Args:
-            varGroups: describes one or more groups of variables
-
-        Returns:
-            the size of a variable array with the specified variable groups
-        """
-        pass
-
-    def extractGroup(
-        self,
-        w: NDArray[np.double],
-        varGroup: VarGroup,
-        varGroupsIn: Union[Sequence[VarGroup], None] = None,
-    ) -> NDArray[np.double]:
-        """
-        Extract a variable group from a variable vector
-
-        Args:
-            w: the state vector
-            varGroup: the variable group to extract
-            varGroupsIn: the variable groups in ``w``. If ``None``, it
-                is assumed that all variable groups with lower indices than
-                ``varGroup`` are included in ``w``.
-
-        Returns:
-            the subset of ``w`` that corresponds to the ``VarGroup``
-            group. The vector elements are reshaped into a matrix if applicable.
-
-        Raises:
-            ValueError: if ``w`` doesn't have enough elements to extract the
-                requested variable groups
-        """
-        if varGroupsIn is None:
-            varGroupsIn = [VarGroup(v) for v in range(varGroup + 1)]
-
-        if not varGroup in varGroupsIn:
-            raise RuntimeError(
-                f"Requested variable group {varGroup} is not part of input set, {varGroupsIn}"
-            )
-
-        nPre = sum([self.groupSize(tp) for tp in varGroupsIn if tp < varGroup])
-        sz = self.groupSize(varGroup)
-
-        if w.size < nPre + sz:
-            raise ValueError(
-                f"Need {nPre + sz} vector elements to extract {varGroup} "
-                f"but w has size {w.size}"
-            )
-
-        nState = self.groupSize(VarGroup.STATE)
-        nCol = int(sz / nState)
-        _w = w.flatten()
-        if nCol > 1:
-            return np.reshape(_w[nPre : nPre + sz], (nState, nCol))
-        else:
-            return np.array(_w[nPre : nPre + sz])
-
-    def defaultICs(self, varGroup: VarGroup) -> NDArray[np.double]:
-        """
-        Get the default initial conditions for a variable vector.
-
-        This basic implementation returns a flattened identity matrix for the
-        :attr:`~VarGroup.STM` and zeros for the other equation types. Derived
-        classes can override this method to provide different values.
-
-        Args:
-            varGroup: describes the group of variables
-
-        Returns:
-            initial conditions for the specified equation type
-        """
-        if varGroup == VarGroup.STM:
-            return np.identity(self.groupSize(VarGroup.STATE)).flatten()
-        else:
-            return np.zeros((self.groupSize(varGroup),))
-
-    def appendICs(
-        self, w0: ArrayLike, varsToAppend: Union[VarGroup, Sequence[VarGroup]]
-    ) -> NDArray[np.double]:
-        """
-        Append initial conditions for the specified variable groups to the
-        provided variable vector
-
-        Args:
-            w0: variable vector of arbitrary length
-            varsToAppend: the variable group(s) to append initial conditions for.
-
-        Returns:
-            an initial condition vector, duplicating ``w0`` at
-            the start of the array with the additional initial conditions
-            appended afterward
-        """
-        w0_ = np.asarray(w0, copy=True)
-        nIn = w0_.size
-        nOut = self.groupSize(varsToAppend)
-        w0_out = np.zeros((nIn + nOut,))
-        w0_out[:nIn] = w0_
-        ix = nIn
-        for v in sorted(util.toList(varsToAppend)):
-            ic = self.defaultICs(v)
-            if ic.size > 0:
-                w0_out[ix : ix + ic.size] = ic
-                ix += ic.size
-
-        return w0_out
-
-    def validForPropagation(
-        self, varGroups: Union[VarGroup, Sequence[VarGroup]]
-    ) -> bool:
-        """
-        Check that the set of variables can be propagated.
-
-        In many cases, some groups of the variables are dependent upon others. E.g.,
-        the STM equations of motion generally require the state variables to be
-        propagated alongside the STM so ``VarGroup.STM`` would be an invalid set for
-        evaluation but ``[VarGroup.STATE, VarGroup.STM]`` would be valid.
-
-        Args:
-            varGroups: the group(s) variables to be propagated
-
-        Returns:
-            True if the set is valid, False otherwise
-        """
-        # General principle: STATE vars are always required
-        return VarGroup.STATE in np.array(varGroups, ndmin=1)
-
-    def varNames(self, varGroup: VarGroup) -> list[str]:
-        """
-        Get names for the variables in a group.
-
-        This implementation provides basic representations of the variables and
-        can be overridden by derived classes to give more descriptive names.
-
-        Args:
-            varGroup: the variable group
-
-        Returns:
-            a list containing the names of the variables in the order
-            they would appear in a variable vector.
-        """
-        N = self.groupSize(VarGroup.STATE)
-        if varGroup == VarGroup.STATE:
-            return [f"State {ix:d}" for ix in range(N)]
-        elif varGroup == VarGroup.STM:
-            return [f"STM({r:d},{c:d})" for r in range(N) for c in range(N)]
-        elif varGroup == VarGroup.EPOCH_PARTIALS:
-            return [
-                f"Epoch Dep {ix:d}"
-                for ix in range(self.groupSize(VarGroup.EPOCH_PARTIALS))
-            ]
-        elif varGroup == VarGroup.PARAM_PARTIALS:
-            return [
-                f"Param Dep({r:d},{c:d})"
-                for r in range(N)
-                for c in range(int(self.groupSize(VarGroup.PARAM_PARTIALS) / N))
-            ]
-        else:
-            raise ValueError(f"Unrecognized enum: varGroup = {varGroup}")
-
-    @abstractmethod
-    def varUnits(self, varGroup: VarGroup) -> list[pint.Unit]:
-        """
-        Get the nondimensional units (LU, TU, MU) for the variables in a group.
-
-        For example, the units for a Cartesian state (x, y, z, dx, dy, dz) would
-        be ``[LU, LU, LU, LU/TU, LU/TU, LU/TU]`` to denote length for
-        the positions and length/time for the velocities, where ``LU`` and ``TU``
-        are the nondimensional units imported from :mod:`medusa.units`.
-
-        Args:
-            varGroup: the variable group
-
-        Returns:
-            a list containing the nondimensional units (LU, TU, MU) for the
-            variables in the specified group in the order they would appear
-            in a variable vector
-        """
-        pass
-
-    def indexToVarName(self, ix: int, varGroups: Sequence[VarGroup]) -> str:
-        # TODO test and document
-        allNames = np.asarray(
-            [self.varNames(varTp) for varTp in util.toList(varGroups)]
-        ).flatten()
-        return allNames[ix]
-
     def checkPartials(
         self,
-        w0: FloatArray,
+        w0: State,
         tspan: FloatArray,
         params: Union[FloatArray, None] = None,
         initStep: float = 1e-4,
@@ -801,28 +499,18 @@ class AbstractDynamicsModel(ABC):
         from medusa import console, numerics
         from medusa.propagate import Propagator
 
-        allVars = [
-            VarGroup.STATE,
-            VarGroup.STM,
-            VarGroup.EPOCH_PARTIALS,
-            VarGroup.PARAM_PARTIALS,
-        ]
-
-        if not len(w0) == self.groupSize(allVars):
-            raise ValueError(
-                "w0 must define the full vector (STATE + STM + EPOCH_PARTIALS + PARAM_PARTIALS"
-            )
-
         # TODO ensure tolerances are tight enough?
         prop = Propagator(self, dense_output=False)
-        w0 = np.array(w0, copy=True)
-        state0 = self.extractGroup(w0, VarGroup.STATE, varGroupsIn=allVars)
+        w0 = copy(w0)
+        state0 = w0.core()
 
-        solution = prop.propagate(w0, tspan, params=params, varGroups=allVars)
+        solution = prop.propagate(
+            state0, tspan, params=params, varGroups=State.ALL_VARS
+        )
         sol_vec = np.concatenate(
             [
-                self.extractGroup(solution.y[:, -1], grp, varGroupsIn=allVars).flatten()
-                for grp in allVars[1:]
+                w0._extractGroup(grp, vals=solution.y[:, -1]).flatten()
+                for grp in State.ALL_VARS[1:]
             ]
         )
 
@@ -834,7 +522,7 @@ class AbstractDynamicsModel(ABC):
         num_stm = numerics.derivative_multivar(prop_state, state0, initStep)
 
         # Compute epoch partials
-        if self.groupSize(VarGroup.EPOCH_PARTIALS) > 0:
+        if w0._groupSize(VarGroup.EPOCH_PARTIALS) > 0:
 
             def prop_epoch(epoch):
                 sol = prop.propagate(
@@ -852,7 +540,7 @@ class AbstractDynamicsModel(ABC):
             num_epochPartials = np.array([])
 
         # Compute parameter partials
-        if self.groupSize(VarGroup.PARAM_PARTIALS) > 0:
+        if w0._groupSize(VarGroup.PARAM_PARTIALS) > 0:
 
             def prop_params(p):
                 sol = prop.propagate(state0, tspan, params=p, varGroups=VarGroup.STATE)
@@ -877,7 +565,7 @@ class AbstractDynamicsModel(ABC):
         absDiff = abs(num_vec - sol_vec)
         relDiff = absDiff.copy()
         equal = True
-        varNames = np.concatenate([self.varNames(grp) for grp in allVars[1:]])
+        varNames = np.concatenate([w0.coords(grp) for grp in State.ALL_VARS[1:]])
         table = Table(
             "Status",
             "Name",
@@ -952,6 +640,11 @@ class State(ModelBlockCopyMixin):
         center: str,
         frame: str,
     ) -> None:
+        if not isinstance(model, AbstractDynamicsModel):
+            raise TypeError(
+                "Expecting 'model' to be derived from medusa.dynamics.AbstractDynamicsModel"
+            )
+
         # Save properties
         self.model = model
         self.time = time
@@ -963,16 +656,49 @@ class State(ModelBlockCopyMixin):
         self._data = np.zeros((N,))
 
         # Copy in the data
-        self._data[: data.size] = data[:]
+        data = np.asarray(data).flatten()
+        nCore = self._groupSize(VarGroup.STATE)
+        if data.size < nCore:
+            raise ValueError(
+                f"Data must include at least the full core state ({nCore} elements)"
+            )
+        self._data[: data.size] = data.flat[:]
 
-    @property
-    @abstractmethod
-    def coords(self) -> Sequence[str]:
-        pass  # TODO document
+    def coords(self, varGroup: VarGroup = VarGroup.STATE) -> Sequence[str]:
+        """
+        Get names for the variables in a group.
 
-    @property
+        This implementation provides basic representations of the variables and
+        can be overridden by derived classes to give more descriptive names.
+
+        Args:
+            varGroup: the variable group
+
+        Returns:
+            a list containing the names of the variables in the order
+            they would appear in a variable vector.
+        """
+        N = self._groupSize(VarGroup.STATE)
+        if varGroup == VarGroup.STATE:
+            return [f"State {ix:d}" for ix in range(N)]
+        elif varGroup == VarGroup.STM:
+            return [f"STM({r:d},{c:d})" for r in range(N) for c in range(N)]
+        elif varGroup == VarGroup.EPOCH_PARTIALS:
+            return [
+                f"Epoch Dep {ix:d}"
+                for ix in range(self._groupSize(VarGroup.EPOCH_PARTIALS))
+            ]
+        elif varGroup == VarGroup.PARAM_PARTIALS:
+            return [
+                f"Param Dep({r:d},{c:d})"
+                for r in range(N)
+                for c in range(int(self._groupSize(VarGroup.PARAM_PARTIALS) / N))
+            ]
+        else:
+            raise ValueError(f"Unrecognized enum: varGroup = {varGroup}")
+
     @abstractmethod
-    def units(self) -> Sequence[pint.Unit]:
+    def units(self, varGroup: VarGroup = VarGroup.STATE) -> Sequence[pint.Unit]:
         pass  # TODO document
 
     @abstractmethod
@@ -990,22 +716,26 @@ class State(ModelBlockCopyMixin):
 
     def core(self, units: bool = False) -> NDArray:
         # TODO document
-        vals = self._extractGroup(self._data, VarGroup.STATE)
+        # TODO test
+        vals = self._extractGroup(VarGroup.STATE)
         return vals if not units else self.toBaseUnits(vals, VarGroup.STATE)
 
     def statePartials(self, units: bool = False) -> NDArray:
         # TODO document
-        vals = self._extractGroup(self._data, VarGroup.STM)
+        # TODO test
+        vals = self._extractGroup(VarGroup.STM)
         return vals if not units else self.toBaseUnits(vals, VarGroup.STM)
 
     def epochPartials(self, units: bool = False) -> NDArray:
         # TODO document
-        vals = self._extractGroup(self._data, VarGroup.EPOCH_PARTIALS)
+        # TODO test
+        vals = self._extractGroup(VarGroup.EPOCH_PARTIALS)
         return vals if not units else self.toBaseUnits(vals, VarGroup.EPOCH_PARTIALS)
 
     def paramPartials(self, units: bool = False) -> NDArray:
         # TODO document
-        vals = self._extractGroup(self._data, VarGroup.PARAM_PARTIALS)
+        # TODO test
+        vals = self._extractGroup(VarGroup.PARAM_PARTIALS)
         return vals if not units else self.toBaseUnits(vals, VarGroup.PARAM_PARTIALS)
 
     def fillDefaultICs(self, varsToAppend: Union[VarGroup, Sequence[VarGroup]]) -> None:
@@ -1016,17 +746,13 @@ class State(ModelBlockCopyMixin):
         Args:
             varsToAppend: the variable group(s) to append initial conditions for
         """
-        varsToAppend = sorted(util.toList(varsToAppend))
-        ix = (
-            0
-            if varsToAppend[0] == VarGroup.STATE
-            else self._groupSize(varsToAppend[0] - 1)
-        )
-        for grp in sorted(varsToAppend):
+        varsToAppend = util.toList(varsToAppend)
+        for grp in varsToAppend:
             ic = self._defaultICs(grp)
-            if ic.size > 0:
-                self._data[ix : ix + ic.size] = ic
-                ix += ic.size
+            if ic.size == 0:
+                continue
+            ix = sum(self._groupSize(grpIn) for grpIn in range(grp))
+            self._data[ix : ix + ic.size] = ic
 
     def relativeTo(self, center: str) -> State:
         # TODO this method likely needs to go from
@@ -1042,19 +768,17 @@ class State(ModelBlockCopyMixin):
 
     def _extractGroup(
         self,
-        vals: Sequence,
         varGroup: VarGroup,
-        varGroupsIn: Union[Sequence[VarGroup], None] = None,
+        vals: Union[Sequence, None] = None,
+        varGroupsIn: Union[Sequence[VarGroup], None] = ALL_VARS,
     ) -> NDArray[np.double]:
         """
         Extract a variable group from a sequence
 
         Args:
-            vals: a sequence of values
             varGroup: the variable group to extract from ``vals``
-            varGroupsIn: the variable groups in ``vals``. If ``None``, it
-                is assumed that all variable groups with lower indices than
-                ``varGroup`` are included in ``vals``.
+            vals: a sequence of values. If ``None``, defaults to the state ``data``
+            varGroupsIn: the variable groups in ``vals``.
 
         Returns:
             the subset of ``vals`` that corresponds to the ``VarGroup``
@@ -1064,17 +788,16 @@ class State(ModelBlockCopyMixin):
             ValueError: if ``vals`` doesn't have enough elements to extract the
                 requested variable groups
         """
-        vals = np.array(vals)
-        if varGroupsIn is None:
-            varGroupsIn = [VarGroup(v) for v in range(varGroup + 1)]
+        if vals is None:
+            vals = self._data
 
         if not varGroup in varGroupsIn:
             raise RuntimeError(
                 f"Requested variable group {varGroup} is not part of input set, {varGroupsIn}"
             )
 
-        nPre = sum([self.groupSize(tp) for tp in varGroupsIn if tp < varGroup])
-        sz = self.groupSize(varGroup)
+        nPre = sum([self._groupSize(tp) for tp in varGroupsIn if tp < varGroup])
+        sz = self._groupSize(varGroup)
 
         if vals.size < nPre + sz:
             raise ValueError(
@@ -1082,7 +805,7 @@ class State(ModelBlockCopyMixin):
                 f"but w has size {vals.size}"
             )
 
-        nState = self.groupSize(VarGroup.STATE)
+        nState = self._groupSize(VarGroup.STATE)
         nCol = int(sz / nState)
         _w = vals.flatten()
         if nCol > 1:
@@ -1110,7 +833,9 @@ class State(ModelBlockCopyMixin):
             return np.zeros((self._groupSize(varGroup),))
 
     def toBaseUnits(
-        self, w: FloatArray, varGroups: Union[VarGroup, Sequence[VarGroup]]
+        self,
+        w: Union[FloatArray, None] = None,
+        varGroups: Union[VarGroup, Sequence[VarGroup]] = ALL_VARS,
     ) -> NDArray:
         """
         Convert normalized :class:`float` data to units.
@@ -1121,12 +846,15 @@ class State(ModelBlockCopyMixin):
 
         Args:
             w: an MxN array of normalized values where N is the number of variables
-                in the ``varGroups``
+                in the ``varGroups``. If ``None``, the state data is converted.
             varGroups: the variable groups included in each row of ``w``
 
         Returns:
             the data from ``w`` in "standard" units
         """
+        if w is None:
+            w = self._data
+
         try:
             w = np.array(w, ndmin=2, copy=True)
         except (ValueError, pint.errors.DimensionalityError):
@@ -1146,7 +874,9 @@ class State(ModelBlockCopyMixin):
             w = w.T
 
         # Convert to standard units
-        units = self._extractGroup(self.units, varGroups)
+        units = []
+        for grp in util.toList(varGroups):
+            units.extend(self.units(grp))
         with ureg.context(self.model.unitContext.name):  # type: ignore[arg-type]
             scale = np.full((N, N), ureg.Quantity(0.0), dtype=pint.Quantity)
             for ix in range(N):
@@ -1156,8 +886,8 @@ class State(ModelBlockCopyMixin):
 
     def normalize(
         self,
-        w: Union[Sequence[pint.Quantity], NDArray],
-        varGroups: Union[VarGroup, Sequence[VarGroup]],
+        w: Union[Sequence[pint.Quantity], NDArray, None] = None,
+        varGroups: Union[VarGroup, Sequence[VarGroup]] = ALL_VARS,
     ) -> NDArray[np.double]:
         """
         Convert :class:`~pint.Quantity` data to normalized floats in the unit
@@ -1170,7 +900,7 @@ class State(ModelBlockCopyMixin):
 
         Args:
             w: an MxN array of Quantities where N is the number of variables
-                in the ``varGroups``
+                in the ``varGroups``. If ``None``, the state data is used.
             varGroups: the variable groups included in each row of ``w``
 
         Returns:
@@ -1183,6 +913,9 @@ class State(ModelBlockCopyMixin):
             in terms of the :data:`~medusa.units.LU`, :data:`~medusa.units.TU`, and
             :data:`~medusa.units.MU` units.
         """
+        if w is None:
+            w = self._data
+
         w = np.array(w, ndmin=2, copy=True, dtype=pint.Quantity)
         if not all(isinstance(v, pint.Quantity) for v in w.flat):
             raise TypeError(
@@ -1200,7 +933,9 @@ class State(ModelBlockCopyMixin):
             w = w.T
 
         # Convert to floats, normalizing by LU, TU, and DU
-        units = self._extractGroup(self.units, varGroups)
+        units = []
+        for grp in util.toList(varGroups):
+            units.extend(self.units(grp))
         with ureg.context(self.model.unitContext.name):  # type: ignore[arg-type]
             scale = np.zeros((N, N))
             for ix in range(N):

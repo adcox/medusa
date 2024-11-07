@@ -8,12 +8,16 @@ import pint
 import pytest
 from conftest import loadBody
 
-from medusa.dynamics import AbstractDynamicsModel, VarGroup
+from medusa import util
+from medusa.dynamics import AbstractDynamicsModel, State, VarGroup
 from medusa.units import LU, MU, TU, UU, kg, km, sec
 
 earth, moon, sun = loadBody("Earth"), loadBody("Moon"), loadBody("Sun")
 
 
+# ------------------------------------------------------------------------------
+# Simple implementations of abstract objects for testing
+# ------------------------------------------------------------------------------
 class DummyModel(AbstractDynamicsModel):
     """
     A dummy model to test base class functionality with
@@ -57,6 +61,36 @@ class DummyModel(AbstractDynamicsModel):
             return [MU, MU / TU, MU * LU / TU**2] * 2  # completely fictional
 
 
+class DummyState(State):
+    def __init__(self, model, data, time=0.0, center="center", frame="frame"):
+        super().__init__(model, data, time, center, frame)
+
+    def units(self, varGroup):
+        if varGroup == VarGroup.STATE:
+            # let's say the state is a position and a velocity
+            return [LU, LU / TU]
+        elif varGroup == VarGroup.STM:
+            # STM units are [1, time, 1/time, 1]
+            return [UU, TU, UU / TU, UU]
+        elif varGroup == VarGroup.EPOCH_PARTIALS:
+            return [UU / TU, UU / TU]  # completely fictional
+        elif varGroup == VarGroup.PARAM_PARTIALS:
+            return [MU, MU / TU, MU * LU / TU**2] * 2  # completely fictional
+
+    def _groupSize(self, varGroups):
+        # A model with 2 state variables, epoch dependencies, and three parameters
+        varGroups = np.array(varGroups, ndmin=1)
+        return (
+            2 * (VarGroup.STATE in varGroups)
+            + 4 * (VarGroup.STM in varGroups)
+            + 2 * (VarGroup.EPOCH_PARTIALS in varGroups)
+            + 6 * (VarGroup.PARAM_PARTIALS in varGroups)
+        )
+
+
+# ------------------------------------------------------------------------------
+# Tests
+# ------------------------------------------------------------------------------
 class TestAbstractDynamicsModel:
     @pytest.fixture(scope="class")
     def model(self):
@@ -125,6 +159,72 @@ class TestAbstractDynamicsModel:
     def test_repr(self, model):
         assert isinstance(repr(model), str)
 
+    def test_eq(self):
+        model = DummyModel([earth, sun])
+        model2 = DummyModel([earth, sun])
+
+        assert model == model2
+        assert not model == "abc"
+
+
+class TestState:
+    @pytest.fixture(scope="class")
+    def model(self):
+        return DummyModel([sun, earth, moon])
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            [1.0, 2.0],
+            np.array([1.0, 2.0], ndmin=2),
+            np.arange(1, 7, dtype=float),
+            np.arange(1, 15, dtype=float),
+        ],
+    )
+    @pytest.mark.parametrize("time, center, frame", [(3.0, "Earth", "Rotating")])
+    def test_constructor(self, model, data, time, center, frame):
+        state = DummyState(model, data, time, center, frame)
+
+        assert state.time == time
+        assert state.center == center
+        assert state.frame == frame
+
+        data = np.asarray(data).flatten()  # for comparison sake, make 1D
+        assert isinstance(state._data, np.ndarray)
+        # All variables have a slot
+        assert state._data.shape == (14,)
+        # The data passed in has been copied
+        np.testing.assert_equal(state._data[: len(data)], data)
+        # Data that hasn't been passed in is equal to zero
+        assert all(state._data[ix] == 0.0 for ix in range(len(data), 14))
+
+        # ensure copy by value
+        d0 = data[0]
+        data[0] *= 2
+        assert state._data[0] == d0
+
+    @pytest.mark.parametrize(
+        "modelOverride, data, err",
+        [
+            (None, [2.0], ValueError),
+            ("abc", [1.0, 2.0], TypeError),
+        ],
+    )
+    def test_constructor_errs(self, model, modelOverride, data, err):
+        if modelOverride is not None:
+            model = modelOverride
+
+        with pytest.raises(err):
+            DummyState(model, data)
+
+    def test_arrayLike(self, model):
+        data = [1, 2, 3, 4, 5, 6]
+        state = DummyState(model, data)
+
+        for ix in range(len(data)):
+            assert state[ix] == data[ix]
+
+    # Sanity check for my testing implementation...
     @pytest.mark.parametrize(
         "varGroups, sz",
         [
@@ -146,24 +246,23 @@ class TestAbstractDynamicsModel:
         ],
     )
     def test_groupSize(self, model, varGroups, sz):
-        assert model.groupSize(varGroups) == sz
+        state = DummyState(model, [1.0, 2.0])
+        assert state._groupSize(varGroups) == sz
 
-    @pytest.mark.parametrize("varIn", [None, [0, 1, 2, 3]])
     @pytest.mark.parametrize(
-        "varGroup, shape, out, ndmin",
+        "varGroup, shape, out",
         [
-            (VarGroup.STATE, (2,), [0, 1], 1),
-            (VarGroup.STATE, (2,), [0, 1], 2),
-            (VarGroup.STM, (2, 2), [[2, 3], [4, 5]], 1),
-            (VarGroup.EPOCH_PARTIALS, (2,), [6, 7], 1),
-            (VarGroup.PARAM_PARTIALS, (2, 3), [[8, 9, 10], [11, 12, 13]], 1),
+            (VarGroup.STATE, (2,), [0, 1]),
+            (VarGroup.STATE, (2,), [0, 1]),
+            (VarGroup.STM, (2, 2), [[2, 3], [4, 5]]),
+            (VarGroup.EPOCH_PARTIALS, (2,), [6, 7]),
+            (VarGroup.PARAM_PARTIALS, (2, 3), [[8, 9, 10], [11, 12, 13]]),
         ],
     )
-    def test_extractGroup(self, model, varGroup, shape, out, varIn, ndmin):
-        # standard use case: y has all the variable groups, we want subset out
-        y = np.arange(14)
-        y = np.array(y, ndmin=ndmin)
-        varOut = model.extractGroup(y, varGroup, varGroupsIn=varIn)
+    def test_extractGroup(self, model, varGroup, shape, out):
+        # Standard use case: get subset of state data
+        state = DummyState(model, np.arange(14))
+        varOut = state._extractGroup(varGroup)
         assert isinstance(varOut, np.ndarray)
         assert varOut.shape == shape
         np.testing.assert_array_equal(varOut, out)
@@ -186,8 +285,9 @@ class TestAbstractDynamicsModel:
         ],
     )
     def test_extractGroup_notFull(self, model, y, varIn, varOut, yOut):
+        state = DummyState(model, [1, 2])
         # Test extracting from a vector that doesn't include all the VarGroup
-        assert np.array_equal(model.extractGroup(y, varOut, varIn), yOut)
+        assert np.array_equal(state._extractGroup(varOut, y, varIn), yOut)
 
     @pytest.mark.parametrize(
         "y, varIn, varOut",
@@ -210,17 +310,19 @@ class TestAbstractDynamicsModel:
         ],
     )
     def test_extractGroup_missingVarIn(self, model, y, varIn, varOut):
+        state = DummyState(model, [1, 2])
         # varIn doesn't include the desired varOut
         with pytest.raises(RuntimeError):
-            model.extractGroup(y, varOut, varIn)
+            state._extractGroup(varOut, y, varIn)
 
     @pytest.mark.parametrize(
         "y, varIn, varOut",
         [[np.arange(3), [VarGroup.STATE, VarGroup.STM], VarGroup.STM]],
     )
     def test_extractGroup_missingData(self, model, y, varIn, varOut):
+        state = DummyState(model, [1, 2])
         with pytest.raises(ValueError):
-            model.extractGroup(y, varOut, varIn)
+            state._extractGroup(varOut, y, varIn)
 
     @pytest.mark.parametrize(
         "VarGroup, out",
@@ -232,10 +334,11 @@ class TestAbstractDynamicsModel:
         ],
     )
     def test_defaultICs(self, model, VarGroup, out):
-        assert model.defaultICs(VarGroup).tolist() == out
+        state = DummyState(model, [1, 2])
+        assert state._defaultICs(VarGroup).tolist() == out
 
     @pytest.mark.parametrize(
-        "VarGroup, appended",
+        "groups, appended",
         [
             [VarGroup.STM, [1, 0, 0, 1]],
             [VarGroup.EPOCH_PARTIALS, [0] * 2],
@@ -245,49 +348,46 @@ class TestAbstractDynamicsModel:
             [[VarGroup.EPOCH_PARTIALS, VarGroup.STM], [1, 0, 0, 1, 0, 0]],
         ],
     )
-    def test_appendICs(self, model, VarGroup, appended):
-        y = np.arange(3)  # arbitrary vector
-        y0 = model.appendICs(y, VarGroup)
-        assert np.array_equal(y0[:3], y)
-        assert y0[3:].tolist() == appended
+    def test_fillDefaultICs(self, model, groups, appended):
+        data = 1 + np.arange(14)  # fill with non-default values
+        state = DummyState(model, data)
+        state.fillDefaultICs(groups)
+
+        groupVals = []
+        for group in sorted(util.toList(groups)):
+            groupVals.extend(state._extractGroup(group).flatten())
+
+        # The default ICs should be in the data now
+        np.testing.assert_equal(groupVals, appended)
+
+        # Other values should be unchanged
+        for group in State.ALL_VARS:
+            if not group in util.toList(groups):
+                np.testing.assert_equal(
+                    state._extractGroup(group), state._extractGroup(group, vals=data)
+                )
 
     @pytest.mark.parametrize(
-        "varGroups, tf",
+        "grp, out",
         [
-            [VarGroup.STATE, True],
-            [VarGroup.STM, False],
-            [VarGroup.EPOCH_PARTIALS, False],
-            [VarGroup.PARAM_PARTIALS, False],
-            [[VarGroup.STATE, VarGroup.STM], True],
+            (VarGroup.STATE, ["State 0", "State 1"]),
+            (VarGroup.STM, ["STM(0,0)", "STM(0,1)", "STM(1,0)", "STM(1,1)"]),
+            (VarGroup.EPOCH_PARTIALS, ["Epoch Dep 0", "Epoch Dep 1"]),
+            (
+                VarGroup.PARAM_PARTIALS,
+                [f"Param Dep({r},{c})" for r in range(2) for c in range(3)],
+            ),
         ],
     )
-    def test_validForPropagation(self, model, varGroups, tf):
-        assert model.validForPropagation(varGroups) == tf
-
-    def test_varNames(self, model):
-        stateNames = model.varNames(VarGroup.STATE)
-        assert stateNames == ["State 0", "State 1"], stateNames
-
-        stmNames = model.varNames(VarGroup.STM)
-        assert stmNames == ["STM(0,0)", "STM(0,1)", "STM(1,0)", "STM(1,1)"], stmNames
-
-        epochNames = model.varNames(VarGroup.EPOCH_PARTIALS)
-        assert epochNames == ["Epoch Dep 0", "Epoch Dep 1"], epochNames
-
-        paramNames = model.varNames(VarGroup.PARAM_PARTIALS)
-        assert paramNames == [
-            "Param Dep(0,0)",
-            "Param Dep(0,1)",
-            "Param Dep(0,2)",
-            "Param Dep(1,0)",
-            "Param Dep(1,1)",
-            "Param Dep(1,2)",
-        ], paramNames
+    def test_coords(self, model, grp, out):
+        state = DummyState(model, [1, 2])
+        assert state.coords(grp) == out
 
     @pytest.mark.parametrize("grp", [7, -1])
-    def test_varNames_invalid(self, model, grp):
+    def test_coords_invalid(self, model, grp):
+        state = DummyState(model, [1, 2])
         with pytest.raises(ValueError):
-            model.varNames(grp)
+            state.coords(grp)
 
     @pytest.mark.parametrize(
         "wIn, varGroups, wOut",
@@ -323,11 +423,12 @@ class TestAbstractDynamicsModel:
         ],
     )
     def test_toBaseUnits(self, model, wIn, varGroups, wOut):
-        w_dim = model.toBaseUnits(wIn, varGroups)
+        state = DummyState(model, [1, 2])
+        w_dim = state.toBaseUnits(wIn, varGroups)
         wOut = np.array(wOut, ndmin=2, dtype=pint.Quantity)
 
         assert isinstance(w_dim, np.ndarray)
-        assert w_dim.shape[1] == model.groupSize(varGroups)
+        assert w_dim.shape[1] == state._groupSize(varGroups)
         assert all([isinstance(val, pint.Quantity) for val in w_dim.flat])
         assert all(
             [
@@ -344,8 +445,9 @@ class TestAbstractDynamicsModel:
         ],
     )
     def test_toBaseUnits_errs(self, model, wIn, varGroups, err):
+        state = DummyState(model, [1, 2])
         with pytest.raises(err):
-            model.toBaseUnits(wIn, varGroups)
+            state.toBaseUnits(wIn, varGroups)
 
     @pytest.mark.parametrize(
         "wOut, varGroups, wIn",
@@ -380,11 +482,12 @@ class TestAbstractDynamicsModel:
         ],
     )
     def test_normalize(self, model, wIn, varGroups, wOut):
-        w_nondim = model.normalize(wIn, varGroups)
+        state = DummyState(model, [1, 2])
+        w_nondim = state.normalize(wIn, varGroups)
         wOut = np.array(wOut, ndmin=2)
 
         assert isinstance(w_nondim, np.ndarray)
-        assert w_nondim.shape[1] == model.groupSize(varGroups)
+        assert w_nondim.shape[1] == state._groupSize(varGroups)
         assert all([isinstance(val, float) for val in w_nondim.flat])
         assert all(
             [
@@ -401,12 +504,6 @@ class TestAbstractDynamicsModel:
         ],
     )
     def test_normalize_errs(self, model, wIn, varGroups, err):
+        state = DummyState(model, [1, 2])
         with pytest.raises(err):
-            model.normalize(wIn, varGroups)
-
-    def test_eq(self):
-        model = DummyModel([earth, sun])
-        model2 = DummyModel([earth, sun])
-
-        assert model == model2
-        assert not model == "abc"
+            state.normalize(wIn, varGroups)
