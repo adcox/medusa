@@ -9,7 +9,7 @@ import pytest
 from conftest import loadBody
 
 from medusa import util
-from medusa.dynamics import AbstractDynamicsModel, State, VarGroup
+from medusa.dynamics import DynamicsModel, State, VarGroup
 from medusa.units import LU, MU, TU, UU, kg, km, sec
 
 earth, moon, sun = loadBody("Earth"), loadBody("Moon"), loadBody("Sun")
@@ -18,7 +18,7 @@ earth, moon, sun = loadBody("Earth"), loadBody("Moon"), loadBody("Sun")
 # ------------------------------------------------------------------------------
 # Simple implementations of abstract objects for testing
 # ------------------------------------------------------------------------------
-class DummyModel(AbstractDynamicsModel):
+class DummyModel(DynamicsModel):
     """
     A dummy model to test base class functionality with
     """
@@ -91,7 +91,7 @@ class DummyState(State):
 # ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
-class TestAbstractDynamicsModel:
+class TestDynamicsModel:
     @pytest.fixture(scope="class")
     def model(self):
         return DummyModel([sun, earth, moon])
@@ -114,9 +114,9 @@ class TestAbstractDynamicsModel:
         if charM is not None:
             quant["charM"] = charM
 
-        preReg = AbstractDynamicsModel._registry.copy()
+        preReg = DynamicsModel._registry.copy()
         model = DummyModel(bodies, **quant)
-        assert len(AbstractDynamicsModel._registry) - len(preReg) == 1
+        assert len(DynamicsModel._registry) - len(preReg) == 1
 
         for b in bodies:
             assert b in model.bodies

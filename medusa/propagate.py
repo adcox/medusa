@@ -94,7 +94,7 @@ from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
 
 import medusa.util as util
-from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
+from medusa.dynamics import DynamicsModel, ModelBlockCopyMixin, VarGroup
 from medusa.typing import FloatArray, IntArray, override
 
 logger = logging.getLogger(__name__)
@@ -124,16 +124,16 @@ class Propagator(ModelBlockCopyMixin):
 
     def __init__(
         self,
-        model: AbstractDynamicsModel,
+        model: DynamicsModel,
         method: str = "DOP853",
         dense_output: bool = True,
         atol: float = 1e-12,
         rtol: float = 1e-10,
     ) -> None:
-        if not isinstance(model, AbstractDynamicsModel):
-            raise TypeError("model must be derived from AbstractDynamicsModel")
+        if not isinstance(model, DynamicsModel):
+            raise TypeError("model must be derived from DynamicsModel")
 
-        self.model: AbstractDynamicsModel = model  #: dynamics model
+        self.model: DynamicsModel = model  #: dynamics model
         self.method: str = method  #: the numerical integration method
         self.dense: bool = (
             dense_output  #: whether or not to output dense propagation data
@@ -231,9 +231,9 @@ class Propagator(ModelBlockCopyMixin):
 
         Raises:
             RuntimeError: if ``varGroups`` is not valid for the propagation as
-                checked via :func:`AbstractDynamicsModel.validForPropagation`
+                checked via :func:`DynamicsModel.validForPropagation`
             RuntimeError: if the size of ``w0`` is inconsistent with ``varGroups``
-                as checked via :func:`AbstractDynamicsModel.groupSize`
+                as checked via :func:`State.groupSize`
             RuntimeError: if any of the objects in ``events`` are not derived
                 from the :class:`AbstractEvent` base class
         """
@@ -408,13 +408,13 @@ class ApseEvent(AbstractEvent):
 
     def __init__(
         self,
-        model: AbstractDynamicsModel,
+        model: DynamicsModel,
         bodyIx: int,
         terminal: bool = False,
         direction: float = 0.0,
     ) -> None:
-        if not isinstance(model, AbstractDynamicsModel):
-            raise TypeError("model must be derived from AbstractDynamicsModel")
+        if not isinstance(model, DynamicsModel):
+            raise TypeError("model must be derived from DynamicsModel")
 
         super().__init__(terminal, direction)
         self._model = model
@@ -431,7 +431,7 @@ class ApseEvent(AbstractEvent):
         w: FloatArray,
         varGroups: tuple[VarGroup, ...],
         params: FloatArray,
-        model: AbstractDynamicsModel,
+        model: DynamicsModel,
         ix: int,
     ) -> float:
         # apse occurs where dot product between primary-relative position and
@@ -466,14 +466,14 @@ class BodyDistanceEvent(AbstractEvent):
 
     def __init__(
         self,
-        model: AbstractDynamicsModel,
+        model: DynamicsModel,
         ix: int,
         dist: float,
         terminal: bool = False,
         direction: float = 0.0,
     ) -> None:
-        if not isinstance(model, AbstractDynamicsModel):
-            raise TypeError("model must be derived from AbstractDynamicsModel")
+        if not isinstance(model, DynamicsModel):
+            raise TypeError("model must be derived from DynamicsModel")
 
         super().__init__(terminal, direction)
         self._model = model

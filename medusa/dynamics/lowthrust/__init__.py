@@ -33,7 +33,7 @@ defined as
 where :math:`\\vec{q}` is the **state vector**, :math:`\\mathbf{\\Phi}` is the
 state transition matrix, and the final two terms are the partial derivatives of
 the state vector with respect to the epoch, :math:`T`, and the parameters,
-:math:`\\vec{p}`. The :class:`~medusa.dynamics.AbstractDynamicsModel` computes 
+:math:`\\vec{p}`. The :class:`~medusa.dynamics.DynamicsModel` computes 
 the derivative of :math:`\\vec{w}`. Accordingly, any dynamical model incorporating 
 a low-thrust control law will need to know how the control law affects each of 
 these quantities.
@@ -111,7 +111,7 @@ law.
 .. note::
    The calculus that follows is not implemented in the control law objects 
    themselves. Rather, these relationships should be coded into the
-   :func:`~AbstractDynamicsModel.diffEqs` method with relevant inputs provided
+   :func:`~medusa.dynamics.DynamicsModel.diffEqs` method with relevant inputs provided
    by the control law.
 
 State Derivative
@@ -453,7 +453,7 @@ class ControlLaw(ABC):
         Compute the acceleration vector delivered by this control law.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             numpy.ndarray: a 3x1 array that gives the Cartesian acceleration
@@ -475,7 +475,7 @@ class ControlLaw(ABC):
         to integration time.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the time derivatives of the state variables. If this
@@ -497,7 +497,7 @@ class ControlLaw(ABC):
         parameterization.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives; the rows represent the elements of the
@@ -518,7 +518,7 @@ class ControlLaw(ABC):
         states defined by the control law.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives; the rows represent the elements of the
@@ -538,7 +538,7 @@ class ControlLaw(ABC):
         The partial derivatives of :func:`accelVec` with respect to the epoch.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives; the rows represent the elements
@@ -559,7 +559,7 @@ class ControlLaw(ABC):
         of parameters.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         .. note::
            Control parameterizations are generally not a function of parameters
@@ -586,7 +586,7 @@ class ControlLaw(ABC):
         control parameterization.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives; the rows represent the differential equations
@@ -607,7 +607,7 @@ class ControlLaw(ABC):
         variables defined by the control law.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives; the rows represent the differential equations
@@ -627,7 +627,7 @@ class ControlLaw(ABC):
         The partial derivatives of :func:`stateDiffEqs` with respect to the epoch.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives; the rows represent the
@@ -648,7 +648,7 @@ class ControlLaw(ABC):
         full set of parameters.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         .. note::
            Control parameterizations are generally not a function of parameters
@@ -738,7 +738,7 @@ class ControlTerm(ABC):
         self._coreStateSize = nCore
         self._paramIx0 = ix0
 
-    # Similar to AbstractDynamicsModel.diffEqs, this function and those that
+    # Similar to DynamicsModel.diffEqs, this function and those that
     # follow may be called millions of times, so types are restricted for
     # computational speed
     def stateDiffEqs(
@@ -754,7 +754,7 @@ class ControlTerm(ABC):
         integration time.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         .. note:: This method is implemented to return zeros for all state variables
            by default. Override it to define custom behavior.
@@ -780,7 +780,7 @@ class ControlTerm(ABC):
         Evaluate the term.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the evaluated term
@@ -801,7 +801,7 @@ class ControlTerm(ABC):
         control parametrization.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives where the rows represent the
@@ -822,7 +822,7 @@ class ControlTerm(ABC):
         control state variables that are defined by *this term*.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives
@@ -841,7 +841,7 @@ class ControlTerm(ABC):
         Compute the partial derivatives of :func:`evalTerm` with respect to the epoch.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives where the rows represent the
@@ -862,7 +862,7 @@ class ControlTerm(ABC):
         parameters *this term* defines.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives where the rows represent the
@@ -879,11 +879,11 @@ class ControlTerm(ABC):
     ) -> NDArray[np.double]:
         """
         Compute the partial derivatives of the core state differential equations
-        (defined in :func:`~medusa.dynamics.AbstractDynamicsModel.diffEqs`) with
+        (defined in :func:`~medusa.dynamics.DynamicsModel.diffEqs`) with
         respect to the control state variables that are defined by this term.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives where the rows represent the
@@ -912,7 +912,7 @@ class ControlTerm(ABC):
         control parameterization.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives where the rows represent the
@@ -940,7 +940,7 @@ class ControlTerm(ABC):
         the control state variables defined by this term.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives where the rows represent the
@@ -965,7 +965,7 @@ class ControlTerm(ABC):
         the epoch.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives where the rows represent the
@@ -990,7 +990,7 @@ class ControlTerm(ABC):
         the parameters defined by this term.
 
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             the partial derivatives where the rows represent the
@@ -1092,7 +1092,7 @@ class SeparableControlLaw(ControlLaw):
     def stateDiffEqs(self, t, w, varGroups, params) -> NDArray[np.double]:
         """
         The input arguments are consistent with those passed to the
-        :func:`medusa.dynamics.AbstractDynamicsModel.diffEqs` function.
+        :func:`medusa.dynamics.DynamicsModel.diffEqs` function.
 
         Returns:
             Differential equations governing the full set of control state variables

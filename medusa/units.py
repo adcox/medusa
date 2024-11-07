@@ -74,8 +74,8 @@ quantities,"
 
 Each dynamical model defines its own values for ``LU``, ``TU``, and ``MU`` so that
 the normalized values in these units can easily be transcribed to the usual physical
-units (km, sec, kg, etc.). The :func:`AbstractDynamicsModel.toBaseUnits` and
-:func:`AbstractDynamicsModel.normalize` functions make converting between normalized
+units (km, sec, kg, etc.). The :func:`State.toBaseUnits` and
+:func:`State.normalize` functions make converting between normalized
 and standard units easy.
 
 Working with Arrays

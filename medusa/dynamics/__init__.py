@@ -109,8 +109,8 @@ are collected into a **variable vector**, denoted by
      \\frac{\\partial \\vec{q}}{\\partial \\vec{p}}
    \\end{Bmatrix}.
 
-The :class:`AbstractDynamicsModel` defines the evolution of this vector
-via the :func:`~AbstractDynamicsModel.diffEqs` function, which returns the
+The :class:`DynamicsModel` defines the evolution of this vector
+via the :func:`~DynamicsModel.diffEqs` function, which returns the
 deriative of the variable vector with respect to the independent variable,
 
 .. math::
@@ -122,12 +122,12 @@ groups:
 .. autosummary::
    :nosignatures:
 
-   ~AbstractDynamicsModel.groupSize
-   ~AbstractDynamicsModel.defaultICs
-   ~AbstractDynamicsModel.appendICs
-   ~AbstractDynamicsModel.extractGroup
-   ~AbstractDynamicsModel.varNames
-   ~AbstractDynamicsModel.validForPropagation
+   ~DynamicsModel.groupSize
+   ~DynamicsModel.defaultICs
+   ~DynamicsModel.appendICs
+   ~DynamicsModel.extractGroup
+   ~DynamicsModel.varNames
+   ~DynamicsModel.validForPropagation
 
 System Properties and Parameters
 --------------------------------
@@ -143,10 +143,10 @@ Four properties are available for any dynamical model,
 .. autosummary::
    :nosignatures:
 
-   ~AbstractDynamicsModel.charL
-   ~AbstractDynamicsModel.charT
-   ~AbstractDynamicsModel.charM
-   ~AbstractDynamicsModel.epochIndependent
+   ~DynamicsModel.charL
+   ~DynamicsModel.charT
+   ~DynamicsModel.charM
+   ~DynamicsModel.epochIndependent
 
 By default, the abstract model class does not define any parameters and relies on
 derived classes to define the :func:`params` function to provide default values of
@@ -164,11 +164,11 @@ a model provides two methods:
 .. autosummary::
    :nosignatures:
 
-   ~AbstractDynamicsModel.toBaseUnits
-   ~AbstractDynamicsModel.normalize
+   ~DynamicsModel.toBaseUnits
+   ~DynamicsModel.normalize
 
 These conversions are accomplished within a unit :class:`~pint.Context` stored
-in the model as :attr:`AbstractDynamicsModel.unitContext`; the context records
+in the model as :attr:`DynamicsModel.unitContext`; the context records
 the conversion from the ``LU``, ``TU``, and ``MU`` units and the standard units.
 
 Utilities
@@ -182,12 +182,12 @@ equations.
 .. autosummary::
    :nosignatures:
 
-   ~AbstractDynamicsModel.checkPartials
+   ~DynamicsModel.checkPartials
 
 Implementations
 ---------------
 
-The ``AbstractDynamicsModel`` defined in this module is just that -- abstract.
+The ``DynamicsModel`` defined in this module is just that -- abstract.
 Concrete implementations are included in the submodules listed below.
 
 .. toctree::
@@ -202,7 +202,7 @@ Reference
 .. autoclass:: VarGroup
    :members:
 
-.. autoclass:: AbstractDynamicsModel
+.. autoclass:: DynamicsModel
    :members:
 
 """
@@ -229,7 +229,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     # base module
     "VarGroup",
-    "AbstractDynamicsModel",
+    "DynamicsModel",
     "ModelBlockCopyMixin",
     # sub modules
     "crtbp",
@@ -283,7 +283,7 @@ class VarGroup(IntEnum):
 # TODO update low-thrust docs about parameters if needed
 
 
-class AbstractDynamicsModel(ABC):
+class DynamicsModel(ABC):
     """
     Contains the mathematics that define a dynamical model
 
@@ -325,7 +325,7 @@ class AbstractDynamicsModel(ABC):
             )
 
         # Register the model so that we can have a unique name for the unit context
-        reg = AbstractDynamicsModel._registry
+        reg = DynamicsModel._registry
         ix = len(reg)
         clsName = self.__module__ + "." + self.__class__.__name__
         reg[ix] = clsName
@@ -351,7 +351,7 @@ class AbstractDynamicsModel(ABC):
         Compare two Model objects. This can be overridden for more specific
         comparisons in derived classes
         """
-        if not isinstance(other, AbstractDynamicsModel):
+        if not isinstance(other, DynamicsModel):
             return False
 
         if not type(self) == type(other):
@@ -608,7 +608,7 @@ class AbstractDynamicsModel(ABC):
 class ModelBlockCopyMixin:
     """
     A mixin class that prevents the parent class from copying stored
-    :class:`AbstractDynamisModel` objects
+    :class:`DynamicsModel` objects
     """
 
     def __deepcopy__(self, memo):
@@ -616,7 +616,7 @@ class ModelBlockCopyMixin:
         result = cls.__new__(cls)
         memo[id(self)] = result
         for k, v in self.__dict__.items():
-            if isinstance(v, AbstractDynamicsModel):
+            if isinstance(v, DynamicsModel):
                 # Models should NOT be copied
                 setattr(result, k, v)
             else:
@@ -634,15 +634,15 @@ class State(ModelBlockCopyMixin):
 
     def __init__(
         self,
-        model: AbstractDynamicsModel,
+        model: DynamicsModel,
         data: FloatArray,
         time: float,
         center: str,
         frame: str,
     ) -> None:
-        if not isinstance(model, AbstractDynamicsModel):
+        if not isinstance(model, DynamicsModel):
             raise TypeError(
-                "Expecting 'model' to be derived from medusa.dynamics.AbstractDynamicsModel"
+                "Expecting 'model' to be derived from medusa.dynamics.DynamicsModel"
             )
 
         # Save properties

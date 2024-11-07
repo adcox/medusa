@@ -278,7 +278,7 @@ from rich.table import Table
 from scipy.integrate._ivp.ivp import OdeResult
 
 from medusa import console, numerics, util
-from medusa.dynamics import AbstractDynamicsModel, ModelBlockCopyMixin, VarGroup
+from medusa.dynamics import DynamicsModel, ModelBlockCopyMixin, VarGroup
 from medusa.propagate import Propagator
 from medusa.typing import FloatArray
 
@@ -504,11 +504,11 @@ class ControlPoint(ModelBlockCopyMixin):
             input list of floats is converted to a :class:`Variable` with name "State"
         autoMask: whether or not to auto-mask the ``epoch`` variable.
             If True and ``model``
-            :func:`~medusa.dynamics.AbstractDynamicsModel.epochIndependent` is True,
+            :func:`~medusa.dynamics.DynamicsModel.epochIndependent` is True,
             the ``epoch`` variable has its mask set to True.
 
     Raises:
-        TypeError: if the model is not derived from AbstractDynamicsModel
+        TypeError: if the model is not derived from DynamicsModel
         RuntimeError: if the epoch specifies more than one value
         RuntimeError: if the state specifies more values than the dynamics model
             allows for :attr:`VarGroup.STATE`
@@ -516,13 +516,13 @@ class ControlPoint(ModelBlockCopyMixin):
 
     def __init__(
         self,
-        model: AbstractDynamicsModel,
+        model: DynamicsModel,
         epoch: Union[float, Variable],
         state: Union[FloatArray, Variable],
         autoMask: bool = True,
     ) -> None:
-        if not isinstance(model, AbstractDynamicsModel):
-            raise TypeError("Model must be derived from AbstractDynamicsModel")
+        if not isinstance(model, DynamicsModel):
+            raise TypeError("Model must be derived from DynamicsModel")
 
         if not isinstance(epoch, Variable):
             # TODO auto-set mask based on model.isTimeDependent()?
@@ -541,7 +541,7 @@ class ControlPoint(ModelBlockCopyMixin):
         if autoMask:
             epoch.mask = model.epochIndependent
 
-        self.model = model  #: AbstractDynamicsModel: the associated model
+        self.model = model  #: DynamicsModel: the associated model
         self.epoch = epoch  #: Variable: the epoch
         self.state = state  #: Variable: the state
 
@@ -576,7 +576,7 @@ class ControlPoint(ModelBlockCopyMixin):
             ix: the index of the point within the ``solution``
             autoMask: whether or not to auto-mask the ``epoch``
                 variable. If True and ``solution.model``
-                :func:`~medusa.dynamics.AbstractDynamicsModel.epochIndependent`
+                :func:`~medusa.dynamics.DynamicsModel.epochIndependent`
                 is True, the ``epoch`` variable has its mask set to True.
 
         Returns:
