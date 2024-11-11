@@ -278,7 +278,7 @@ from rich.table import Table
 from scipy.integrate._ivp.ivp import OdeResult
 
 from medusa import console, numerics, util
-from medusa.dynamics import DynamicsModel, ModelBlockCopyMixin, VarGroup
+from medusa.dynamics import DynamicsModel, ModelBlockCopyMixin, State, VarGroup
 from medusa.propagate import Propagator
 from medusa.typing import FloatArray
 
@@ -497,72 +497,32 @@ class ControlPoint(ModelBlockCopyMixin):
     Defines a propagation start point
 
     Args:
-        model: defines the dynamics model for the propagation
-        epoch: the epoch at which the propagation begins. An
-            input ``float`` is converted to a :class:`Variable` with name "Epoch"
-        state: the state at which the propagation begins. An
-            input list of floats is converted to a :class:`Variable` with name "State"
+        state: the state at which to create the control point. The state
+            :func:`~State.values` and :attr:`~State.time` are used to construct
+            the ``stateVec`` and ``epoch`` variables. If you wish to pass in
+            variables explicitly, use the :func:`fromVars` method.
         autoMask: whether or not to auto-mask the ``epoch`` variable.
             If True and ``model``
             :func:`~medusa.dynamics.DynamicsModel.epochIndependent` is True,
             the ``epoch`` variable has its mask set to True.
 
     Raises:
-        TypeError: if the model is not derived from DynamicsModel
-        RuntimeError: if the epoch specifies more than one value
-        RuntimeError: if the state specifies more values than the dynamics model
-            allows for :attr:`VarGroup.STATE`
+        TypeError: if ``state`` is not derived from :class:`State`
     """
 
-    def __init__(
-        self,
-        model: DynamicsModel,
-        epoch: Union[float, Variable],
-        state: Union[FloatArray, Variable],
-        autoMask: bool = True,
-    ) -> None:
-        if not isinstance(model, DynamicsModel):
-            raise TypeError("Model must be derived from DynamicsModel")
+    def __init__(self, state, autoMask=True):
+        if not isinstance(state, State):
+            raise TypeError("state must be derived from medusa.dynamics.State")
 
-        if not isinstance(epoch, Variable):
-            # TODO auto-set mask based on model.isTimeDependent()?
-            epoch = Variable(epoch, name="Epoch")
+        # TODO document that stateVec and state will have different values...
 
-        if not isinstance(state, Variable):
-            state = Variable(state, name="State")
+        # Define attributes
+        self.model = state.model  #: DynamicsModel: the associated model
+        self.epoch = Variable([])  #: Variable: the epoch
+        self.stateVec = Variable([])  #: Variable: the state vector
 
-        if not epoch.size == 1:
-            raise RuntimeError("Epoch can only have one value")
-
-        sz = model.groupSize(VarGroup.STATE)
-        if not state.size == sz:
-            raise RuntimeError("State must have {sz} values")
-
-        if autoMask:
-            epoch.mask = model.epochIndependent
-
-        self.model = model  #: DynamicsModel: the associated model
-        self.epoch = epoch  #: Variable: the epoch
-        self.state = state  #: Variable: the state
-
-    def __repr__(self) -> str:
-        out = "<ControlPoint:"
-        out += f"\n  model=<{self.model.__class__.__module__}.{self.model.__class__.__name__}>,"
-        for attr in ("epoch", "state"):
-            out += "\n  {!s}={!r}".format(attr, getattr(self, attr))
-        out += "\n>"
-        return out
-
-    @property
-    def importableVars(self) -> tuple[Variable, ...]:
-        """
-        A tuple of variables that can be imported into a corrections problem.
-
-        Importing is accomplished via :func:`CorrectionsProblem.importVariables`.
-        These variables are defined as a property so that evaluation occurs at
-        runtime, allowing the user to modify or reassign the variables.
-        """
-        return self.state, self.epoch
+        self.state = copy(state)
+        self._makeVars(state.time, state.get(VarGroup.STATE), autoMask)
 
     @staticmethod
     def fromProp(
@@ -592,7 +552,108 @@ class ControlPoint(ModelBlockCopyMixin):
         if ix > len(solution.t):
             raise ValueError(f"ix = {ix} is out of bounds (max = {len(solution.t)})")
 
-        return ControlPoint(solution.model, solution.t[ix], solution.y[:, ix], autoMask)
+        return ControlPoint(solution.states[ix], autoMask)
+
+    @staticmethod
+    def fromVars(
+        model: DynamicsModel,
+        epoch: Union[float, Variable],
+        stateVec: Union[FloatArray, Variable],
+        center: str,
+        frame: str,
+        autoMask: bool = True,
+    ):
+        """
+        Construct a control point from variables
+
+        Args:
+            model: defines the dynamics model for the propagation
+            epoch: the epoch at which the propagation begins. An input ``float``
+                is converted to a :class:`Variable` with name "Epoch"
+            state: the state at which the propagation begins. An input list of
+                floats is converted to a :class:`Variable` with name "State"
+            autoMask: whether or not to auto-mask the ``epoch`` variable.
+                If True and ``model``
+                :func:`~medusa.dynamics.DynamicsModel.epochIndependent` is True,
+                the ``epoch`` variable has its mask set to True.
+
+        Raises:
+            TypeError: if the model is not derived from DynamicsModel
+            RuntimeError: if the epoch specifies more than one value
+            RuntimeError: if the state specifies more values than the dynamics model
+                allows for :attr:`VarGroup.STATE`
+        """
+        if not isinstance(model, DynamicsModel):
+            raise TypeError("Model must be derived from DynamicsModel")
+
+        # Create a control point
+        stateObj = model.makeState(stateVec, epoch, center, frame)
+        cp = ControlPoint(stateObj)
+
+        # Overwrite the variables using definitions passed in
+        cp._makeVars(epoch, stateVec, autoMask)
+        return cp
+
+    def _makeVars(
+        self,
+        epoch: Union[float, Variable],
+        stateVec: Union[FloatArray, Variable],
+        autoMask: bool,
+    ):
+        """
+        Args:
+            model: defines the dynamics model for the propagation
+            epoch: the epoch at which the propagation begins. An input ``float``
+                is converted to a :class:`Variable` with name "Epoch"
+            state: the state at which the propagation begins. An input list of
+                floats is converted to a :class:`Variable` with name "State"
+            autoMask: whether or not to auto-mask the ``epoch`` variable.
+                If True and ``model``
+                :func:`~medusa.dynamics.DynamicsModel.epochIndependent` is True,
+                the ``epoch`` variable has its mask set to True.
+
+        Raises:
+            RuntimeError: if the epoch specifies more than one value
+            RuntimeError: if the state specifies more values than the dynamics model
+                allows for :attr:`VarGroup.STATE`
+        """
+        if not isinstance(epoch, Variable):
+            epoch = Variable(epoch, name="Epoch")
+
+        if not isinstance(stateVec, Variable):
+            stateVec = Variable(stateVec, name="State")
+
+        if not epoch.size == 1:
+            raise RuntimeError("Epoch can only have one value")
+
+        sz = self.state.groupSize(VarGroup.STATE)
+        if not stateVec.size == sz:
+            raise RuntimeError("State must have {sz} values")
+
+        if autoMask:
+            epoch.mask = self.model.epochIndependent
+
+        self.epoch = epoch
+        self.stateVec = stateVec
+
+    def __repr__(self) -> str:
+        out = "<ControlPoint:"
+        out += f"\n  model=<{self.model.__class__.__module__}.{self.model.__class__.__name__}>,"
+        for attr in ("epoch", "stateVec", "state"):
+            out += "\n  {!s}={!r}".format(attr, getattr(self, attr))
+        out += "\n>"
+        return out
+
+    @property
+    def importableVars(self) -> tuple[Variable, ...]:
+        """
+        A tuple of variables that can be imported into a corrections problem.
+
+        Importing is accomplished via :func:`CorrectionsProblem.importVariables`.
+        These variables are defined as a property so that evaluation occurs at
+        runtime, allowing the user to modify or reassign the variables.
+        """
+        return self.stateVec, self.epoch
 
 
 class Segment:
@@ -641,11 +702,8 @@ class Segment:
             if not isinstance(prop, Propagator):
                 raise TypeError("prop must be a Propagator")
             prop = copy(prop)
-            if not prop.model == origin.model:
-                logger.warning("Changing propagator model to match origin")
-                prop.model = origin.model
         else:
-            prop = Propagator(origin.model, dense_output=False)
+            prop = Propagator(dense_output=False)
 
         if not isinstance(tof, Variable):
             tof = Variable(tof, name="Time-of-flight")
@@ -713,7 +771,7 @@ class Segment:
             propagated trajectory
         """
         sol = self.propagate(VarGroup.STATE)
-        return self.origin.model.extractGroup(sol.y[:, ix], VarGroup.STATE)
+        return sol.states[ix].get(VarGroup.STATE)
 
     def partials_state_wrt_time(self, ix: int = -1) -> NDArray[np.double]:
         """
@@ -731,7 +789,7 @@ class Segment:
         dy_dt = self.origin.model.diffEqs(
             sol.t[ix], sol.y[:, ix], (VarGroup.STATE,), tuple(self.propParams.data)
         )
-        return self.origin.model.extractGroup(dy_dt, VarGroup.STATE)
+        return self.origin.state._extractGroup(VarGroup.STATE, vals=dy_dt)
 
     def partials_state_wrt_initialState(self, ix: int = -1) -> NDArray[np.double]:
         """
@@ -746,7 +804,7 @@ class Segment:
             The partials are returned in matrix form.
         """
         sol = self.propagate([VarGroup.STATE, VarGroup.STM])
-        return self.origin.model.extractGroup(sol.y[:, ix], VarGroup.STM)
+        return sol.states[ix].get(VarGroup.STM)
 
     def partials_state_wrt_epoch(self, ix: int = -1) -> NDArray[np.double]:
         """
@@ -761,11 +819,11 @@ class Segment:
             :attr:`~medusa.dynamics.VarGroup.EPOCH_PARTIALS`.
         """
         sol = self.propagate([VarGroup.STATE, VarGroup.STM, VarGroup.EPOCH_PARTIALS])
-        partials = self.origin.model.extractGroup(sol.y[:, ix], VarGroup.EPOCH_PARTIALS)
+        partials = sol.states[ix].get(VarGroup.EPOCH_PARTIALS)
 
         # Handle models that don't depend on epoch by setting partials to zero
         if partials.size == 0:
-            partials = np.zeros((self.origin.model.groupSize(VarGroup.STATE),))
+            partials = np.zeros((self.origin.state.groupSize(VarGroup.STATE),))
 
         return partials
 
@@ -788,12 +846,12 @@ class Segment:
                 VarGroup.PARAM_PARTIALS,
             ]
         )
-        partials = self.origin.model.extractGroup(sol.y[:, ix], VarGroup.PARAM_PARTIALS)
+        partials = sol.states[ix].get(VarGroup.PARAM_PARTIALS)
 
         # Handle models that don't depend on propagator params by setting partials
         # to zero
         if partials.size == 0:
-            partials = np.zeros((self.origin.model.groupSize(VarGroup.STATE),))
+            partials = np.zeros((self.origin.state.groupSize(VarGroup.STATE),))
 
         return partials
 
@@ -830,10 +888,18 @@ class Segment:
             if all([v in self.propSol.varGroups for v in varGroups]):
                 return self.propSol
 
-        # Propagate from the origin for TOF, set self.propSol
+        # Propagate from the origin for TOF
         tspan = [0, self.tof.data[0]] + self.origin.epoch.data[0]
+        q0 = self.origin.model.makeState(
+            self.origin.stateVec.data,
+            self.origin.epoch.data[0],
+            self.origin.state.center,
+            self.origin.state.frame,
+        )
+
+        # Save the solution
         self.propSol = self.prop.propagate(
-            self.origin.state.data,
+            q0,
             tspan,
             params=self.propParams.data,
             varGroups=varGroups,

@@ -20,7 +20,7 @@ from medusa.corrections import (
     Variable,
 )
 from medusa.dynamics import VarGroup
-from medusa.dynamics.crtbp import DynamicsModel
+from medusa.dynamics.crtbp import DynamicsModel, State
 from medusa.propagate import Propagator
 
 emModel = DynamicsModel(loadBody("Earth"), loadBody("Moon"))
@@ -108,26 +108,63 @@ class TestVariable:
 # ------------------------------------------------------------------------------
 class TestControlPoint:
     @pytest.mark.parametrize(
-        "epoch, state",
+        "epoch, stateVec",
         [
             [0.0, np.arange(6)],
             [Variable(0), Variable(np.arange(6))],
         ],
     )
     @pytest.mark.parametrize("autoMask", [True, False])
-    def test_constructor(self, epoch, state, autoMask):
-        cp = ControlPoint(emModel, copy.deepcopy(epoch), copy.deepcopy(state), autoMask)
+    def test_constructor(self, epoch, stateVec, autoMask):
+        stateObj = State(emModel, stateVec, epoch)
+        cp = ControlPoint(stateObj, autoMask)
+
+        assert isinstance(cp.state, State)
+        assert isinstance(cp.epoch, Variable)
+        # CR3BP is epoch-independent, so autoMask=True will set mask to True;
+        # without autoMask, the mask will be false
+        assert cp.epoch.mask == [autoMask]
+        assert isinstance(cp.stateVec, Variable)
+
+        assert isinstance(cp.importableVars, tuple)
+        assert len(cp.importableVars) == 2
+        assert cp.epoch in cp.importableVars
+        assert cp.stateVec in cp.importableVars
+
+    @pytest.mark.parametrize(
+        "epoch, stateVec",
+        [
+            [0.0, np.arange(6)],
+            [Variable(0), Variable(np.arange(6))],
+        ],
+    )
+    @pytest.mark.parametrize("autoMask", [True, False])
+    def test_fromVars(self, epoch, stateVec, autoMask):
+        center, frame = "EMB", "Rot"
+        cp = ControlPoint.fromVars(
+            emModel,
+            copy.deepcopy(epoch),
+            copy.deepcopy(stateVec),
+            center,
+            frame,
+            autoMask,
+        )
+
+        assert isinstance(cp.state, State)
+        np.testing.assert_equal(cp.state.get(VarGroup.STATE), stateVec.tolist())
+        assert cp.state.center == center
+        assert cp.state.frame == frame
 
         assert isinstance(cp.epoch, Variable)
         # CR3BP is epoch-independent, so autoMask=True will set mask to True;
         # without autoMask, the mask will be false
         assert cp.epoch.mask == [autoMask]
-        assert isinstance(cp.state, Variable)
+        assert isinstance(cp.stateVec, Variable)
 
         assert isinstance(cp.importableVars, tuple)
         assert len(cp.importableVars) == 2
         assert cp.epoch in cp.importableVars
-        assert cp.state in cp.importableVars
+        assert cp.stateVec in cp.importableVars
 
     @pytest.mark.parametrize(
         "epoch, state",
@@ -136,55 +173,62 @@ class TestControlPoint:
             [0.0, np.arange(42)],
         ],
     )
-    def test_constructor_errs(self, epoch, state):
+    def test_fromVars_errs(self, epoch, state):
         with pytest.raises(RuntimeError):
-            ControlPoint(emModel, epoch, state)
+            ControlPoint.fromVars(emModel, epoch, state, "EMB", "Rot")
 
     def test_repr(self):
-        cp = ControlPoint(emModel, 0.0, [1, 2, 3, 4, 5, 6])
+        cp = ControlPoint(State(emModel, [1, 2, 3, 4, 5, 6], 0.0))
         assert isinstance(repr(cp), str)
 
     def test_fromProp(self):
-        prop = Propagator(emModel)
+        prop = Propagator()
         t0 = 0.1
-        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], t0)
         sol = prop.propagate(y0, [t0, t0 + 1.2])
         cp = ControlPoint.fromProp(sol)
 
+        assert isinstance(cp.state, State)
         assert cp.model == emModel
+
+        assert isinstance(cp.epoch, Variable)
         assert cp.epoch.data[0] == t0
-        assert np.array_equal(cp.state.data, y0)
+
+        assert isinstance(cp.stateVec, Variable)
+        assert np.array_equal(cp.stateVec.data, y0.get(VarGroup.STATE))
 
     def test_copy(self):
-        state = Variable(np.arange(6))
+        stateVec = Variable(np.arange(6))
         epoch = Variable(0.0)
-        cp = ControlPoint(emModel, epoch, state)
+        cp = ControlPoint.fromVars(emModel, epoch, stateVec, "EMB", "Rot")
         cp2 = copy.copy(cp)
 
         assert id(cp.model) == id(cp2.model) == id(emModel)
+        assert id(cp.state) == id(cp2.state)
         assert id(cp.epoch) == id(cp2.epoch) == id(epoch)
-        assert id(cp.state) == id(cp2.state) == id(state)
+        assert id(cp.stateVec) == id(cp2.stateVec) == id(stateVec)
 
         # Changes to variables affect both objects
-        state[:] = np.arange(6, 12)
-        assert np.array_equal(cp.state, cp2.state)
+        stateVec[:] = np.arange(6, 12)
+        assert np.array_equal(cp.stateVec, cp2.stateVec)
 
         epoch[:] = 3
         assert np.array_equal(cp.epoch, cp2.epoch)
 
     def test_deepcopy(self):
-        state = Variable(np.arange(6))
+        stateVec = Variable(np.arange(6))
         epoch = Variable(0.0)
-        cp = ControlPoint(emModel, epoch, state)
+        cp = ControlPoint.fromVars(emModel, epoch, stateVec, "EMB", "Rot")
         cp2 = copy.deepcopy(cp)
 
         assert id(cp.model) == id(cp2.model)
-        assert not id(cp.epoch) == id(cp2.epoch)
         assert not id(cp.state) == id(cp2.state)
+        assert not id(cp.epoch) == id(cp2.epoch)
+        assert not id(cp.stateVec) == id(cp2.stateVec)
 
         # Changes to variables do NOT affect both objects
-        state[:] = np.arange(6, 12)
-        assert np.array_equal(cp2.state, np.arange(6))
+        stateVec[:] = np.arange(6, 12)
+        assert np.array_equal(cp2.stateVec, np.arange(6))
 
         epoch[:] = 3
         assert np.array_equal(cp2.epoch, [0])
@@ -194,12 +238,14 @@ class TestControlPoint:
 class TestSegment:
     @pytest.fixture(scope="class")
     def prop(self):
-        return Propagator(emModel, dense_output=False)
+        return Propagator(dense_output=False)
 
     @pytest.fixture
     def origin(self):
         # IC for EM L3 Vertical
-        return ControlPoint(emModel, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
+        return ControlPoint.fromVars(
+            emModel, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], "EMB", "Rot"
+        )
 
     @pytest.mark.parametrize(
         "tof, term, _prop, params",
@@ -215,18 +261,20 @@ class TestSegment:
             _prop = request.getfixturevalue(_prop)
 
         if term == "cp":
-            term = ControlPoint(origin.model, 0.1, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            term = ControlPoint.fromVars(
+                origin.model, 0.1, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "EMB", "Rot"
+            )
 
         seg = Segment(origin, tof, term, _prop, params)
 
         assert seg.origin == origin
         assert id(seg.origin) == id(origin)
-        assert id(seg.origin.state) == id(origin.state)
+        assert id(seg.origin.stateVec) == id(origin.stateVec)
         assert id(seg.origin.epoch) == id(origin.epoch)
 
         assert seg.terminus == term
         if term:
-            assert id(seg.terminus.state) == id(term.state)
+            assert id(seg.terminus.stateVec) == id(term.stateVec)
             assert id(seg.terminus.epoch) == id(term.epoch)
 
         assert isinstance(seg.tof, Variable)
@@ -237,7 +285,6 @@ class TestSegment:
 
         assert isinstance(seg.prop, Propagator)
         assert not id(seg.prop) == id(_prop)  # should make a copy
-        assert id(seg.prop.model) == id(origin.model)
 
         assert isinstance(seg.propParams, Variable)
         assert seg.propParams.size == 0
@@ -249,21 +296,13 @@ class TestSegment:
         assert seg.tof in seg.importableVars
         assert seg.propParams in seg.importableVars
 
-    def test_constructor_altProp(self, origin, request):
-        sun, earth = loadBody("Sun"), loadBody("Earth")
-        model = DynamicsModel(sun, earth)
-        prop = Propagator(model)
-        seg = Segment(origin, 2.3, prop=prop)
-        assert seg.prop.model == origin.model
-        assert not seg.prop.model == model
-
     def test_repr(self, origin):
         seg = Segment(origin, 1.1)
         assert isinstance(repr(seg), str)
 
     def test_copy(self, origin, prop):
         tof = Variable([2.1])
-        terminus = ControlPoint(origin.model, 0.1, [0.0] * 6)
+        terminus = ControlPoint.fromVars(origin.model, 0.1, [0.0] * 6, "EMB", "Rot")
         params = Variable([1.0, 2.0])
         seg = Segment(origin, tof, terminus, prop, params)
         seg2 = copy.copy(seg)
@@ -276,7 +315,7 @@ class TestSegment:
 
     def test_deepcopy(self, origin, prop):
         tof = Variable([2.1])
-        terminus = ControlPoint(origin.model, 0.1, [0.0] * 6)
+        terminus = ControlPoint.fromVars(origin.model, 0.1, [0.0] * 6, "EMB", "Rot")
         params = Variable([1.0, 2.0])
         seg = Segment(origin, tof, terminus, prop, params)
         seg2 = copy.deepcopy(seg)
@@ -312,7 +351,7 @@ class TestSegment:
         assert seg.propSol is None
         seg.propagate(varGroups, **kwargs)
         assert seg.propSol is not None
-        assert seg.propSol.y[:, 0].size == origin.model.groupSize(varGroups)
+        assert seg.propSol.y[:, 0].size == origin.state.groupSize(varGroups)
         assert seg.propSol.t[0] == origin.epoch.data[0]
         assert seg.propSol.t[-1] == origin.epoch.data[0] + 1.0
         assert (seg.propSol.sol is None) != kwargs.get("dense_output", False)
@@ -335,7 +374,7 @@ class TestSegment:
         seg.propagate(varGroups2, lazy)
         assert spy.call_count == 1 if lazy else 2
         assert seg.propSol is not None
-        assert seg.propSol.y[:, 0].size >= origin.model.groupSize(varGroups2)
+        assert seg.propSol.y[:, 0].size >= origin.state.groupSize(varGroups2)
         assert seg.propSol.t[0] == origin.epoch.data[0]
         assert seg.propSol.t[-1] == origin.epoch.data[0] + 1.0
 
@@ -406,8 +445,12 @@ class TestCorrectionsProblem:
     @pytest.mark.parametrize(
         "obj",
         [
-            ControlPoint(emModel, 0, [0] * 6, autoMask=False),
-            Segment(ControlPoint(emModel, 0, [0] * 6), 1.2, propParams=[1, 2, 3]),
+            ControlPoint.fromVars(emModel, 0, [0] * 6, "EMB", "Rot", autoMask=False),
+            Segment(
+                ControlPoint.fromVars(emModel, 0, [0] * 6, "EMB", "Rot"),
+                1.2,
+                propParams=[1, 2, 3],
+            ),
         ],
     )
     def test_importVariables(self, obj):
@@ -791,7 +834,9 @@ class TestCorrectionsProblem:
 class TestShootingProblem:
     @pytest.fixture(scope="class")
     def origin(self):
-        return ControlPoint(emModel, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
+        return ControlPoint.fromVars(
+            emModel, 0.1, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], "EMB", "Rot"
+        )
 
     def test_constructor(self):
         prob = ShootingProblem()
@@ -840,7 +885,10 @@ class TestShootingProblem:
         assert prob._segments == []
 
     def test_adjacencyMatrix_fwrdTime(self):
-        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        points = [
+            ControlPoint.fromVars(emModel, v, [v] * 6, "EMB", "Rot")
+            for v in (0.0, 1.0, 2.0)
+        ]
         seg1 = Segment(points[0], 0.1, points[1])
         seg2 = Segment(points[1], 0.2, points[2])
 
@@ -853,7 +901,10 @@ class TestShootingProblem:
         assert np.array_equal(adjMat, [[None, 0, None], [None, None, 1], [None] * 3])
 
     def test_adjacencyMatrix_revTime(self):
-        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        points = [
+            ControlPoint.fromVars(emModel, v, [v] * 6, "EMB", "Rot")
+            for v in (0.0, 1.0, 2.0)
+        ]
         seg1 = Segment(points[0], -0.1, points[1])
         seg2 = Segment(points[1], -0.2, points[2])
 
@@ -869,7 +920,10 @@ class TestShootingProblem:
 
     @pytest.mark.parametrize("sign", [1, -1])
     def test_adjacencyMatrix_mixedTime(self, sign):
-        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        points = [
+            ControlPoint.fromVars(emModel, v, [v] * 6, "EMB", "Rot")
+            for v in (0.0, 1.0, 2.0)
+        ]
         seg1 = Segment(points[0], sign * 0.1, points[1])
         seg2 = Segment(points[0], -sign * 0.2, points[2])
 
@@ -882,7 +936,10 @@ class TestShootingProblem:
 
     @pytest.mark.parametrize("sign", [1, -1])
     def test_adjacencyMatrix_invalid_doubledOrigin(self, sign):
-        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        points = [
+            ControlPoint.fromVars(emModel, v, [v] * 6, "EMB", "Rot")
+            for v in (0.0, 1.0, 2.0)
+        ]
         seg1 = Segment(points[0], sign * 0.1, points[1])
         seg2 = Segment(points[0], sign * 0.2, points[2])
 
@@ -902,7 +959,10 @@ class TestShootingProblem:
 
     @pytest.mark.parametrize("sign", [1, -1])
     def test_adjacencyMatrix_invalid_tripleOrigin(self, sign):
-        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0, 3.0)]
+        points = [
+            ControlPoint.fromVars(emModel, v, [v] * 6, "EMB", "Rot")
+            for v in (0.0, 1.0, 2.0, 3.0)
+        ]
         seg1 = Segment(points[0], sign * 0.1, points[1])
         seg2 = Segment(points[0], -sign * 0.2, points[2])
         seg3 = Segment(points[0], sign * 0.3, points[3])
@@ -925,7 +985,10 @@ class TestShootingProblem:
     @pytest.mark.parametrize("sign1", [1, -1])
     @pytest.mark.parametrize("sign2", [1, -1])
     def test_adjacencyMatrix_invalid_doubledTerminus(self, sign1, sign2):
-        points = [ControlPoint(emModel, v, [v] * 6) for v in (0.0, 1.0, 2.0)]
+        points = [
+            ControlPoint.fromVars(emModel, v, [v] * 6, "EMB", "Rot")
+            for v in (0.0, 1.0, 2.0)
+        ]
         seg1 = Segment(points[0], sign1 * 0.1, points[1])
         seg2 = Segment(points[2], sign2 * 0.2, points[1])
 
@@ -943,7 +1006,9 @@ class TestShootingProblem:
 
     @pytest.mark.parametrize("sign", [1, -1])
     def test_adjacencyMatrix_invalid_cycleSegment(self, sign):
-        points = [ControlPoint(emModel, v, [v] * 6) for v in [0.0]]
+        points = [
+            ControlPoint.fromVars(emModel, v, [v] * 6, "EMB", "Rot") for v in [0.0]
+        ]
         seg = Segment(points[0], sign * 0.1, points[0])
 
         prob = ShootingProblem()
@@ -971,14 +1036,22 @@ class TestDifferentialCorrector:
             [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], [True] * 3 + [False] * 3
         )
 
-        origin = ControlPoint(emModel, 0, q0)
+        origin = ControlPoint.fromVars(
+            emModel, 0, q0, "Earth Barycenter", "EMB Rotating"
+        )
 
         # Target roughly halfway around
-        terminus = ControlPoint(emModel, 0, [0.82, 0.0, -0.57, 0.0, 0.0, 0.0])
+        terminus = ControlPoint.fromVars(
+            emModel,
+            0,
+            [0.82, 0.0, -0.57, 0.0, 0.0, 0.0],
+            "Earth Barycenter",
+            "EMB Rotating",
+        )
         segment = Segment(origin, 3.1505, terminus)
 
         problem = CorrectionsProblem()
-        problem.addVariables(origin.state)
+        problem.addVariables(origin.stateVec)
         problem.addVariables(segment.tof)
 
         # Constrain the position at the end of the arc to match the terminus
@@ -997,9 +1070,9 @@ class TestDifferentialCorrector:
 
     @pytest.mark.parametrize("linesearch", [True, False])
     def test_multipleShooter(self, linesearch):
-        q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        q0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
         period = 6.311
-        prop = Propagator(emModel, dense_output=False)
+        prop = Propagator(dense_output=False)
         sol = prop.propagate(
             q0,
             [0, period],
@@ -1029,9 +1102,9 @@ class TestDifferentialCorrector:
 
         # Check that variables have been added correctly
         for point in points[:-1]:
-            assert point.state in problem._freeVars
+            assert point.stateVec in problem._freeVars
             assert not point.epoch in problem._freeVars  # epoch-independent problem
-        assert not points[-1].state in problem._freeVars
+        assert not points[-1].stateVec in problem._freeVars
         assert not points[-1].epoch in problem._freeVars
         assert segments[0].tof in problem._freeVars
 

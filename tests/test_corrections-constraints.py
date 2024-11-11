@@ -26,13 +26,13 @@ emModel = crtbpModel(loadBody("Earth"), loadBody("Moon"))
 def origin(originMask):
     # IC for EM L3 Vertical
     state = Variable([0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0], originMask)
-    return ControlPoint(emModel, 0.1, state)
+    return ControlPoint.fromVars(emModel, 0.1, state, "EMB", "Rot")
 
 
 @pytest.fixture
 def terminus(terminusMask):
     state = Variable([0.0] * 6, terminusMask)
-    return ControlPoint(emModel, 1.1, state)
+    return ControlPoint.fromVars(emModel, 1.1, state, "EMB", "Rot")
 
 
 @pytest.fixture
@@ -62,7 +62,7 @@ class TestAngle:
     )
     def test_constructor(self, origin, refDir, stateIx, center):
         angle = 60
-        con = pcons.Angle(refDir, origin.state, angle, stateIx, center)
+        con = pcons.Angle(refDir, origin.stateVec, angle, stateIx, center)
 
         assert isinstance(con.refDir, np.ndarray)
         np.testing.assert_array_equal(con.refDir, refDir)
@@ -73,7 +73,7 @@ class TestAngle:
         assert isinstance(con.center, np.ndarray)
         np.testing.assert_array_equal(con.center, center)
 
-        assert id(origin.state) == id(con.state)
+        assert id(origin.stateVec) == id(con.state)
 
     @pytest.mark.parametrize("originMask", [None])
     @pytest.mark.parametrize(
@@ -93,7 +93,7 @@ class TestAngle:
     )
     def test_constructor_err(self, origin, refDir, stateIx, center, err):
         with pytest.raises(err):
-            pcons.Angle(refDir, origin.state, 30, stateIx, center)
+            pcons.Angle(refDir, origin.stateVec, 30, stateIx, center)
 
     @pytest.mark.parametrize("originMask", [None])
     @pytest.mark.parametrize(
@@ -107,7 +107,7 @@ class TestAngle:
     )
     def test_evaluate(self, origin, refDir, stateIx, center):
         angle = 27.0
-        con = pcons.Angle(refDir, origin.state, angle, stateIx, center)
+        con = pcons.Angle(refDir, origin.stateVec, angle, stateIx, center)
         out = con.evaluate()
         assert isinstance(out, np.ndarray)
 
@@ -123,7 +123,7 @@ class TestAngle:
     )
     def test_partials(self, origin, refDir, stateIx, center, problem):
         angle = 27.0
-        con = pcons.Angle(refDir, origin.state, angle, stateIx, center)
+        con = pcons.Angle(refDir, origin.stateVec, angle, stateIx, center)
         problem.addConstraints(con)
         assert problem.checkJacobian()
 
@@ -192,15 +192,15 @@ class TestStateContinuity:
 
         assert isinstance(partials, dict)
 
-        assert segment.origin.state in partials
-        dF_dq0 = partials[segment.origin.state]
+        assert segment.origin.stateVec in partials
+        dF_dq0 = partials[segment.origin.stateVec]
         assert isinstance(dF_dq0, np.ndarray)
-        assert dF_dq0.shape == (con.size, segment.origin.state.size)
+        assert dF_dq0.shape == (con.size, segment.origin.stateVec.size)
 
-        assert segment.terminus.state in partials
-        dF_dqf = partials[segment.terminus.state]
+        assert segment.terminus.stateVec in partials
+        dF_dqf = partials[segment.terminus.stateVec]
         assert isinstance(dF_dqf, np.ndarray)
-        assert dF_dqf.shape == (con.size, segment.terminus.state.size)
+        assert dF_dqf.shape == (con.size, segment.terminus.stateVec.size)
 
         assert segment.tof in partials
         dF_dtof = partials[segment.tof]
@@ -232,7 +232,7 @@ class TestStateContinuity:
     def test_excludeTerminus(self, segment, indices):
         # Don't include the terminus in the free variable vector
         prob = CorrectionsProblem()
-        prob.addVariables(segment.origin.state)
+        prob.addVariables(segment.origin.stateVec)
         prob.addVariables(segment.tof)
         con = pcons.StateContinuity(segment, indices=indices)
         err = con.evaluate()
@@ -240,8 +240,8 @@ class TestStateContinuity:
         assert err.size == con.size
 
         partials = con.partials(prob.freeVarIndexMap())
-        assert not segment.terminus.state in partials
-        assert segment.origin.state in partials
+        assert not segment.terminus.stateVec in partials
+        assert segment.origin.stateVec in partials
         assert segment.tof in partials
         assert not segment.propParams in partials
         assert not segment.origin.epoch in partials
@@ -281,8 +281,8 @@ class TestStateContinuity:
         q0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
         state0 = Variable(q0, mask=oMask)
         statef = Variable(q0, mask=tMask)
-        origin = ControlPoint(model, 0.0, state0)
-        terminus = ControlPoint(model, 0.0, statef)
+        origin = ControlPoint.fromVars(model, 0.0, state0, "EMB", "Rot")
+        terminus = ControlPoint.fromVars(model, 0.0, statef, "EMB", "Rot")
         segment = Segment(origin, 1.0, terminus, propParams=control.params)
         con = pcons.StateContinuity(segment, indices=indices)
 

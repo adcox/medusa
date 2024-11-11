@@ -40,7 +40,7 @@ from numpy.typing import NDArray
 logger = logging.getLogger(__name__)
 
 from medusa import util
-from medusa.corrections import AbstractConstraint, ControlPoint, Segment, Variable
+from medusa.corrections import AbstractConstraint, Segment, Variable
 from medusa.typing import FloatArray, IntArray, override
 
 
@@ -116,6 +116,9 @@ class StateContinuity(AbstractConstraint):
     TODO document
     """
 
+    # TODO need to check if origin and terminus have same center, frame, or call
+    #   some sort of isCompatible() function to compare the two
+
     def __init__(self, segment: Segment, indices: Union[None, IntArray] = None) -> None:
         if segment.terminus is None:
             raise RuntimeError("Cannot constraint StateContinuity with terminus = None")
@@ -124,7 +127,7 @@ class StateContinuity(AbstractConstraint):
 
         if indices is None:
             # default to constraining all state variables
-            indices = np.arange(len(segment.terminus.state.data))
+            indices = np.arange(len(segment.terminus.stateVec.data))
 
         if not len(indices) == len(np.unique(indices)):
             raise RuntimeError("Indices cannot have repeated values")
@@ -148,7 +151,7 @@ class StateContinuity(AbstractConstraint):
         # F = propFinalState - terminalState
 
         # Already asserted that segment.terminus is not None
-        termVar = self.segment.terminus.state  # type: ignore
+        termVar = self.segment.terminus.stateVec  # type: ignore
         propState = self.segment.state(-1)[self.constrainedIx]
         termState = termVar.data[self.constrainedIx]
         return propState - termState
@@ -157,9 +160,9 @@ class StateContinuity(AbstractConstraint):
     def partials(
         self, freeVarIndexMap: dict[Variable, int]
     ) -> dict[Variable, NDArray[np.double]]:
-        originVar = self.segment.origin.state
+        originVar = self.segment.origin.stateVec
         epochVar = self.segment.origin.epoch
-        termVar = self.segment.terminus.state  # type: ignore
+        termVar = self.segment.terminus.stateVec  # type: ignore
         tofVar = self.segment.tof
         paramVar = self.segment.propParams
 

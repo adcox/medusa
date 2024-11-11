@@ -94,7 +94,7 @@ from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
 
 import medusa.util as util
-from medusa.dynamics import DynamicsModel, ModelBlockCopyMixin, VarGroup
+from medusa.dynamics import DynamicsModel, ModelBlockCopyMixin, State, VarGroup
 from medusa.typing import FloatArray, IntArray, override
 
 logger = logging.getLogger(__name__)
@@ -124,26 +124,20 @@ class Propagator(ModelBlockCopyMixin):
 
     def __init__(
         self,
-        model: DynamicsModel,
         method: str = "DOP853",
         dense_output: bool = True,
         atol: float = 1e-12,
         rtol: float = 1e-10,
     ) -> None:
-        if not isinstance(model, DynamicsModel):
-            raise TypeError("model must be derived from DynamicsModel")
-
-        self.model: DynamicsModel = model  #: dynamics model
         self.method: str = method  #: the numerical integration method
         self.dense: bool = (
             dense_output  #: whether or not to output dense propagation data
         )
-        self.atol: float = atol  #: absolute tolerance
-        self.rtol: float = rtol  #: relative tolerance
+        self.atol: float = abs(atol)  #: absolute tolerance
+        self.rtol: float = abs(rtol)  #: relative tolerance
 
     def __repr__(self) -> str:
         out = "<Propagator:"
-        out += f"\n  model=<{self.model.__class__.__module__}.{self.model.__class__.__name__}>,"
         for attr in ("method", "dense", "atol", "rtol"):
             out += "\n  {!s}={!r},".format(attr, getattr(self, attr))
         out += "\n>"
@@ -173,7 +167,7 @@ class Propagator(ModelBlockCopyMixin):
         if sol.sol is None:
             # Re-propagate with dense_out = True
             sol = self.propagate(
-                sol.y[:, 0],
+                sol.states[0],
                 (sol.t[0], sol.t[-1]),
                 params=sol.params,
                 varGroups=sol.varGroups,
@@ -184,13 +178,14 @@ class Propagator(ModelBlockCopyMixin):
             sol = copy(sol)
 
         # Evaluate the solution at the specified times
+        # TODO create State objects from the data
         sol.t = np.asarray(times)
         sol.y = np.asarray([sol.sol(t) for t in times]).T
         return sol
 
     def propagate(
         self,
-        w0: FloatArray,
+        w0: State,
         tspan: FloatArray,
         *,
         params: Union[FloatArray, None] = None,
@@ -221,25 +216,22 @@ class Propagator(ModelBlockCopyMixin):
 
             This function appends three fields to the output:
 
-            - ``model`` (:class:`~medusa.dynamics.AbstractModel`): the model from
+            - ``model`` (:class:`~medusa.dynamics.DynamicsModel`): the model from
               the propagation. This is *not* a copy, it is a reference to the model
-              passed to the constructor.
+              in ``state``.
             - ``params``: a copy of the ``params`` passed into the function
             - ``varGroups`` (:class:`tuple`): the variable groups passed into
               the function.
             - ``events`` (:class:`tuple`): the events for the propagation
 
         Raises:
-            RuntimeError: if ``varGroups`` is not valid for the propagation as
-                checked via :func:`DynamicsModel.validForPropagation`
             RuntimeError: if the size of ``w0`` is inconsistent with ``varGroups``
                 as checked via :func:`State.groupSize`
             RuntimeError: if any of the objects in ``events`` are not derived
                 from the :class:`AbstractEvent` base class
         """
-        # Checks
-        if not self.model.validForPropagation(varGroups):
-            raise RuntimeError(f"VarGroup = {varGroups} is not valid for propagation")
+        if not isinstance(w0, State):
+            raise TypeError("Expecting w0 to be derived from medusa.dynamics.State")
 
         # defaults from object attributes
         kwargs_in = {
@@ -259,22 +251,17 @@ class Propagator(ModelBlockCopyMixin):
         #   JIT compilation support
         varGroups = tuple(sorted(np.array(varGroups, ndmin=1)))
 
-        # Ensure state is an array with the right number of elements
-        w0_ = np.array(w0, ndmin=1, dtype=float, copy=True)
-        if not w0_.size == self.model.groupSize(varGroups):
-            # Likely scenario: user wants default ICs for other variable groups
-            if w0_.size == self.model.groupSize(VarGroup.STATE):
-                w0_ = self.model.appendICs(
-                    w0_, [v for v in varGroups if not v == VarGroup.STATE]
-                )
-            else:
-                raise RuntimeError(
-                    f"w0 size is {w0_.size}, which is not the STATE size "
-                    f"({self.model.groupSize(VarGroup.STATE)}); don't know how to respond."
-                    " Please pass in a STATE-sized vector or a vector with all "
-                    "initial conditions defined for the specified VarGroup"
-                )
+        # Ensure initial conditions have been set, otherwise use defaults
+        w0 = copy(w0)
+        for grp in varGroups:
+            vals = w0.get(grp, reshape=False)
+            if any(np.isnan(v) for v in vals):
+                w0.fillDefaultICs(grp)
 
+        # Pull out just the variables to be propagated
+        w0_ = w0.get(varGroups, reshape=False)
+
+        # Set the args to be passed to DynamicsModel.diffEqs()
         kwargs_in["args"] = (varGroups, tuple(params) if params is not None else params)
 
         # Gather event functions and assign attributes
@@ -288,10 +275,20 @@ class Propagator(ModelBlockCopyMixin):
         kwargs_in["events"] = eventFcns
 
         # Run propagation
-        sol = solve_ivp(self.model.diffEqs, tspan, w0_, **kwargs_in)
+        sol = solve_ivp(w0.model.diffEqs, tspan, w0_, **kwargs_in)
 
         # Append our own metadata
-        sol.model = self.model
+        sol.model = w0.model
+
+        # Create states with zeros and then fill in the variable group data
+        sol.states = [
+            w0.model.makeState(0.0 * sol.y[:, ix], sol.t[ix], w0.center, w0.frame)
+            for ix in range(len(sol.t))
+        ]
+        for ix, q in enumerate(sol.states):
+            q.set(varGroups, sol.y[:, ix])
+        # TODO would be handy to have a class like Trajectory to hold a bunch of states
+
         sol.params = copy(params)
         sol.varGroups = varGroups
         sol.events = tuple(events)
@@ -390,7 +387,7 @@ class AbstractEvent(ABC):
         pass
 
 
-class ApseEvent(AbstractEvent):
+class ApseEvent(ModelBlockCopyMixin, AbstractEvent):
     """
     Occurs at an apsis relative to a body in the model
 
@@ -446,7 +443,7 @@ class ApseEvent(AbstractEvent):
         )
 
 
-class BodyDistanceEvent(AbstractEvent):
+class BodyDistanceEvent(ModelBlockCopyMixin, AbstractEvent):
     """
     Occurs when the position distance relative to a body equals a specified value
 

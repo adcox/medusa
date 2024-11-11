@@ -10,7 +10,7 @@ import scipy.optimize
 from conftest import loadBody
 
 from medusa.dynamics import VarGroup
-from medusa.dynamics.crtbp import DynamicsModel
+from medusa.dynamics.crtbp import DynamicsModel, State
 from medusa.propagate import (
     ApseEvent,
     BodyDistanceEvent,
@@ -29,24 +29,15 @@ def emModel():
 
 @pytest.mark.usefixtures("emModel")
 class TestPropagator:
-    def test_constructor(self, emModel):
-        prop = Propagator(emModel)
-        assert prop.model == emModel
-
-    def test_constructor_errs(self):
-        with pytest.raises(TypeError):
-            Propagator("DOP853")
+    def test_constructor(self):
+        prop = Propagator(method="abc", atol=-12.1, rtol=-1.4)
+        assert prop.method == "abc"
+        assert prop.atol == 12.1
+        assert prop.rtol == 1.4
 
     def test_repr(self, emModel):
-        prop = Propagator(emModel)
+        prop = Propagator()
         assert repr(prop)  # check for failure
-
-    def test_deepcopy(self, emModel):
-        prop = Propagator(emModel)
-        prop2 = copy.deepcopy(prop)
-
-        assert id(prop.model) == id(prop2.model)
-        # TODO check other attributes
 
     @pytest.mark.parametrize("dense", [True, False])
     @pytest.mark.parametrize(
@@ -67,29 +58,46 @@ class TestPropagator:
     )
     def test_propagate(self, emModel, dense, groups):
         # ICs and tspan for EM L3 vertical periodic orbit
-        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
         tspan = [0, 6.3111]
 
-        prop = Propagator(emModel, dense_output=dense)
+        prop = Propagator(dense_output=dense)
         sol = prop.propagate(y0, tspan, varGroups=groups, atol=1e-12, rtol=1e-10)
 
         assert isinstance(sol, scipy.integrate._ivp.ivp.OdeResult)
         assert sol.status == 0
 
         assert all([tspan[0] <= t <= tspan[1] for t in sol.t])
-        vecSize = emModel.groupSize(groups)
+        vecSize = y0.groupSize(groups)
         assert all([y.size == vecSize for y in sol.y.T])
 
+        # Check for custom metadata
+        assert hasattr(sol, "model")
+        assert sol.model == emModel
+        assert id(sol.model) == id(emModel)
+
+        assert hasattr(sol, "states")
+        assert all(isinstance(q, State) for q in sol.states)
+        assert len(sol.states) == len(sol.t)
+        assert all(q.center == y0.center for q in sol.states)
+        assert all(q.frame == y0.frame for q in sol.states)
+
+        assert hasattr(sol, "params")
+        assert sol.params == None
+
+        assert hasattr(sol, "varGroups")
+        assert np.array_equal(sorted(np.array(groups, ndmin=1)), sol.varGroups)
+
         # Check final state value; values from old MATLAB codes
-        assert pytest.approx(sol.y[0, -1], 1e-4) == 0.82129933
-        assert pytest.approx(sol.y[1, -1], 1e-4) == 0.00104217
-        assert pytest.approx(sol.y[2, -1], 1e-4) == 0.56899951
-        assert pytest.approx(sol.y[3, -1], 1e-4) == 0.00188573
-        assert pytest.approx(sol.y[4, -1], 1e-4) == -1.82139906
-        assert pytest.approx(sol.y[5, -1], 1e-4) == 0.00061782
+        assert pytest.approx(sol.states[-1][0], 1e-4) == 0.82129933
+        assert pytest.approx(sol.states[-1][1], 1e-4) == 0.00104217
+        assert pytest.approx(sol.states[-1][2], 1e-4) == 0.56899951
+        assert pytest.approx(sol.states[-1][3], 1e-4) == 0.00188573
+        assert pytest.approx(sol.states[-1][4], 1e-4) == -1.82139906
+        assert pytest.approx(sol.states[-1][5], 1e-4) == 0.00061782
 
         if VarGroup.STM in groups:
-            stm = emModel.extractGroup(sol.y[:, -1], VarGroup.STM)
+            stm = sol.states[-1].get(VarGroup.STM)
 
             # Check determinant of STM is unity
             assert pytest.approx(np.linalg.det(stm)) == 1.0
@@ -108,39 +116,6 @@ class TestPropagator:
         else:
             assert sol.sol is None
 
-        # Check for custom metadata
-        assert hasattr(sol, "model")
-        assert sol.model == emModel
-        assert hasattr(sol, "params")
-        assert sol.params == None
-        assert hasattr(sol, "varGroups")
-        assert np.array_equal(sorted(np.array(groups, ndmin=1)), sol.varGroups)
-
-    @pytest.mark.parametrize(
-        "groups", [VarGroup.STM, VarGroup.EPOCH_PARTIALS, VarGroup.PARAM_PARTIALS]
-    )
-    def test_propagate_invalidgroups(self, emModel, groups):
-        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
-        tspan = [0, 6.3111]
-
-        prop = Propagator(emModel)
-        with pytest.raises(RuntimeError):
-            prop.propagate(y0, tspan, varGroups=groups)
-
-    @pytest.mark.parametrize(
-        "y0, groups",
-        [
-            [[0.2] * 5, VarGroup.STATE],
-            [[0.3] * 43, (VarGroup.STATE, VarGroup.STM)],
-        ],
-    )
-    def test_propagate_invalidY0(self, emModel, y0, groups):
-        tspan = [0, 6.3111]
-
-        prop = Propagator(emModel)
-        with pytest.raises(RuntimeError):
-            prop.propagate(y0, tspan, varGroups=groups)
-
     @pytest.mark.parametrize(
         "evtArgs",
         [
@@ -152,9 +127,9 @@ class TestPropagator:
         ],
     )
     def test_propagate_events(self, emModel, evtArgs):
-        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
         tspan = [0, 6.3111]
-        prop = Propagator(emModel)
+        prop = Propagator()
 
         # Using VariableValueEvent to test core class behavior
         event = VariableValueEvent(*evtArgs)
@@ -171,17 +146,17 @@ class TestPropagator:
         assert sol.status == 0 if not event.terminal else 1
 
     def test_propagate_invalidEvents(self, emModel):
-        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
         tspan = [0, 6.3111]
-        prop = Propagator(emModel)
+        prop = Propagator()
         with pytest.raises(TypeError):
             prop.propagate(y0, tspan, events=[emModel])
 
     @pytest.mark.parametrize("dense", [False, True])
     def test_denseEval(self, emModel, dense):
-        y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+        y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
         tspan = [0, 6.3111]
-        prop = Propagator(emModel)
+        prop = Propagator()
 
         # Do the first propagation
         sol = prop.propagate(y0, tspan, dense_output=dense)
@@ -260,9 +235,9 @@ def test_variableValueEvent(emModel, terminal, direction, nEvt, jit, mocker):
             VariableValueEvent, "_eval", VariableValueEvent._eval.py_func
         )
 
-    y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+    y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
     tspan = [0, 6.32]
-    prop = Propagator(emModel)
+    prop = Propagator()
     event = VariableValueEvent(1, 0.0, terminal, direction)
     sol = prop.propagate(y0, tspan, events=[event])
 
@@ -276,9 +251,9 @@ def test_variableValueEvent(emModel, terminal, direction, nEvt, jit, mocker):
 
 @pytest.mark.parametrize("terminal, direction", [[False, 0.0]])
 def test_apseEvent(emModel, terminal, direction):
-    y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+    y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
     tspan = [0, 6.32]
-    prop = Propagator(emModel)
+    prop = Propagator()
     event = ApseEvent(emModel, 0, terminal, direction)
     sol = prop.propagate(y0, tspan, events=[event])
 
@@ -290,9 +265,9 @@ def test_apseEvent(emModel, terminal, direction):
 
 
 def test_distanceEvent(emModel):
-    y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+    y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
     tspan = [0, 6.32]
-    prop = Propagator(emModel)
+    prop = Propagator()
     event = DistanceEvent(0.5, [-1.0, 0.0, 0.0])
     sol = prop.propagate(y0, tspan, events=[event])
 
@@ -304,9 +279,9 @@ def test_distanceEvent(emModel):
 
 
 def test_bodyDistanceEvent(emModel):
-    y0 = [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0]
+    y0 = State(emModel, [0.8213, 0.0, 0.5690, 0.0, -1.8214, 0.0])
     tspan = [0, 6.32]
-    prop = Propagator(emModel)
+    prop = Propagator()
     event = BodyDistanceEvent(emModel, 0, 1.0)
     sol = prop.propagate(y0, tspan, events=[event])
 

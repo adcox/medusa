@@ -33,6 +33,10 @@ Reference
    :show-inheritance:
 
 """
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -40,10 +44,35 @@ from numpy.typing import NDArray
 from medusa import util
 from medusa.data import Body
 from medusa.dynamics import VarGroup
-from medusa.dynamics.crtbp import DynamicsModel as CrtbpDynamics
+from medusa.dynamics.crtbp import DynamicsModel as CrtbpDynamics, State as CrtbpState
 from medusa.typing import FloatArray, override
 
 from . import ControlLaw
+
+
+class State(CrtbpState):
+    @override
+    def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
+        varGroups = util.toList(varGroups)
+        ctrl = self.model.ctrlLaw
+        N = 6 + ctrl.numStates
+        nCtrlParam = len(ctrl.params)
+
+        return (
+            N * (VarGroup.STATE in varGroups)
+            + N**2 * (VarGroup.STM in varGroups)
+            + N
+            * (not self.model.epochIndependent and VarGroup.EPOCH_PARTIALS in varGroups)
+            + N * nCtrlParam * (VarGroup.PARAM_PARTIALS in varGroups)
+        )
+
+    @override
+    def coords(self, varGroup: VarGroup) -> list[str]:
+        if varGroup == VarGroup.STATE:
+            baseNames = super().coords(varGroup)
+            return baseNames + self.ctrlLaw.stateNames
+        else:
+            return super().coords(varGroup)
 
 
 class DynamicsModel(CrtbpDynamics):
@@ -67,26 +96,8 @@ class DynamicsModel(CrtbpDynamics):
         """The default values for the model and control law parameters"""
         return self.ctrlLaw.params
 
-    @override
-    def groupSize(self, varGroups) -> int:
-        varGroups = util.toList(varGroups)
-        N = 6 + self.ctrlLaw.numStates
-        nCtrlParam = len(self.ctrlLaw.params)
-
-        return (
-            N * (VarGroup.STATE in varGroups)
-            + N**2 * (VarGroup.STM in varGroups)
-            + N * (not self.epochIndependent and VarGroup.EPOCH_PARTIALS in varGroups)
-            + N * nCtrlParam * (VarGroup.PARAM_PARTIALS in varGroups)
-        )
-
-    @override
-    def varNames(self, varGroup) -> list[str]:
-        if varGroup == VarGroup.STATE:
-            baseNames = super().varNames(varGroup)
-            return baseNames + self.ctrlLaw.stateNames
-        else:
-            return super().varNames(varGroup)
+    def makeState(self, data, time, center, frame) -> State:
+        return State(self, data, time, center, frame)
 
     @override
     def diffEqs(self, t, w, varGroups, params=None) -> NDArray[np.double]:

@@ -373,7 +373,6 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from medusa import util
-from medusa.corrections import Variable
 from medusa.dynamics import VarGroup
 from medusa.typing import FloatArray, override
 

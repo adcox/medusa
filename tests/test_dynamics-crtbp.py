@@ -157,12 +157,18 @@ def test_equilbria(bodies):
 # ------------------------------------------------------------------------------
 
 
-def test_groupSize(state):
-    assert state._groupSize(VarGroup.STATE) == 6
-    assert state._groupSize(VarGroup.STM) == 36
-    assert state._groupSize([VarGroup.STATE, VarGroup.STM]) == 42
-    assert state._groupSize(VarGroup.EPOCH_PARTIALS) == 0
-    assert state._groupSize(VarGroup.PARAM_PARTIALS) == 0
+@pytest.mark.parametrize(
+    "groups, out",
+    [
+        (VarGroup.STATE, 6),
+        (VarGroup.STM, 36),
+        ([VarGroup.STATE, VarGroup.STM], 42),
+        (VarGroup.EPOCH_PARTIALS, 0),
+        (VarGroup.PARAM_PARTIALS, 0),
+    ],
+)
+def test_groupSize(state, groups, out):
+    assert state.groupSize(groups) == out
 
 
 def test_coords(state):
@@ -196,7 +202,7 @@ def test_toBaseUnits(model, state, N, transpose):
     q_dim = state.toBaseUnits(qIn, VarGroup.STATE)
     assert q_dim.shape == qOut.shape
     for out, expect in zip(q_dim.flat, qOut.flat):
-        assert abs((out - expect).to_base_units().magnitude) < 1e-12
+        assert abs((out.to_base_units() - expect.to_base_units()).magnitude) < 1e-12
 
 
 def test_coreUnits(model):
@@ -206,21 +212,20 @@ def test_coreUnits(model):
     ]
 
     state = State(model, q0_nd)
-    qOut = state.core(units=True)
+    qOut = state.get(VarGroup.STATE, units=True)
     for out, expect in zip(q0_dim, qOut):
-        assert abs((out - expect).to_base_units().magnitude) < 1e-12
+        assert abs((out.to_base_units() - expect.to_base_units()).magnitude) < 1e-12
 
 
 def test_stmToBaseUnits(model):
     state = State(model, np.arange(6))
     state.fillDefaultICs(VarGroup.STM)
-    q0_dim = state.toBaseUnits()
 
-    state = state._extractGroup(q0_dim, VarGroup.STATE)
-    stm = state._extractGroup(q0_dim, VarGroup.STM)
+    q0 = state.get(VarGroup.STATE, units=True)
+    stm = state.get(VarGroup.STM, units=True)
 
     # Should be able to multiple these...
-    dState0 = state * 0.01
+    dState0 = q0 * 0.01
     dStatef = stm @ dState0
 
     # STM is Identity, so dStatef == dState0

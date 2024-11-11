@@ -1,7 +1,7 @@
 """
 Test basic dynamics
 """
-from copy import copy
+from copy import copy, deepcopy
 
 import numpy as np
 import pint
@@ -38,27 +38,8 @@ class DummyModel(DynamicsModel):
     def epochIndependent(self):
         return False
 
-    def groupSize(self, varGroups):
-        # A model with 2 state variables, epoch dependencies, and three parameters
-        varGroups = np.array(varGroups, ndmin=1)
-        return (
-            2 * (VarGroup.STATE in varGroups)
-            + 4 * (VarGroup.STM in varGroups)
-            + 2 * (VarGroup.EPOCH_PARTIALS in varGroups)
-            + 6 * (VarGroup.PARAM_PARTIALS in varGroups)
-        )
-
-    def varUnits(self, varGroup):
-        if varGroup == VarGroup.STATE:
-            # let's say the state is a position and a velocity
-            return [LU, LU / TU]
-        elif varGroup == VarGroup.STM:
-            # STM units are [1, time, 1/time, 1]
-            return [UU, TU, 1 / TU, UU]
-        elif varGroup == VarGroup.EPOCH_PARTIALS:
-            return [1 / TU, 1 / TU]  # completely fictional
-        elif varGroup == VarGroup.PARAM_PARTIALS:
-            return [MU, MU / TU, MU * LU / TU**2] * 2  # completely fictional
+    def makeState(self, data, time, center, frame):
+        return DummyState(self, data, time, center, frame)
 
 
 class DummyState(State):
@@ -77,7 +58,7 @@ class DummyState(State):
         elif varGroup == VarGroup.PARAM_PARTIALS:
             return [MU, MU / TU, MU * LU / TU**2] * 2  # completely fictional
 
-    def _groupSize(self, varGroups):
+    def groupSize(self, varGroups):
         # A model with 2 state variables, epoch dependencies, and three parameters
         varGroups = np.array(varGroups, ndmin=1)
         return (
@@ -195,8 +176,8 @@ class TestState:
         assert state._data.shape == (14,)
         # The data passed in has been copied
         np.testing.assert_equal(state._data[: len(data)], data)
-        # Data that hasn't been passed in is equal to zero
-        assert all(state._data[ix] == 0.0 for ix in range(len(data), 14))
+        # Data that hasn't been passed in is equal to NaN
+        assert all(np.isnan(state._data[ix]) for ix in range(len(data), 14))
 
         # ensure copy by value
         d0 = data[0]
@@ -207,6 +188,7 @@ class TestState:
         "modelOverride, data, err",
         [
             (None, [2.0], ValueError),
+            (None, np.arange(15), ValueError),
             ("abc", [1.0, 2.0], TypeError),
         ],
     )
@@ -217,12 +199,35 @@ class TestState:
         with pytest.raises(err):
             DummyState(model, data)
 
-    def test_arrayLike(self, model):
+    def test_deepcopy(self, model):
+        state = DummyState(model, [1, 2])
+        state2 = deepcopy(state)
+
+        # Model should not be copied due to Mixin that prevents it
+        assert id(state.model) == id(state2.model)
+
+    def test_arrayLike_get(self, model):
         data = [1, 2, 3, 4, 5, 6]
         state = DummyState(model, data)
 
+        # Individual indices
         for ix in range(len(data)):
             assert state[ix] == data[ix]
+
+        # Slices
+        np.testing.assert_equal(state[:3], data[:3])
+
+    def test_arrayLike_set(self, model):
+        data = [1, 2]
+        state = DummyState(model, data)
+
+        # Individual indices
+        state[0] = 1
+        assert state._data[0] == 1
+
+        # Slices
+        state[:2] = [4, 5]
+        np.testing.assert_equal(state._data[:2], [4, 5])
 
     # Sanity check for my testing implementation...
     @pytest.mark.parametrize(
@@ -245,9 +250,9 @@ class TestState:
             ],
         ],
     )
-    def test_groupSize(self, model, varGroups, sz):
+    def testgroupSize(self, model, varGroups, sz):
         state = DummyState(model, [1.0, 2.0])
-        assert state._groupSize(varGroups) == sz
+        assert state.groupSize(varGroups) == sz
 
     @pytest.mark.parametrize(
         "varGroup, shape, out",
@@ -259,10 +264,11 @@ class TestState:
             (VarGroup.PARAM_PARTIALS, (2, 3), [[8, 9, 10], [11, 12, 13]]),
         ],
     )
-    def test_extractGroup(self, model, varGroup, shape, out):
+    @pytest.mark.parametrize("vals", [None, np.arange(14).tolist()])
+    def test_extractGroup(self, model, varGroup, vals, shape, out):
         # Standard use case: get subset of state data
         state = DummyState(model, np.arange(14))
-        varOut = state._extractGroup(varGroup)
+        varOut = state._extractGroup(varGroup, vals=vals)
         assert isinstance(varOut, np.ndarray)
         assert varOut.shape == shape
         np.testing.assert_array_equal(varOut, out)
@@ -325,6 +331,52 @@ class TestState:
             state._extractGroup(varOut, y, varIn)
 
     @pytest.mark.parametrize(
+        "groups, out, reshape",
+        [
+            # Simple cases: extract one vargroup
+            (VarGroup.STATE, [0, 1], False),
+            (VarGroup.STM, [2, 3, 4, 5], False),
+            (VarGroup.EPOCH_PARTIALS, [6, 7], False),
+            (VarGroup.PARAM_PARTIALS, [8, 9, 10, 11, 12, 13], False),
+            (VarGroup.STATE, [0, 1], True),
+            (VarGroup.STM, [[2, 3], [4, 5]], True),
+            (VarGroup.PARAM_PARTIALS, [[8, 9, 10], [11, 12, 13]], True),
+            # Extract multiple, not necessarily in order
+            ([VarGroup.STATE, VarGroup.STM], [0, 1, 2, 3, 4, 5], False),
+            ([VarGroup.STATE, VarGroup.EPOCH_PARTIALS], [0, 1, 6, 7], False),
+            ([VarGroup.STM, VarGroup.EPOCH_PARTIALS], [2, 3, 4, 5, 6, 7], False),
+            ([VarGroup.STM, VarGroup.STATE], [2, 3, 4, 5, 0, 1], False),
+            ([VarGroup.STATE, VarGroup.STM], ([0, 1], [[2, 3], [4, 5]]), True),
+        ],
+    )
+    def test_get(self, model, groups, out, reshape):
+        state = DummyState(model, np.arange(14))
+        vals = state.get(groups, reshape=reshape)
+        np.testing.assert_equal(vals, out)
+
+    @pytest.mark.parametrize(
+        "groups, data, indices",
+        [
+            # Set a single variable group
+            (VarGroup.STATE, [98, 99], [0, 1]),
+            (VarGroup.STM, [1, 2, 3, 4], [2, 3, 4, 5]),
+            (VarGroup.EPOCH_PARTIALS, [0, 1], [6, 7]),
+            (VarGroup.PARAM_PARTIALS, 100 + np.arange(6), 8 + np.arange(6)),
+            # Set multiple
+            ([VarGroup.STATE, VarGroup.STM], 100 + np.arange(6), np.arange(6)),
+        ],
+    )
+    def test_set(self, model, groups, data, indices):
+        state = DummyState(model, np.arange(14))
+        state.set(groups, data)
+
+        for count, ix in enumerate(indices):
+            assert state[ix] == data[count]
+        for ix in range(14):
+            if not ix in indices:
+                assert state[ix] == ix
+
+    @pytest.mark.parametrize(
         "VarGroup, out",
         [
             [VarGroup.STATE, [0] * 2],
@@ -353,18 +405,16 @@ class TestState:
         state = DummyState(model, data)
         state.fillDefaultICs(groups)
 
-        groupVals = []
-        for group in sorted(util.toList(groups)):
-            groupVals.extend(state._extractGroup(group).flatten())
-
         # The default ICs should be in the data now
+        groupVals = state.get(sorted(util.toList(groups)), reshape=False)
         np.testing.assert_equal(groupVals, appended)
 
         # Other values should be unchanged
         for group in State.ALL_VARS:
             if not group in util.toList(groups):
                 np.testing.assert_equal(
-                    state._extractGroup(group), state._extractGroup(group, vals=data)
+                    state.get(group, reshape=False),
+                    state._extractGroup(group, vals=data, reshape=False),
                 )
 
     @pytest.mark.parametrize(
@@ -428,7 +478,7 @@ class TestState:
         wOut = np.array(wOut, ndmin=2, dtype=pint.Quantity)
 
         assert isinstance(w_dim, np.ndarray)
-        assert w_dim.shape[1] == state._groupSize(varGroups)
+        assert w_dim.shape[1] == state.groupSize(varGroups)
         assert all([isinstance(val, pint.Quantity) for val in w_dim.flat])
         assert all(
             [
@@ -487,7 +537,7 @@ class TestState:
         wOut = np.array(wOut, ndmin=2)
 
         assert isinstance(w_nondim, np.ndarray)
-        assert w_nondim.shape[1] == state._groupSize(varGroups)
+        assert w_nondim.shape[1] == state.groupSize(varGroups)
         assert all([isinstance(val, float) for val in w_nondim.flat])
         assert all(
             [

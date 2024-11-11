@@ -121,6 +121,8 @@ Reference
    :members:
 
 """
+from __future__ import annotations
+
 from collections.abc import Sequence
 from typing import Union
 
@@ -134,6 +136,48 @@ from medusa.data import GRAV_PARAM, Body
 from medusa.dynamics import DynamicsModel as BaseDynamics, State as BaseState, VarGroup
 from medusa.typing import FloatArray, override
 from medusa.units import LU, TU, UU
+
+
+class State(BaseState):
+    def __init__(
+        self,
+        model: DynamicsModel,
+        data: FloatArray,
+        time: float = 0.0,
+        center: str = "Barycenter",
+        frame: str = "Rotating",
+    ) -> None:
+        super().__init__(model, data, time, center, frame)
+
+    @override
+    def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
+        varGroups = util.toList(varGroups)
+        return 6 * (VarGroup.STATE in varGroups) + 36 * (VarGroup.STM in varGroups)
+
+    @override
+    def coords(self, varGroup: VarGroup) -> list[str]:
+        if varGroup == VarGroup.STATE:
+            return ["x", "y", "z", "dx", "dy", "dz"]
+        else:
+            return super().coords(varGroup)  # defaults are fine for the rest
+
+    @override
+    def units(self, varGroup: VarGroup) -> list[pint.Unit]:
+        if varGroup == VarGroup.STATE:
+            return [LU, LU, LU, LU / TU, LU / TU, LU / TU]  # type: ignore[list-item]
+        elif varGroup == VarGroup.STM:
+            return (
+                np.block(
+                    [
+                        [np.full((3, 3), UU), np.full((3, 3), TU)],
+                        [np.full((3, 3), UU / TU), np.full((3, 3), UU)],
+                    ]
+                )
+                .flatten()
+                .tolist()
+            )
+        else:
+            return []  # No epoch or parameter partials
 
 
 class DynamicsModel(BaseDynamics):
@@ -178,6 +222,10 @@ class DynamicsModel(BaseDynamics):
     @override
     def params(self) -> FloatArray:
         return []
+
+    @override
+    def makeState(self, data, time, center, frame) -> State:
+        return State(self, data, time, center, frame)
 
     @override
     def diffEqs(
@@ -471,45 +519,3 @@ class DynamicsModel(BaseDynamics):
 
         # There are no epoch or parameter partials
         return qdot
-
-
-class State(BaseState):
-    def __init__(
-        self,
-        model: DynamicsModel,
-        data: FloatArray,
-        time: float = 0.0,
-        center: str = "Barycenter",
-        frame: str = "Rotating",
-    ) -> None:
-        super().__init__(model, data, time, center, frame)
-
-    @override
-    def _groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
-        varGroups = util.toList(varGroups)
-        return 6 * (VarGroup.STATE in varGroups) + 36 * (VarGroup.STM in varGroups)
-
-    @override
-    def coords(self, varGroup: VarGroup) -> list[str]:
-        if varGroup == VarGroup.STATE:
-            return ["x", "y", "z", "dx", "dy", "dz"]
-        else:
-            return super().coords(varGroup)  # defaults are fine for the rest
-
-    @override
-    def units(self, varGroup: VarGroup) -> list[pint.Unit]:
-        if varGroup == VarGroup.STATE:
-            return [LU, LU, LU, LU / TU, LU / TU, LU / TU]  # type: ignore[list-item]
-        elif varGroup == VarGroup.STM:
-            return (
-                np.block(
-                    [
-                        [np.full((3, 3), UU), np.full((3, 3), TU)],
-                        [np.full((3, 3), UU / TU), np.full((3, 3), UU)],
-                    ]
-                )
-                .flatten()
-                .tolist()
-            )
-        else:
-            return []  # No epoch or parameter partials
