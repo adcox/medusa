@@ -217,7 +217,7 @@ from typing import Union
 
 import numpy as np
 import pint
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 
 from medusa import util
 from medusa.data import Body
@@ -688,6 +688,110 @@ class State(ModelBlockCopyMixin):
         msg += ">"
         return msg
 
+    # TODO document all the arithmetic
+
+    def __eq__(self, obj) -> bool:
+        # TODO test
+        if not isinstance(obj, State):
+            return False
+
+        return (
+            obj.center == self.center
+            and obj.frame == self.frame
+            and obj.time == self.time
+            and np.array_equal(obj._data, self._data, equal_nan=True)
+        )
+
+    def __add__(self, obj) -> State:
+        # Or should this be __concat__?
+        ss = copy(self)
+        ss.__iadd__(obj)
+        return ss
+
+    def __iadd__(self, obj) -> State:
+        if isinstance(obj, State):
+            if not obj.model == self.model:
+                raise RuntimeError("Cannot add two states with different models")
+            if not obj.center == self.center:
+                raise RuntimeError("Cannot add two states with different centers")
+            if not obj.frame == self.frame:
+                raise RuntimeError("Cannot add two states with different frames")
+
+        if hasattr(obj, "__len__"):
+            self._data[: len(obj)].__iadd__(obj)
+        else:
+            self._data.__iadd__(obj)
+
+        return self
+
+    def __contains__(self, obj) -> bool:
+        return self._data.__contains__(obj)
+
+    def __getitem__(self, indices) -> FloatArray:
+        return self._data[indices]
+
+    def __setitem__(self, indices, value) -> None:
+        self._data[indices] = value
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __mul__(self, obj) -> State:
+        ss = copy(self)
+        ss.__imul__(obj)
+        return ss
+
+    def __imul__(self, obj) -> State:
+        if isinstance(obj, State):
+            raise RuntimeError("Cannot multiply states together")
+
+        if hasattr(obj, "__len__"):
+            self._data[: len(obj)].__imul__(obj)
+        else:
+            self._data.__imul__(obj)
+
+        return self
+
+    def __matmul__(self, obj) -> State:
+        ss = copy(self)
+        ss.__imatmul__(obj)
+        return ss
+
+    def __imatmul__(self, obj) -> State:
+        if isinstance(obj, State):
+            raise RuntimeError("Cannot multiple states together")
+
+        if hasattr(obj, "__len__"):
+            self._data[: len(obj)].__imatmul__(obj)
+        else:
+            self._data.__imatmul__(obj)
+        return self
+
+    def __neg__(self) -> State:
+        ss = copy(self)
+        ss._data = -ss._data
+        return ss
+
+    def __sub__(self, obj) -> State:
+        ss = copy(self)
+        ss.__isub__(obj)
+        return ss
+
+    def __isub__(self, obj) -> State:
+        if isinstance(obj, State):
+            if not obj.model == self.model:
+                raise RuntimeError("Cannot add two states with different models")
+            if not obj.center == self.center:
+                raise RuntimeError("Cannot add subtract states with different centers")
+            if not obj.frame == self.frame:
+                raise RuntimeError("Cannot add subtract states with different frames")
+
+        if hasattr(obj, "__len__"):
+            self._data[: len(obj)].__isub__(obj)
+        else:
+            self._data.__isub__(obj)
+        return self
+
     def coords(self, varGroup: VarGroup = VarGroup.STATE) -> Sequence[str]:
         """
         Get names for the variables in a group.
@@ -799,12 +903,6 @@ class State(ModelBlockCopyMixin):
         # current center -> default center -> requested center, but defining the
         # "default center" is not currently accomplished
         raise NotImplementedError
-
-    def __getitem__(self, indices) -> FloatArray:
-        return self._data[indices]
-
-    def __setitem__(self, indices, value) -> None:
-        self._data[indices] = value
 
     def _extractGroup(
         self,

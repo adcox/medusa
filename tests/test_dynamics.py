@@ -1,6 +1,7 @@
 """
 Test basic dynamics
 """
+from collections.abc import Sequence
 from copy import copy, deepcopy
 
 import numpy as np
@@ -557,3 +558,106 @@ class TestState:
         state = DummyState(model, [1, 2])
         with pytest.raises(err):
             state.normalize(wIn, varGroups)
+
+    @pytest.mark.parametrize(
+        "obj, out",
+        [
+            (1, [2, 3] + [np.nan] * 12),
+            (np.arange(14), [1, 3] + [np.nan] * 12),
+            ([0, 1], [1, 3] + [np.nan] * 12),
+            (np.asarray([0, 1]), [1, 3] + [np.nan] * 12),
+        ],
+    )
+    def test_add_floats(self, model, obj, out):
+        state = DummyState(model, [1, 2])
+        state2 = state + obj
+        np.testing.assert_equal(state2._data, out)
+
+    @pytest.mark.parametrize(
+        "vals, kwargs, out",
+        [
+            ([1, 1], {}, [2, 3] + [np.nan] * 12),
+            ([1, 1], {"center": "earth"}, RuntimeError),
+            ([1, 1], {"frame": "inertial"}, RuntimeError),
+        ],
+    )
+    def test_add_states(self, model, vals, kwargs, out):
+        state = DummyState(model, [1, 2])
+        state2 = DummyState(model, vals, **kwargs)
+        if isinstance(out, Sequence):
+            state3 = state + state2
+            np.testing.assert_equal(state3._data, out)
+        else:
+            with pytest.raises(out):
+                state + state2
+
+    @pytest.mark.parametrize(
+        "vals, out", [(1, True), (2, True), (3, False), (np.nan, False)]
+    )
+    def test_contains(self, model, vals, out):
+        state = DummyState(model, [1, 2])
+        assert (vals in state) == out
+
+    @pytest.mark.parametrize("vals, out", [([1, 2], 14), (np.arange(4), 14)])
+    def test_len(self, model, vals, out):
+        state = DummyState(model, vals)
+        assert len(state) == out
+
+    @pytest.mark.parametrize(
+        "vals, out", [(3, [3, 6] + [np.nan] * 12), ([2, 1], [2, 2] + [np.nan] * 12)]
+    )
+    def test_mul(self, model, vals, out):
+        state = DummyState(model, [1, 2])
+        state2 = state * vals
+        np.testing.assert_equal(state2._data, out)
+
+    @pytest.mark.parametrize(
+        "vals, out",
+        [
+            (np.eye(2), [1, 2] + [np.nan] * 12),
+            (2 * np.eye(2), [2, 4] + [np.nan] * 12),
+            (np.full((2, 2), 1), [3, 3] + [np.nan] * 12),
+            (np.eye(3), [np.nan] * 14),
+        ],
+    )
+    def test_matmul(self, model, vals, out):
+        state = DummyState(model, [1, 2])
+        state2 = state @ vals
+        np.testing.assert_equal(state2._data, out)
+
+    def test_neg(self, model):
+        state = DummyState(model, np.arange(14))
+        state2 = -state
+        np.testing.assert_equal(state2._data, -(state._data))
+
+    @pytest.mark.parametrize(
+        "obj, out",
+        [
+            (1, [0, 1] + [np.nan] * 12),
+            (np.arange(14), [1, 1] + [np.nan] * 12),
+            ([0, 1], [1, 1] + [np.nan] * 12),
+            (np.asarray([0, 1]), [1, 1] + [np.nan] * 12),
+        ],
+    )
+    def test_sub_floats(self, model, obj, out):
+        state = DummyState(model, [1, 2])
+        state2 = state - obj
+        np.testing.assert_equal(state2._data, out)
+
+    @pytest.mark.parametrize(
+        "vals, kwargs, out",
+        [
+            ([1, 1], {}, [0, 1] + [np.nan] * 12),
+            ([1, 1], {"center": "earth"}, RuntimeError),
+            ([1, 1], {"frame": "inertial"}, RuntimeError),
+        ],
+    )
+    def test_sub_states(self, model, vals, kwargs, out):
+        state = DummyState(model, [1, 2])
+        state2 = DummyState(model, vals, **kwargs)
+        if isinstance(out, Sequence):
+            state3 = state - state2
+            np.testing.assert_equal(state3._data, out)
+        else:
+            with pytest.raises(out):
+                state - state2
