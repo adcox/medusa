@@ -587,7 +587,9 @@ class ControlPoint(ModelBlockCopyMixin):
             raise TypeError("Model must be derived from DynamicsModel")
 
         # Create a control point
-        stateObj = model.makeState(stateVec, epoch, center, frame)
+        q = stateVec.data if isinstance(stateVec, Variable) else stateVec
+        t = epoch.data if isinstance(epoch, Variable) else epoch
+        stateObj = model.makeState(q, t, center, frame)
         cp = ControlPoint(stateObj)
 
         # Overwrite the variables using definitions passed in

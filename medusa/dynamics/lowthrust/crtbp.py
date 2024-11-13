@@ -43,7 +43,7 @@ from numpy.typing import NDArray
 
 from medusa import util
 from medusa.data import Body
-from medusa.dynamics import VarGroup
+from medusa.dynamics import TVarGroup, VarGroup
 from medusa.dynamics.crtbp import DynamicsModel as CrtbpDynamics, State as CrtbpState
 from medusa.typing import FloatArray, override
 
@@ -52,7 +52,25 @@ from . import ControlLaw
 
 class State(CrtbpState):
     @override
-    def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
+    def __init__(
+        self,
+        model: DynamicsModel,
+        data: FloatArray,
+        time: float = 0.0,
+        center: str = "Barycenter",
+        frame: str = "Rotating",
+    ) -> None:
+        super().__init__(model, data, time, center, frame)
+        if not isinstance(model, DynamicsModel):
+            raise TypeError(
+                "Model must be a medusa.dynamics.lowthrust.crtbp.DynamicsModel"
+            )
+
+        # Specify more specific model type
+        self.model: DynamicsModel
+
+    @override
+    def groupSize(self, varGroups: Union[TVarGroup, Sequence[TVarGroup]]) -> int:
         varGroups = util.toList(varGroups)
         ctrl = self.model.ctrlLaw
         N = 6 + ctrl.numStates
@@ -67,10 +85,10 @@ class State(CrtbpState):
         )
 
     @override
-    def coords(self, varGroup: VarGroup) -> list[str]:
+    def coords(self, varGroup: TVarGroup = VarGroup.STATE) -> list[str]:
         if varGroup == VarGroup.STATE:
             baseNames = super().coords(varGroup)
-            return baseNames + self.ctrlLaw.stateNames
+            return baseNames + self.model.ctrlLaw.stateNames
         else:
             return super().coords(varGroup)
 

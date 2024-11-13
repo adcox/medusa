@@ -133,7 +133,12 @@ from numpy.typing import NDArray
 
 import medusa.util as util
 from medusa.data import GRAV_PARAM, Body
-from medusa.dynamics import DynamicsModel as BaseDynamics, State as BaseState, VarGroup
+from medusa.dynamics import (
+    DynamicsModel as BaseDynamics,
+    State as BaseState,
+    TVarGroup,
+    VarGroup,
+)
 from medusa.typing import FloatArray, override
 from medusa.units import LU, TU, UU
 
@@ -150,19 +155,19 @@ class State(BaseState):
         super().__init__(model, data, time, center, frame)
 
     @override
-    def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
+    def groupSize(self, varGroups: Union[TVarGroup, Sequence[TVarGroup]]) -> int:
         varGroups = util.toList(varGroups)
         return 6 * (VarGroup.STATE in varGroups) + 36 * (VarGroup.STM in varGroups)
 
     @override
-    def coords(self, varGroup: VarGroup) -> list[str]:
+    def coords(self, varGroup: TVarGroup = VarGroup.STATE) -> list[str]:
         if varGroup == VarGroup.STATE:
             return ["x", "y", "z", "dx", "dy", "dz"]
         else:
             return super().coords(varGroup)  # defaults are fine for the rest
 
     @override
-    def units(self, varGroup: VarGroup) -> list[pint.Unit]:
+    def units(self, varGroup: TVarGroup = VarGroup.STATE) -> list[pint.Unit]:
         if varGroup == VarGroup.STATE:
             return [LU, LU, LU, LU / TU, LU / TU, LU / TU]  # type: ignore[list-item]
         elif varGroup == VarGroup.STM:
@@ -232,7 +237,7 @@ class DynamicsModel(BaseDynamics):
         self,
         t: float,
         w: NDArray[np.double],
-        varGroups: tuple[VarGroup, ...],
+        varGroups: tuple[TVarGroup, ...],
         params: Union[tuple[float, ...], None] = None,
     ) -> NDArray[np.double]:
         return DynamicsModel._eoms(t, w, self.massRatio, varGroups)
@@ -243,7 +248,7 @@ class DynamicsModel(BaseDynamics):
         ix: int,
         t: float,
         w: FloatArray = [],
-        varGroups: tuple[VarGroup, ...] = (VarGroup.STATE,),
+        varGroups: tuple[TVarGroup, ...] = (VarGroup.STATE,),
         params: Union[FloatArray, None] = None,
     ) -> NDArray[np.double]:
         if ix == 0:
@@ -439,7 +444,7 @@ class DynamicsModel(BaseDynamics):
     @staticmethod
     @njit
     def _eoms(
-        t: float, q: NDArray[np.double], mu: float, varGroups: tuple[VarGroup, ...]
+        t: float, q: NDArray[np.double], mu: float, varGroups: tuple[TVarGroup, ...]
     ) -> NDArray[np.double]:
         qdot = np.zeros(q.shape)
 

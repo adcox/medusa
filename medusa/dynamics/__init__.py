@@ -278,6 +278,10 @@ class VarGroup(IntEnum):
     """
 
 
+#: Type alias for variable group
+TVarGroup = Union[VarGroup, int]
+
+
 # TODO need a method to return all model parameters
 # TODO document that method above
 # TODO update low-thrust docs about parameters if needed
@@ -519,7 +523,7 @@ class DynamicsModel(ABC):
             ]
         )
 
-        wVals = w0.get(VarGroup.STATE, reshape=False)
+        wVals = w0.get(VarGroup.STATE, units=False, reshape=False)
         wCpy = copy(w0)
 
         # Compute state partials (STM)
@@ -528,7 +532,9 @@ class DynamicsModel(ABC):
             sol = prop.propagate(wCpy, tspan, params=params, varGroups=VarGroup.STATE)
             return sol.y[:, -1]
 
-        num_stm = numerics.derivative_multivar(prop_state, wVals, initStep)
+        num_stm = numerics.derivative_multivar(
+            prop_state, wVals, initStep  # type: ignore[arg-type]
+        )  # wVals *will* be NDArray[np.double]
 
         # Compute epoch partials
         if w0.groupSize(VarGroup.EPOCH_PARTIALS) > 0:
@@ -792,7 +798,7 @@ class State(ModelBlockCopyMixin):
             self._data.__isub__(obj)
         return self
 
-    def coords(self, varGroup: VarGroup = VarGroup.STATE) -> Sequence[str]:
+    def coords(self, varGroup: TVarGroup = VarGroup.STATE) -> list[str]:
         """
         Get names for the variables in a group.
 
@@ -826,11 +832,11 @@ class State(ModelBlockCopyMixin):
             raise ValueError(f"Unrecognized enum: varGroup = {varGroup}")
 
     @abstractmethod
-    def units(self, varGroup: VarGroup = VarGroup.STATE) -> Sequence[pint.Unit]:
+    def units(self, varGroup: TVarGroup = VarGroup.STATE) -> list[pint.Unit]:
         pass  # TODO document
 
     @abstractmethod
-    def groupSize(self, varGroups: Union[VarGroup, Sequence[VarGroup]]) -> int:
+    def groupSize(self, varGroups: Union[TVarGroup, Sequence[TVarGroup]]) -> int:
         """
         Get the size (i.e., number of elements) for one or more variable groups.
 
@@ -844,7 +850,7 @@ class State(ModelBlockCopyMixin):
 
     def get(
         self,
-        varGroups: Union[VarGroup, Sequence[VarGroup]] = VarGroup.STATE,
+        varGroups: Union[TVarGroup, Sequence[TVarGroup]] = VarGroup.STATE,
         units: bool = False,
         reshape=True,
     ) -> Union[NDArray, tuple[NDArray, ...]]:
@@ -853,10 +859,9 @@ class State(ModelBlockCopyMixin):
         varGroups = util.toList(varGroups)
 
         # Get raw data in 1D array
-        vals = []
-        for grp in varGroups:
-            vals.extend(self._extractGroup(grp, reshape=False).tolist())
-        vals = np.asarray(vals)
+        vals = np.concatenate(
+            [self._extractGroup(grp, reshape=False) for grp in varGroups]
+        )
 
         # Add units, if applicable
         if units:
@@ -864,7 +869,7 @@ class State(ModelBlockCopyMixin):
 
         # Reshape into matrices, if applicable
         if reshape:
-            vals = tuple(
+            vals = tuple(  # type: ignore [assignment]
                 self._extractGroup(grp, vals, varGroupsIn=varGroups, reshape=True)
                 for grp in varGroups
             )
@@ -873,7 +878,7 @@ class State(ModelBlockCopyMixin):
         return vals
 
     def set(
-        self, varGroups: Union[VarGroup, Sequence[VarGroup]], data: FloatArray
+        self, varGroups: Union[TVarGroup, Sequence[TVarGroup]], data: FloatArray
     ) -> None:
         varGroups = util.toList(varGroups)
         for grp in varGroups:
@@ -883,7 +888,9 @@ class State(ModelBlockCopyMixin):
             ix0 = sum(self.groupSize(grpBefore) for grpBefore in range(grp))
             self._data[ix0 : ix0 + self.groupSize(grp)] = subdata
 
-    def fillDefaultICs(self, varsToAppend: Union[VarGroup, Sequence[VarGroup]]) -> None:
+    def fillDefaultICs(
+        self, varsToAppend: Union[TVarGroup, Sequence[TVarGroup]]
+    ) -> None:
         """
         Write the default initial conditions for the specified variable group(s)
         to the ``data`` vector. This overwrites existing data!
@@ -906,9 +913,9 @@ class State(ModelBlockCopyMixin):
 
     def _extractGroup(
         self,
-        varGroup: VarGroup,
-        vals: Union[Sequence, None] = None,
-        varGroupsIn: Union[Sequence[VarGroup], None] = ALL_VARS,
+        varGroup: TVarGroup,
+        vals: Union[Sequence, NDArray, None] = None,
+        varGroupsIn: Union[TVarGroup, Sequence[TVarGroup]] = ALL_VARS,
         reshape: bool = True,
     ) -> NDArray[np.double]:
         """
@@ -936,6 +943,7 @@ class State(ModelBlockCopyMixin):
             vals = self._data
         vals = np.asarray(vals)
 
+        varGroupsIn = util.toList(varGroupsIn)
         if not varGroup in varGroupsIn:
             raise RuntimeError(
                 f"Requested variable group {varGroup} is not part of input set, {varGroupsIn}"
@@ -958,7 +966,7 @@ class State(ModelBlockCopyMixin):
         else:
             return np.array(_w[nPre : nPre + sz])
 
-    def _defaultICs(self, varGroup: VarGroup) -> NDArray[np.double]:
+    def _defaultICs(self, varGroup: TVarGroup) -> NDArray[np.double]:
         """
         Get the default initial conditions for a variable vector.
 
@@ -980,7 +988,7 @@ class State(ModelBlockCopyMixin):
     def toBaseUnits(
         self,
         w: Union[FloatArray, None] = None,
-        varGroups: Union[VarGroup, Sequence[VarGroup]] = ALL_VARS,
+        varGroups: Union[TVarGroup, Sequence[TVarGroup]] = ALL_VARS,
     ) -> NDArray:
         """
         Convert normalized :class:`float` data to units.
@@ -1019,9 +1027,7 @@ class State(ModelBlockCopyMixin):
             w = w.T
 
         # Convert to standard units
-        units = []
-        for grp in util.toList(varGroups):
-            units.extend(self.units(grp))
+        units = np.concatenate([self.units(grp) for grp in util.toList(varGroups)])
         with ureg.context(self.model.unitContext.name):  # type: ignore[arg-type]
             scale = np.full((N, N), ureg.Quantity(0.0), dtype=pint.Quantity)
             for ix in range(N):
@@ -1032,7 +1038,7 @@ class State(ModelBlockCopyMixin):
     def normalize(
         self,
         w: Union[Sequence[pint.Quantity], NDArray, None] = None,
-        varGroups: Union[VarGroup, Sequence[VarGroup]] = ALL_VARS,
+        varGroups: Union[TVarGroup, Sequence[TVarGroup]] = ALL_VARS,
     ) -> NDArray[np.double]:
         """
         Convert :class:`~pint.Quantity` data to normalized floats in the unit
@@ -1078,9 +1084,7 @@ class State(ModelBlockCopyMixin):
             w = w.T
 
         # Convert to floats, normalizing by LU, TU, and DU
-        units = []
-        for grp in util.toList(varGroups):
-            units.extend(self.units(grp))
+        units = np.concatenate([self.units(grp) for grp in util.toList(varGroups)])
         with ureg.context(self.model.unitContext.name):  # type: ignore[arg-type]
             scale = np.zeros((N, N))
             for ix in range(N):
