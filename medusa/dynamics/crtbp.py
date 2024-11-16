@@ -119,6 +119,11 @@ Reference
 
 .. autoclass:: DynamicsModel
    :members:
+   :show-inheritance:
+
+.. autoclass:: State
+   :members:
+   :show-inheritance:
 
 """
 from __future__ import annotations

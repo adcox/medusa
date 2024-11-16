@@ -39,13 +39,13 @@ class DummyModel(DynamicsModel):
     def epochIndependent(self):
         return False
 
-    def makeState(self, data, time, center, frame):
-        return DummyState(self, data, time, center, frame)
+    def makeState(self, data, epoch, center, frame):
+        return DummyState(self, data, epoch, center, frame)
 
 
 class DummyState(State):
-    def __init__(self, model, data, time=0.0, center="center", frame="frame"):
-        super().__init__(model, data, time, center, frame)
+    def __init__(self, model, data, epoch=0.0, center="center", frame="frame"):
+        super().__init__(model, data, epoch, center, frame)
 
     def units(self, varGroup):
         if varGroup == VarGroup.STATE:
@@ -163,11 +163,11 @@ class TestState:
             np.arange(1, 15, dtype=float),
         ],
     )
-    @pytest.mark.parametrize("time, center, frame", [(3.0, "Earth", "Rotating")])
-    def test_constructor(self, model, data, time, center, frame):
-        state = DummyState(model, data, time, center, frame)
+    @pytest.mark.parametrize("epoch, center, frame", [(3.0, "Earth", "Rotating")])
+    def test_constructor(self, model, data, epoch, center, frame):
+        state = DummyState(model, data, epoch, center, frame)
 
-        assert state.time == time
+        assert state.epoch == epoch
         assert state.center == center
         assert state.frame == frame
 
@@ -206,6 +206,20 @@ class TestState:
 
         # Model should not be copied due to Mixin that prevents it
         assert id(state.model) == id(state2.model)
+
+    @pytest.mark.parametrize(
+        "vals, kwargs, eq",
+        [
+            ([1, 2], {}, True),
+            ([1, 2], {"epoch": 1.3}, False),
+            ([1, 2], {"center": "Oz"}, False),
+            ([1, 2], {"frame": "J2000"}, False),
+        ],
+    )
+    def test_eq(self, model, vals, kwargs, eq):
+        state = DummyState(model, [1, 2])
+        state2 = DummyState(model, vals, **kwargs)
+        assert (state == state2) == eq
 
     def test_arrayLike_get(self, model):
         data = [1, 2, 3, 4, 5, 6]

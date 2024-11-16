@@ -13,7 +13,7 @@ from medusa.corrections import (
 )
 from medusa.data import Body
 from medusa.dynamics import VarGroup
-from medusa.dynamics.crtbp import DynamicsModel
+from medusa.dynamics.crtbp import DynamicsModel, State
 from medusa.propagate import Propagator
 
 logger = logging.getLogger("medusa")
@@ -27,20 +27,23 @@ assert BODIES.exists(), "Cannot find body-data.xml file"
 earth = Body.fromXML(BODIES, "Earth")
 moon = Body.fromXML(BODIES, "Moon")
 model = DynamicsModel(earth, moon)
-q0 = [
-    6.4260881453410956e-1,
-    -5.9743133135791852e-27,
-    7.5004250912552883e-1,
-    -1.7560161626620319e-12,
-    3.5068017486608094e-1,
-    2.6279755586942682e-12,
-]
+q0 = State(
+    model,
+    [
+        6.4260881453410956e-1,
+        -5.9743133135791852e-27,
+        7.5004250912552883e-1,
+        -1.7560161626620319e-12,
+        3.5068017486608094e-1,
+        2.6279755586942682e-12,
+    ],
+)
+q0.fillDefaultICs(VarGroup.STM)
 period = 3.00
 
-q0Full = model.appendICs(q0, [VarGroup.STM])
-model.checkPartials(q0Full, [0, period])
+model.checkPartials(q0, [0, period])
 
-prop = Propagator(model, dense_output=False)
+prop = Propagator(dense_output=False)
 sol = prop.propagate(q0, [0, period], t_eval=[0.0, period / 2, period])
 points = [ControlPoint.fromProp(sol, ix) for ix in range(len(sol.t))]
 segments = [

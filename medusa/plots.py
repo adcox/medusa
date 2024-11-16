@@ -8,7 +8,7 @@ import numpy as np
 import scipy.optimize  # type: ignore
 
 from medusa import util
-from medusa.dynamics import VarGroup
+from medusa.dynamics import State, VarGroup
 
 
 class ToCoordVals:
@@ -17,28 +17,30 @@ class ToCoordVals:
         Args:
             coords ([str]): the coordinate name to extract. Can by "t" for the time
                 value, or one of the variables names (see
-                :func:`medusa.dynamics.DynamicsModel.varNames`) from the dynamics
+                :func:`medusa.dynamics.DynamicsModel.coords`) from the dynamics
                 model.
         """
         # TODO check input types
         self.coords = util.toList(coords)
 
-    def data(self, model, times, states):
+    def data(self, states):
         """
         Extract time and/or state values via coordinate name
 
         Args:
-            model (medusa.dynamics.DynamicsModel): the model associated with the
-                ``states``
-            times ([float], numpy.ndarray<float>): a 1D array of N times
-            states ([[float]], numpy.ndarray<flat>): an MxN array of states
+            states ([State]): an M-element array of states
 
         Returns:
             numpy.ndarray: an LxN array of values where L is the number of coordinates
         """
+        if isinstance(states, State):
+            states = [states]
+        allVals = np.asarray(states)
+        times = [state.time for state in states]
+
         # TODO check input types
         # Build a dict mapping coordinate name to state index
-        stateNames = model.varNames(VarGroup.STATE)
+        stateNames = states[0].coords(VarGroup.STATE)
         coordMap = {"t": None}
         for ix, name in enumerate(stateNames):
             coordMap[name] = ix
@@ -50,10 +52,10 @@ class ToCoordVals:
             if ixc is None:
                 vals[ixv] = times
             else:
-                if len(states.shape) == 1:
-                    vals[ixv] = states[ixc]
-                if len(states.shape) == 2:
-                    vals[ixv] = states[ixc, :]
+                if len(allVals.shape) == 1:
+                    vals[ixv] = allVals[ixc]
+                if len(allVals.shape) == 2:
+                    vals[ixv] = allVals[:, ixc]
 
         return vals
 
@@ -79,7 +81,7 @@ class ToCoordVals:
         # TODO check input types
         vals = None
         for point in points:
-            _vals = self.data(point.model, [point.epoch.data[0]], point.state.data)
+            _vals = self.data(point.state)
             if vals is None:
                 vals = _vals
             else:
@@ -92,4 +94,4 @@ class ToCoordVals:
             raise TypeError("Input must by a propagation solution")
 
         # TODO allow different time sampling if propSol.sol is not None?
-        return self.data(result.model, result.t, result.y)
+        return self.data(result.states)

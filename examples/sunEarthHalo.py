@@ -15,7 +15,7 @@ from medusa.corrections import (
     ShootingProblem,
 )
 from medusa.data import Body
-from medusa.dynamics.crtbp import DynamicsModel
+from medusa.dynamics.crtbp import DynamicsModel, State
 from medusa.propagate import Propagator
 
 logger = logging.getLogger("medusa")
@@ -30,17 +30,20 @@ sun = Body.fromXML(BODIES, "Sun")
 earth = Body.fromXML(BODIES, "Earth Barycenter")
 model = DynamicsModel(sun, earth)
 # print(model.params["mu"])
-q0 = [
-    9.8881583890062652e-1,
-    0.0,
-    4.0357157728763445e-4,
-    0.0,
-    8.8734639842052918e-3,
-    0.0,
-]
+q0 = State(
+    model,
+    [
+        9.8881583890062652e-1,
+        0.0,
+        4.0357157728763445e-4,
+        0.0,
+        8.8734639842052918e-3,
+        0.0,
+    ],
+)
 period = 3.06
 
-prop = Propagator(model)
+prop = Propagator()
 solForward = prop.propagate(q0, [0, period / 2], t_eval=[0.0, period / 4, period / 2])
 solReverse = prop.propagate(
     q0, [0, -period / 2], t_eval=[0.0, -period / 4, -period / 2]
@@ -73,7 +76,7 @@ for seg in segments:
 # Constrain z0
 problem.addConstraints(
     constraints.VariableValue(
-        points[0].state, [None, 0, 4.0357157728763445e-4, None, None, None]
+        points[0].stateVec, [None, 0, 4.0357157728763445e-4, None, None, None]
     )
 )
 problem.build()

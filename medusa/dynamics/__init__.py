@@ -18,12 +18,27 @@ In this notation, the dot over the coordinates represents the derivative with
 respect to :math:`\\tau`. Some models may append more 
 variables, such as a thrust vector parameterization, to this state vector.
 
+Within the code, the dynamics model is defined via a :class:`DynamicsModel` object.
+This object provides methods to compute the derivative of the state, stores the
+conversion between standard and nondimensional units, and describes the locations
+of all relevant bodies throughout time.
+
+The :class:`State` object captures the actual numerical data (e.g., the position
+and velocity) as well as associated metadata such as the epoch, the central body, 
+and the reference frame.
+
+.. note::
+   The ``DynamicsModel`` and ``State`` classes defined in this module are
+   **abstract** and cannot be instantiated on their own. Specific implementations
+   define *derived* classes based on these base objects. For an example, see the
+   :mod:`medusa/dynamics/crtbp` implementation of the CR3BP.
+
 Partial Derivatives
 --------------------
 
-In addition to the state vector, models can include equations that describe three
-other "variable groups", described by :class:`VarGroup`, that provide extra 
-dynamical information and are frequently
+In addition to describing the evolution of the state vector, models may also 
+describe three other "variable groups", described by :class:`VarGroup`, that 
+provide extra dynamical information and are frequently
 used in differential corrections and optimization processes:
 
 State Partials
@@ -116,18 +131,93 @@ deriative of the variable vector with respect to the independent variable,
 .. math::
    \\dot{\\vec{w}} = \\frac{\\mathrm{d} \\vec{w}}{\\mathrm{d} \\tau}(\\tau, T, \\vec{p})
 
-Several other methods are supplied to initialize, extract, and append variable
-groups:
+Defining and interacting with a variable vector is accomplished via a :class:`State`
+object. For example,
+
+.. code-block:: python
+
+   model = DynamicsModel( ... )
+   state = State(model, [1, 2, 3, 4, 5, 6], epoch = 0.0, center="Earth", frame="J2000")
+
+Assuming the model has a 6-element state (e.g., 3D position and velocity), the
+:data:`VarGroup.STATE` elements are set to the values one through six. These can
+be queried directly from the state,
+
+.. code-block:: python
+
+   >> state[:6]
+
+   [1, 2, 3, 4, 5, 6]
+
+or accessed via a function,
+
+.. code-block:: python
+
+   >> state.get(VarGroup.STATE)
+
+   [1, 2, 3, 4, 5, 6]
+
+Variable vector values can also be set,
+
+.. code-block:: python
+
+   >> state[:6] = np.arange(6)
+   >> state[:6]
+
+   [0,1,2,3,4,5]
+
+   >> state.set(VarGroup.STATE, np.arange(6)  # same effect
+
+Although the full variable vector can be passed to the :class:`State` cosntructor,
+or inserted as described above,
+it is often easier to use "default initial conditions (ICs)". These can be applied
+to the vector,
+
+.. code-block:: python
+
+   state.fillDefaultICs( VarGroup.STM )
+   # or
+   state.fillDefaultICs( [VarGroup.STM, VarGroup.EPOCH_PARTIALS] )
+
+The :class:`State` class implements vector and matrix math so that it is possible
+to manipulate the data in an intuitive algebraic way,
+
+.. code-block:: python
+
+   state += 1       # add one to all elements
+   state -= [1, 2, 3, 4, 5, 6]  # vector difference
+   state *= 1.3     # multiply all elements by 1.3
+   state /= [2, 2, 1, 1, 2, 2]  # element-wise division
+   state @ stm      # matrix multiply the state by an STM matrix
+
+These operations are implemented consistently with :mod:`numpy`. Additionally,
+``State``s can be combined. However, these operations are only permitted if the
+model, epoch, center, and frame are the same for the two states. Derived classes 
+may modify this logic if it makes sense (e.g., autonomous dynamical models may not
+care if the epochs are equal).
+
+.. code-block:: python
+
+   state1 + state2      # add two states
+   state1 - state2      # subtract two states
+   state1 * state2      # RUNTIME ERROR - no physical meaning
+   state1 / state2      # RUNTIME ERROR - no physical meaning
+
+
+
+
+The :class:`State` class provides several other methods to manipulate the data:
 
 .. autosummary::
    :nosignatures:
 
-   ~DynamicsModel.groupSize
-   ~DynamicsModel.defaultICs
-   ~DynamicsModel.appendICs
-   ~DynamicsModel.extractGroup
-   ~DynamicsModel.varNames
-   ~DynamicsModel.validForPropagation
+   State.groupSize
+   State.units
+   State.coords
+   State.get
+   State.set
+   State.fillDefaultICs
+   State.relativeTo
 
 System Properties and Parameters
 --------------------------------
@@ -159,13 +249,13 @@ _See also: :doc:`units`_
 For practically all of the encoded calculus, quantities are represented via
 **normalized** length, time, and mass units, :data:`~medusa.LU`, :data:`~medusa.TU`,
 :data:`~medusa.MU`. To convert to and from "standard" units (km, sec, kg, etc.),
-a model provides two methods:
+a ``State`` provides two methods:
 
 .. autosummary::
    :nosignatures:
 
-   ~DynamicsModel.toBaseUnits
-   ~DynamicsModel.normalize
+   State.toBaseUnits
+   State.normalize
 
 These conversions are accomplished within a unit :class:`~pint.Context` stored
 in the model as :attr:`DynamicsModel.unitContext`; the context records
@@ -203,6 +293,9 @@ Reference
    :members:
 
 .. autoclass:: DynamicsModel
+   :members:
+
+.. autoclass:: State
    :members:
 
 """
@@ -412,7 +505,7 @@ class DynamicsModel(ABC):
 
     @abstractmethod
     def makeState(
-        self, data: FloatArray, time: float, center: str, frame: str
+        self, data: FloatArray, epoch: float, center: str, frame: str
     ) -> State:
         """
         Construct a state object associated with this model. The arguments are
@@ -442,6 +535,7 @@ class DynamicsModel(ABC):
         Returns:
             the state vector for the body
         """
+        # TODO returns a State object?
         pass
 
     # Because the diffEqs method can be called millions of times during a
@@ -640,6 +734,22 @@ class ModelBlockCopyMixin:
 
 
 class State(ModelBlockCopyMixin):
+    """
+    Bundles the data required to fully represent a state vector
+
+    Args:
+        model: the model that describes the evolution of the state
+        data: the numerical state values. There must be at least a "core"
+            state included, i.e., the :data:`VarGroup.STATE` elements. Additional
+            elements for the state, epoch, and parameter partials can also be
+            provided.
+        epoch: the epoch associated with the state vector
+        center: the central body for the state
+            .. warning:: this attribute is currently not used
+        frame: the reference frame for the state
+            .. warning:: this attribute is currently not used
+    """
+
     ALL_VARS = [
         VarGroup.STATE,
         VarGroup.STM,
@@ -647,13 +757,11 @@ class State(ModelBlockCopyMixin):
         VarGroup.PARAM_PARTIALS,
     ]
 
-    # TODO define __eq__ method
-
     def __init__(
         self,
         model: DynamicsModel,
         data: FloatArray,
-        time: float,
+        epoch: float,
         center: str,
         frame: str,
     ) -> None:
@@ -661,12 +769,14 @@ class State(ModelBlockCopyMixin):
             raise TypeError(
                 "Expecting 'model' to be derived from medusa.dynamics.DynamicsModel"
             )
+        # TODO a body attribute??
 
         # Save properties
+        #: the dynamical model that describes the evolution of this state
         self.model = model
-        self.time = copy(time)
-        self.center = copy(center)
-        self.frame = copy(frame)
+        self.epoch = copy(epoch)  #: epoch associated with the state vector
+        self.center = copy(center)  #: central body for the state
+        self.frame = copy(frame)  #: reference frame for the state
 
         # Create a data vector of NaN
         N = self.groupSize(State.ALL_VARS)
@@ -687,24 +797,21 @@ class State(ModelBlockCopyMixin):
         msg += ", ".join(
             [
                 "{!s} = {!r}".format(attr, getattr(self, attr))
-                for attr in ("center", "frame", "time")
+                for attr in ("center", "frame", "epoch")
             ]
         )
         msg += ",\ndata = {!r}".format(self._data)
         msg += ">"
         return msg
 
-    # TODO document all the arithmetic
-
     def __eq__(self, obj) -> bool:
-        # TODO test
         if not isinstance(obj, State):
             return False
 
         return (
             obj.center == self.center
             and obj.frame == self.frame
-            and obj.time == self.time
+            and obj.epoch == self.epoch
             and np.array_equal(obj._data, self._data, equal_nan=True)
         )
 
@@ -715,6 +822,8 @@ class State(ModelBlockCopyMixin):
         return ss
 
     def __iadd__(self, obj) -> State:
+        # Addition of state objects is permitted if they have the same model,
+        #   center, and frame
         if isinstance(obj, State):
             if not obj.model == self.model:
                 raise RuntimeError("Cannot add two states with different models")
@@ -748,15 +857,22 @@ class State(ModelBlockCopyMixin):
         return ss
 
     def __imul__(self, obj) -> State:
+        # States cannot be multiplied together, but a state can be multiplied by
+        #   a scalar or an arbitrary vector
         if isinstance(obj, State):
             raise RuntimeError("Cannot multiply states together")
 
         if hasattr(obj, "__len__"):
+            # Allow multiplication to affect a subset of the _data elements
+            #   This makes it possible to multiply a state by an STM, for example,
+            #   without running into errors
             self._data[: len(obj)].__imul__(obj)
         else:
             self._data.__imul__(obj)
 
         return self
+
+    # TODO implement division??
 
     def __matmul__(self, obj) -> State:
         ss = copy(self)
@@ -768,6 +884,7 @@ class State(ModelBlockCopyMixin):
             raise RuntimeError("Cannot multiple states together")
 
         if hasattr(obj, "__len__"):
+            # Same logic as for __imul__: allow multiplication with a subset of _data
             self._data[: len(obj)].__imatmul__(obj)
         else:
             self._data.__imatmul__(obj)
@@ -798,6 +915,32 @@ class State(ModelBlockCopyMixin):
             self._data.__isub__(obj)
         return self
 
+    @abstractmethod
+    def units(self, varGroup: TVarGroup = VarGroup.STATE) -> list[pint.Unit]:
+        """
+        Get the units for a variable group
+
+        Args:
+            varGroup: the variable group to get units for
+
+        Returns:
+            the units for the variable group in row-major order
+        """
+        pass
+
+    @abstractmethod
+    def groupSize(self, varGroups: Union[TVarGroup, Sequence[TVarGroup]]) -> int:
+        """
+        Get the size (i.e., number of elements) for one or more variable groups.
+
+        Args:
+            varGroups: describes one or more groups of variables
+
+        Returns:
+            the size of a variable array with the specified variable groups
+        """
+        pass
+
     def coords(self, varGroup: TVarGroup = VarGroup.STATE) -> list[str]:
         """
         Get names for the variables in a group.
@@ -809,8 +952,7 @@ class State(ModelBlockCopyMixin):
             varGroup: the variable group
 
         Returns:
-            a list containing the names of the variables in the order
-            they would appear in a variable vector.
+            a list containing the names of the variables in row-major order
         """
         N = self.groupSize(VarGroup.STATE)
         if varGroup == VarGroup.STATE:
@@ -831,31 +973,27 @@ class State(ModelBlockCopyMixin):
         else:
             raise ValueError(f"Unrecognized enum: varGroup = {varGroup}")
 
-    @abstractmethod
-    def units(self, varGroup: TVarGroup = VarGroup.STATE) -> list[pint.Unit]:
-        pass  # TODO document
-
-    @abstractmethod
-    def groupSize(self, varGroups: Union[TVarGroup, Sequence[TVarGroup]]) -> int:
-        """
-        Get the size (i.e., number of elements) for one or more variable groups.
-
-        Args:
-            varGroups: describes one or more groups of variables
-
-        Returns:
-            the size of a variable array with the specified variable groups
-        """
-        pass
-
     def get(
         self,
         varGroups: Union[TVarGroup, Sequence[TVarGroup]] = VarGroup.STATE,
         units: bool = False,
         reshape=True,
     ) -> Union[NDArray, tuple[NDArray, ...]]:
-        # TODO document
-        # TODO test
+        """
+        Get state values for one or more variable groups
+
+        Args:
+            varGroups: the variable groups to retrieve
+            units: whether or not to return the data with units (:class:`pint.Quantity`)
+                or without (:class:`float`)
+            reshape: whether or not to reshape matrix elements. If ``True``, variable
+                groups like :data:`VarGroup.STM` are reshaped into a 2-dimensional
+                array. Otherwise, data are returned in row-major order.
+
+        Returns:
+            the requested variable groups. If multiple variable groups are requested,
+            the data are returned as a :class:`tuple` in the same order as requested.
+        """
         varGroups = util.toList(varGroups)
 
         # Get raw data in 1D array
@@ -880,6 +1018,13 @@ class State(ModelBlockCopyMixin):
     def set(
         self, varGroups: Union[TVarGroup, Sequence[TVarGroup]], data: FloatArray
     ) -> None:
+        """
+        Set the values for a variable group
+
+        Args:
+            varGroups: the variable group(s) to set
+            data: the numeric data for the variable group(s)
+        """
         varGroups = util.toList(varGroups)
         for grp in varGroups:
             subdata = self._extractGroup(
@@ -893,7 +1038,7 @@ class State(ModelBlockCopyMixin):
     ) -> None:
         """
         Write the default initial conditions for the specified variable group(s)
-        to the ``data`` vector. This overwrites existing data!
+        to the state. **This overwrites existing data!**
 
         Args:
             varsToAppend: the variable group(s) to append initial conditions for
@@ -906,6 +1051,11 @@ class State(ModelBlockCopyMixin):
             self.set(grp, ic)
 
     def relativeTo(self, center: str) -> State:
+        """
+        Get the state relative to a different center
+
+        .. important:: not implemented yet!
+        """
         # TODO this method likely needs to go from
         # current center -> default center -> requested center, but defining the
         # "default center" is not currently accomplished
@@ -921,7 +1071,7 @@ class State(ModelBlockCopyMixin):
         """
         Extract a variable group from a sequence.
 
-        This is a utility function; the user will call :func:`values` to extract
+        This is a utility function; the user will call :func:`get` to extract
         data from the state by VarGroup.
 
         Args:
@@ -955,7 +1105,7 @@ class State(ModelBlockCopyMixin):
         if vals.size < nPre + sz:
             raise ValueError(
                 f"Need {nPre + sz} vector elements to extract {varGroup} "
-                f"but w has size {vals.size}"
+                f"but vals has size {vals.size}"
             )
 
         nState = self.groupSize(VarGroup.STATE)
@@ -987,29 +1137,30 @@ class State(ModelBlockCopyMixin):
 
     def toBaseUnits(
         self,
-        w: Union[FloatArray, None] = None,
+        vals: Union[FloatArray, None] = None,
         varGroups: Union[TVarGroup, Sequence[TVarGroup]] = ALL_VARS,
     ) -> NDArray:
         """
         Convert normalized :class:`float` data to units.
 
-        The :attr:`charL`, :attr:`charT`, and :attr:`charM` define the conversion
-        from the normalized ``LU``, ``TU``, and ``MU`` units to "standard" units like
-        km, sec, and kg.
+        The :attr:`DynamicsModel.charL`, :attr:`DynamicsModel.charT`, and
+        :attr:`DynamicsModel.charM` in :attr:`model` define the conversion
+        from the normalized ``LU``, ``TU``, and ``MU`` units to "standard" units
+        like km, sec, and kg.
 
         Args:
-            w: an MxN array of normalized values where N is the number of variables
+            vals: an MxN array of normalized values where N is the number of variables
                 in the ``varGroups``. If ``None``, the state data is converted.
-            varGroups: the variable groups included in each row of ``w``
+            varGroups: the variable groups included in each row of ``vals``
 
         Returns:
-            the data from ``w`` in "standard" units
+            the data from ``vals`` in "standard" units
         """
-        if w is None:
-            w = self._data
+        if vals is None:
+            vals = self._data
 
         try:
-            w = np.array(w, ndmin=2, copy=True)
+            vals = np.array(vals, ndmin=2, copy=True)
         except (ValueError, pint.errors.DimensionalityError):
             raise TypeError(
                 "Expecting input data to be numeric (int, float, etc.); did "
@@ -1017,14 +1168,14 @@ class State(ModelBlockCopyMixin):
             )
 
         N = self.groupSize(varGroups)
-        if not N in w.shape:
+        if not N in vals.shape:
             raise ValueError(
-                f"Dimension mismatch; 'w' has shape {w.shape}, which does not "
+                f"Dimension mismatch; 'vals' has shape {vals.shape}, which does not "
                 f"include variable group size, {N}"
             )
 
-        if not w.shape[1] == N:
-            w = w.T
+        if not vals.shape[1] == N:
+            vals = vals.T
 
         # Convert to standard units
         units = np.concatenate([self.units(grp) for grp in util.toList(varGroups)])
@@ -1033,11 +1184,11 @@ class State(ModelBlockCopyMixin):
             for ix in range(N):
                 scale[ix, ix] = ureg.Quantity(1.0, units[ix]).to_base_units()
 
-        return w @ scale
+        return vals @ scale
 
     def normalize(
         self,
-        w: Union[Sequence[pint.Quantity], NDArray, None] = None,
+        vals: Union[Sequence[pint.Quantity], NDArray, None] = None,
         varGroups: Union[TVarGroup, Sequence[TVarGroup]] = ALL_VARS,
     ) -> NDArray[np.double]:
         """
@@ -1045,43 +1196,44 @@ class State(ModelBlockCopyMixin):
         context of this model.
 
 
-        The :attr:`charL`, :attr:`charT`, and :attr:`charM` define the conversion
-        from the normalized ``LU``, ``TU``, and ``MU`` units to "standard" units like
-        km, sec, and kg.
+        The :attr:`DynamicsModel.charL`, :attr:`DynamicsModel.charT`, and
+        :attr:`DynamicsModel.charM` in :attr:`model` define the conversion
+        from the normalized ``LU``, ``TU``, and ``MU`` units to "standard" units
+        like km, sec, and kg.
 
         Args:
-            w: an MxN array of Quantities where N is the number of variables
+            vals: an MxN array of Quantities where N is the number of variables
                 in the ``varGroups``. If ``None``, the state data is used.
-            varGroups: the variable groups included in each row of ``w``
+            varGroups: the variable groups included in each row of ``vals``
 
         Returns:
-            the data from ``w`` in normalized units. The data are returned as
+            the data from ``vals`` in normalized units. The data are returned as
             floats instead of as Quantity objects with ``LU``, ``TU``, and ``MU``
             units.
 
         See also:
-            :func:`varUnits`: this function provides the normalized units for each variable
+            :func:`units`: this function provides the normalized units for each variable
             in terms of the :data:`~medusa.units.LU`, :data:`~medusa.units.TU`, and
             :data:`~medusa.units.MU` units.
         """
-        if w is None:
-            w = self._data
+        if vals is None:
+            vals = self._data
 
-        w = np.array(w, ndmin=2, copy=True, dtype=pint.Quantity)
-        if not all(isinstance(v, pint.Quantity) for v in w.flat):
+        vals = np.array(vals, ndmin=2, copy=True, dtype=pint.Quantity)
+        if not all(isinstance(v, pint.Quantity) for v in vals.flat):
             raise TypeError(
                 "Expecting input data to be Quantities; did you mean to call toBaseUnits()?"
             )
 
         N = self.groupSize(varGroups)
-        if not N in w.shape:
+        if not N in vals.shape:
             raise ValueError(
-                f"Dimension mismatch; 'w' has shape {w.shape}, which does not "
+                f"Dimension mismatch; 'vals' has shape {vals.shape}, which does not "
                 f"include variable group size, {N}"
             )
 
-        if not w.shape[1] == N:
-            w = w.T
+        if not vals.shape[1] == N:
+            vals = vals.T
 
         # Convert to floats, normalizing by LU, TU, and DU
         units = np.concatenate([self.units(grp) for grp in util.toList(varGroups)])
@@ -1092,8 +1244,8 @@ class State(ModelBlockCopyMixin):
                     1.0 / ureg.Quantity(1.0, units[ix]).to_base_units().magnitude
                 )
 
-            w = np.asarray(
-                [[val.to_base_units().magnitude for val in vals] for vals in w]
+            vals = np.asarray(
+                [[val.to_base_units().magnitude for val in subvals] for subvals in vals]
             )
 
-            return w @ scale
+            return vals @ scale

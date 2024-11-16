@@ -498,7 +498,7 @@ class ControlPoint(ModelBlockCopyMixin):
 
     Args:
         state: the state at which to create the control point. The state
-            :func:`~State.values` and :attr:`~State.time` are used to construct
+            values and :attr:`~State.epoch` are used to construct
             the ``stateVec`` and ``epoch`` variables. If you wish to pass in
             variables explicitly, use the :func:`fromVars` method.
         autoMask: whether or not to auto-mask the ``epoch`` variable.
@@ -521,8 +521,8 @@ class ControlPoint(ModelBlockCopyMixin):
         self.epoch = Variable([])  #: Variable: the epoch
         self.stateVec = Variable([])  #: Variable: the state vector
 
-        self.state = copy(state)
-        self._makeVars(state.time, state.get(VarGroup.STATE), autoMask)
+        self._state = copy(state)
+        self._makeVars(state.epoch, state.get(VarGroup.STATE), autoMask)
 
     @staticmethod
     def fromProp(
@@ -628,7 +628,7 @@ class ControlPoint(ModelBlockCopyMixin):
         if not epoch.size == 1:
             raise RuntimeError("Epoch can only have one value")
 
-        sz = self.state.groupSize(VarGroup.STATE)
+        sz = self._state.groupSize(VarGroup.STATE)
         if not stateVec.size == sz:
             raise RuntimeError("State must have {sz} values")
 
@@ -645,6 +645,20 @@ class ControlPoint(ModelBlockCopyMixin):
             out += "\n  {!s}={!r}".format(attr, getattr(self, attr))
         out += "\n>"
         return out
+
+    @property
+    def state(self) -> State:
+        """
+        A :class:`State` representation of the control point.
+
+        The ``time`` and state data are updated to match the :attr:`epoch` and
+        :attr:`stateVec` values at run time.
+        """
+        # TODO test
+        # Update the epoch and state values from the variables and return the obj
+        self._state.epoch = self.epoch.data[0]
+        self._state[: len(self.stateVec)] = self.stateVec.data
+        return self._state
 
     @property
     def importableVars(self) -> tuple[Variable, ...]:
