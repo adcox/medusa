@@ -665,7 +665,7 @@ class AbstractDynamicsModel(ABC):
             the start of the array with the additional initial conditions
             appended afterward
         """
-        w0_ = np.asarray(w0, copy=True)
+        w0_ = np.array(w0, copy=True)
         nIn = w0_.size
         nOut = self.groupSize(varsToAppend)
         w0_out = np.zeros((nIn + nOut,))
